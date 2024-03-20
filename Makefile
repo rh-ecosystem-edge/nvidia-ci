@@ -28,3 +28,8 @@ install: deps-update install-ginkgo
 run-tests:
 	@echo "Executing nvidiagpu test-runner script"
 	scripts/test-runner.sh
+
+test-bm-arm-deployment:
+	/bin/bash tests/gpu-operator-arm-bm/uninstall-gpu-operator.sh
+	/bin/bash tests/gpu-operator-arm-bm/install-gpu-operator.sh
+	/bin/bash tests/gpu-operator-arm-bm/areweok.sh
