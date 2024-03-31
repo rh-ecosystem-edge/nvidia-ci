@@ -5,6 +5,11 @@ set -e
 . "$(dirname "$0")"/common.sh
 
 GOLANGCI_LINT_VERSION="1.55.2"
+# This is required because the Openshift CI is running this test as a non-root
+# user but whitin the / directory as the home directory, therefore, the linter
+# won't have the permissions to create the `/.cache` directory.
+export GOCACHE=/tmp
+export GOLANGCI_LINT_CACHE=/tmp
 
 # IsGoLangCiLintInstalled is used to check whether golangci-lint executable is on the $PATH.
 function IsGolangCiLintInstalled() {
@@ -58,7 +63,7 @@ function RunGolangCiLint() {
 
 	echo "Running golangci-lint"
 
-	if golangci-lint run -v; then
+	if golangci-lint run -v --timeout 10m; then
 		return 0;
 	fi
 
