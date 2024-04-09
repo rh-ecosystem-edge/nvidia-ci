@@ -13,9 +13,9 @@ import (
 	"github.com/openshift-kni/eco-goinfra/pkg/nfd"
 	"github.com/openshift-kni/eco-goinfra/pkg/olm"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
-	"github.com/rh-ecosystem-edge/nvidia-ci/tests/nvidiagpu/internal/get"
-	"github.com/rh-ecosystem-edge/nvidia-ci/tests/nvidiagpu/internal/gpuparams"
-	nvidiagpuwait "github.com/rh-ecosystem-edge/nvidia-ci/tests/nvidiagpu/internal/wait"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
+	nvidiagpuwait "github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 

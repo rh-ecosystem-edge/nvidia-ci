@@ -9,7 +9,7 @@ import (
 	"github.com/openshift-kni/eco-goinfra/pkg/deployment"
 	"github.com/openshift-kni/eco-goinfra/pkg/nvidiagpu"
 	"github.com/openshift-kni/eco-goinfra/pkg/olm"
-	"github.com/rh-ecosystem-edge/nvidia-ci/tests/nvidiagpu/internal/gpuparams"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 

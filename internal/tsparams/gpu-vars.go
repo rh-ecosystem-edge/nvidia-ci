@@ -3,7 +3,7 @@ package tsparams
 import (
 	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/v1"
 	"github.com/openshift-kni/k8sreporter"
-	"github.com/rh-ecosystem-edge/nvidia-ci/tests/nvidiagpu/internal/gpuparams"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 )
 
 var (

@@ -2,10 +2,11 @@ package inittools
 
 import (
 	"flag"
+
 	"github.com/golang/glog"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/openshift-kni/eco-goinfra/pkg/clients"
-	"github.com/rh-ecosystem-edge/nvidia-ci/tests/internal/config"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )

@@ -3,23 +3,22 @@ package reporter
 import (
 	"errors"
 	"fmt"
-	"github.com/openshift-kni/k8sreporter"
 	"io"
 	"os"
 	"path"
 	"strings"
 
+	"github.com/openshift-kni/k8sreporter"
+
 	"github.com/golang/glog"
 	"github.com/onsi/ginkgo/v2/types"
-	. "github.com/rh-ecosystem-edge/nvidia-ci/tests/internal/inittools"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var (
 	pathToPodExecLogs = "/tmp/pod_exec_logs.log"
 )
-
-// 	. "github.com/rh-ecosystem-edge/nvidia-ci/tests/internal/inittools"
 
 func newReporter(
 	reportPath string,
@@ -59,7 +58,7 @@ func ReportIfFailed(
 		return
 	}
 
-	dumpDir := GeneralConfig.GetDumpFailedTestReportLocation(testSuite)
+	dumpDir := inittools.GeneralConfig.GetDumpFailedTestReportLocation(testSuite)
 
 	if dumpDir != "" {
 		reporter, err := newReporter(dumpDir, nSpaces, apiScheme, cRDs)
@@ -74,7 +73,7 @@ func ReportIfFailed(
 		_, podExecLogsFName := path.Split(pathToPodExecLogs)
 
 		err = moveFile(
-			pathToPodExecLogs, path.Join(GeneralConfig.ReportsDirAbsPath, tcReportFolderName, podExecLogsFName))
+			pathToPodExecLogs, path.Join(inittools.GeneralConfig.ReportsDirAbsPath, tcReportFolderName, podExecLogsFName))
 
 		if err != nil {
 			glog.Fatalf("Failed to move pod exec logs %s to report folder: %s", pathToPodExecLogs, err)

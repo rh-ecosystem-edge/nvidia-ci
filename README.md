@@ -32,7 +32,7 @@ We use glog library for logging. In order to enable verbose logging the followin
 
 <sup>
     import (
-      . "github.com/rh-ecosystem-edge/nvidia-ci/tests/internal/inittools"
+      . "github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
     )
 </sup>
 

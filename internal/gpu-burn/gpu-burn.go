@@ -6,7 +6,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/openshift-kni/eco-goinfra/pkg/clients"
 	"github.com/openshift-kni/eco-goinfra/pkg/configmap"
-	"github.com/rh-ecosystem-edge/nvidia-ci/tests/nvidiagpu/internal/gpuparams"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
