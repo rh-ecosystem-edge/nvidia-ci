@@ -46,8 +46,10 @@ require (
 	github.com/openshift-kni/eco-goinfra v0.0.0-20240314154612-cfbcce869632
 	github.com/openshift-kni/k8sreporter v1.0.5
 	github.com/operator-framework/api v0.22.0
+	go.uber.org/mock v0.4.0
 	k8s.io/api v0.29.0
 	k8s.io/apimachinery v0.29.0
+	k8s.io/client-go v12.0.0+incompatible
 	sigs.k8s.io/controller-runtime v0.17.2
 	sigs.k8s.io/yaml v1.4.0
 )
@@ -206,7 +208,6 @@ require (
 	k8s.io/apiextensions-apiserver v0.29.0 // indirect
 	k8s.io/apiserver v0.29.0 // indirect
 	k8s.io/cli-runtime v0.28.7 // indirect
-	k8s.io/client-go v12.0.0+incompatible // indirect
 	k8s.io/component-base v0.29.0 // indirect
 	k8s.io/klog v1.0.0 // indirect
 	k8s.io/klog/v2 v2.120.1 // indirect

@@ -13,8 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-// github.com/rh-ecosystem-edge/nvidia-ci/tests
-
 // ClusterPolicyReady Waits until clusterPolicy is Ready.
 func ClusterPolicyReady(apiClient *clients.Settings, clusterPolicyName string, pollInterval,
 	timeout time.Duration) error {
