@@ -16,7 +16,7 @@ RUN ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;
 # Get the source code in there
 WORKDIR /root/nvidia-ci
 
-ENV GOCACHE=/tmp/
+ENV GOCACHE=/root/nvidia-ci/tmp/
 ENV PATH="${PATH}:/opt/app-root/src/go/bin"
 
 # Defaults we want the image to run with, can be overridden
@@ -30,6 +30,7 @@ COPY . .
 
 RUN make install-ginkgo
 RUN mkdir -p "${ARTIFACT_DIR}" && chmod 777 "${ARTIFACT_DIR}"
+RUN mkdir -p "${GOCACHE}" && chmod 777 "${GOCACHE}"
 RUN chmod 777 /root/nvidia-ci -R
 
 ENTRYPOINT ["bash"]
