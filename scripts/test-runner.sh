@@ -3,6 +3,7 @@
 GOPATH="${GOPATH:-~/go}"
 PATH=$PATH:$GOPATH/bin
 TEST_DIR="./tests"
+REPORTS_DUMP_DIR="${ARTIFACT_DIR:-/tmp/reports}"
 
 # Check that TEST_FEATURES environment variable has been set
 if [[ -z "${TEST_FEATURES}" ]]; then
