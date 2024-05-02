@@ -3,7 +3,13 @@
 GOPATH="${GOPATH:-~/go}"
 PATH=$PATH:$GOPATH/bin
 TEST_DIR="./tests"
-REPORTS_DUMP_DIR="${ARTIFACT_DIR:-/tmp/reports}"
+
+# Override REPORTS_DUMP_DIR if ARTIFACT_DIR is set
+if [[ -n "${ARTIFACT_DIR}" ]]; then
+    # `export` passes the variable down to a child process,
+    # which is needed because of the `eval`
+    export REPORTS_DUMP_DIR=${ARTIFACT_DIR}
+fi
 
 # Check that TEST_FEATURES environment variable has been set
 if [[ -z "${TEST_FEATURES}" ]]; then
