@@ -73,6 +73,8 @@ const (
 	nfdOperatorDeploymentName = "nfd-controller-manager"
 	nfdPackage                = "nfd"
 	nfdCRName                 = "nfd-instance"
+	operatorVersionFile       = "operator.version"
+	openShiftVersionFile      = "ocp.version"
 
 	nvidiaGPUNamespace                  = "nvidia-gpu-operator"
 	nfdRhcosLabel                       = "feature.node.kubernetes.io/system-os_release.ID"
@@ -162,6 +164,14 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_DEPLOY_FROM_BUNDLE" +
 					" is set to false or is not set, will deploy GPU Operator from catalogsource")
 				deployFromBundle = false
+			}
+
+			By("Report OpenShift version")
+			ocpVersion, err := inittools.GetOpenShiftVersion()
+			if err != nil {
+				glog.Error("Error getting OpenShift version: ", err)
+			} else if err := inittools.GeneralConfig.WriteReport(openShiftVersionFile, []byte(ocpVersion)); err != nil {
+				glog.Error("Error writing an OpenShift version file: ", err)
 			}
 
 			By("Check if NFD is installed")
@@ -541,6 +551,10 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				glog.V(gpuparams.GpuLogLevel).Infof("ClusterServiceVersion deployed from bundle is '%s",
 					bundleCSVBuilder.Definition.Name)
 
+				if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(bundleCSVBuilder.Definition.Name)); err != nil {
+					glog.Error("Error writing an operator version file: ", err)
+				}
+
 				// save the deployed CSVBuilder object
 				gpuCurrentCSVFromSub = bundleCSVBuilder.Definition.Name
 
@@ -552,6 +566,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				Expect(gpuCurrentCSVFromSub).ToNot(BeEmpty())
 				glog.V(gpuparams.GpuLogLevel).Infof("currentCSV %s extracted from Subscripion %s",
 					gpuCurrentCSVFromSub, gpuSubscriptionName)
+				if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(gpuCurrentCSVFromSub)); err != nil {
+					glog.Error("Error writing an operator version file: ", err)
+				}
 			}
 
 			By("Wait for ClusterServiceVersion to be in Succeeded phase")

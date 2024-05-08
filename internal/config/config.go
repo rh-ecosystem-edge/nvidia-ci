@@ -6,8 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	yaml "sigs.k8s.io/yaml/goyaml.v2"
 	"strings"
+
+	yaml "sigs.k8s.io/yaml/goyaml.v2"
 
 	"github.com/kelseyhightower/envconfig"
 )
@@ -70,8 +71,19 @@ func NewConfig() *GeneralConfig {
 // GetJunitReportPath returns full path to the junit report file.
 func (cfg *GeneralConfig) GetJunitReportPath(file string) string {
 	reportFileName := strings.TrimSuffix(filepath.Base(file), filepath.Ext(filepath.Base(file)))
-
 	return fmt.Sprintf("%s_junit.xml", filepath.Join(cfg.ReportsDirAbsPath, reportFileName))
+}
+
+// GetArtifactPath return full path to a file in the report directory.
+func (cfg *GeneralConfig) GetReportPath(file string) string {
+	fileName := filepath.Base(file)
+	return filepath.Join(cfg.ReportsDirAbsPath, fileName)
+}
+
+// WriteReport writes contents into a file in the report directory.
+func (cfg *GeneralConfig) WriteReport(fileName string, content []byte) error {
+	file := cfg.GetReportPath(fileName)
+	return os.WriteFile(file, content, 0666)
 }
 
 // GetDumpFailedTestReportLocation returns destination file for failed tests logs.
