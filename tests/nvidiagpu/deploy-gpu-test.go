@@ -3,12 +3,12 @@ package nvidiagpu
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
 
 	"github.com/openshift-kni/eco-goinfra/pkg/machine"
-	nfddeploy "github.com/rh-ecosystem-edge/nvidia-ci/internal/deploy"
 
 	"strings"
 	"time"
@@ -205,15 +205,15 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					nfdChannel)
 
 				By("Deploy NFD Operator in NFD namespace")
-				err = nfddeploy.CreateNFDNamespace(inittools.APIClient)
+				err = deploy.CreateNFDNamespace(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "error creating  NFD Namespace: %v", err)
 
 				By("Deploy NFD OperatorGroup in NFD namespace")
-				err = nfddeploy.CreateNFDOperatorGroup(inittools.APIClient)
+				err = deploy.CreateNFDOperatorGroup(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "error creating NFD OperatorGroup:  %v", err)
 
 				By("Deploy NFD Subscription in NFD namespace")
-				err = nfddeploy.CreateNFDSubscription(inittools.APIClient)
+				err = deploy.CreateNFDSubscription(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "error creating NFD Subscription:  %v", err)
 
 				By("Sleep for 2 minutes to allow the NFD Operator deployment to be created")
@@ -228,13 +228,13 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					"NFD operator")
 
 				By("Deploy NFD Subscription in NFD namespace")
-				nfdDeployed, err := nfddeploy.CheckNFDOperatorDeployed(inittools.APIClient, 120*time.Second)
+				nfdDeployed, err := deploy.CheckNFDOperatorDeployed(inittools.APIClient, 120*time.Second)
 				Expect(err).ToNot(HaveOccurred(), "error deploying NFD Operator in"+
 					" NFD namespace:  %v", err)
 				Expect(nfdDeployed).ToNot(BeFalse(), "failed to deploy NFD operator")
 
 				By("Deploy NFD CR instance in NFD namespace")
-				err = nfddeploy.DeployCRInstance(inittools.APIClient)
+				err = deploy.DeployCRInstance(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "error deploying NFD CR instance in"+
 					" NFD namespace:  %v", err)
 
@@ -255,19 +255,19 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				// Here need to check if NFD CR is deployed, otherwise Deleting a non-existing CR will throw an error
 				// skipping error check for now cause any failure before entire NFD stack
 				By("Delete NFD CR instance in NFD namespace")
-				_ = nfddeploy.NFDCRDeleteAndWait(inittools.APIClient, nfdCRName, nfdOperatorNamespace, 30*time.Second, 5*time.Minute)
+				_ = deploy.NFDCRDeleteAndWait(inittools.APIClient, nfdCRName, nfdOperatorNamespace, 30*time.Second, 5*time.Minute)
 
 				By("Delete NFD CSV")
-				_ = nfddeploy.DeleteNFDCSV(inittools.APIClient)
+				_ = deploy.DeleteNFDCSV(inittools.APIClient)
 
 				By("Delete NFD Subscription in NFD namespace")
-				_ = nfddeploy.DeleteNFDSubscription(inittools.APIClient)
+				_ = deploy.DeleteNFDSubscription(inittools.APIClient)
 
 				By("Delete NFD OperatorGroup in NFD namespace")
-				_ = nfddeploy.DeleteNFDOperatorGroup(inittools.APIClient)
+				_ = deploy.DeleteNFDOperatorGroup(inittools.APIClient)
 
 				By("Delete NFD Namespace in NFD namespace")
-				_ = nfddeploy.DeleteNFDNamespace(inittools.APIClient)
+				_ = deploy.DeleteNFDNamespace(inittools.APIClient)
 			}
 		})
 
@@ -551,7 +551,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				glog.V(gpuparams.GpuLogLevel).Infof("ClusterServiceVersion deployed from bundle is '%s",
 					bundleCSVBuilder.Definition.Name)
 
-				if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(bundleCSVBuilder.Definition.Name)); err != nil {
+				bundleVersion := fmt.Sprintf("%s(bundle)", bundleCSVBuilder.Definition.Spec.Version.String())
+				if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(bundleVersion)); err != nil {
 					glog.Error("Error writing an operator version file: ", err)
 				}
 
@@ -566,7 +567,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				Expect(gpuCurrentCSVFromSub).ToNot(BeEmpty())
 				glog.V(gpuparams.GpuLogLevel).Infof("currentCSV %s extracted from Subscripion %s",
 					gpuCurrentCSVFromSub, gpuSubscriptionName)
-				if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(gpuCurrentCSVFromSub)); err != nil {
+				if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(get.ExtractVersionFromCSV(gpuCurrentCSVFromSub))); err != nil {
 					glog.Error("Error writing an operator version file: ", err)
 				}
 			}

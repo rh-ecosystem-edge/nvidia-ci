@@ -2,6 +2,7 @@ package get
 
 import (
 	"fmt"
+	"regexp"
 
 	"github.com/openshift-kni/eco-goinfra/pkg/nodes"
 	"github.com/openshift-kni/eco-goinfra/pkg/olm"
@@ -95,4 +96,13 @@ func GetClusterArchitecture(apiClient *clients.Settings, nodeSelector map[string
 	err = fmt.Errorf("could not find one node with label '%s'", nodeLabel)
 
 	return "", err
+}
+
+func ExtractVersionFromCSV(csv string) string {
+	regex := *regexp.MustCompile(`(v\d+\.\d+\.\d+)`)
+	matches := regex.FindAllString(csv, -1)
+	if len(matches) == 0 {
+		return csv
+	}
+	return matches[0]
 }
