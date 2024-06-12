@@ -8,12 +8,13 @@ import (
 
 // NvidiaGPUConfig contains environment information related to nvidiagpu tests.
 type NvidiaGPUConfig struct {
-	InstanceType        string `envconfig:"NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE"`
-	CatalogSource       string `envconfig:"NVIDIAGPU_CATALOGSOURCE"`
-	SubscriptionChannel string `envconfig:"NVIDIAGPU_SUBSCRIPTION_CHANNEL"`
-	CleanupAfterTest    bool   `envconfig:"NVIDIAGPU_CLEANUP" default:"true"`
-	DeployFromBundle    bool   `envconfig:"NVIDIAGPU_DEPLOY_FROM_BUNDLE" default:"false"`
-	BundleImage         string `envconfig:"NVIDIAGPU_BUNDLE_IMAGE"`
+	InstanceType             string `envconfig:"NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE"`
+	CatalogSource            string `envconfig:"NVIDIAGPU_CATALOGSOURCE"`
+	SubscriptionChannel      string `envconfig:"NVIDIAGPU_SUBSCRIPTION_CHANNEL"`
+	CleanupAfterTest         bool   `envconfig:"NVIDIAGPU_CLEANUP" default:"true"`
+	DeployFromBundle         bool   `envconfig:"NVIDIAGPU_DEPLOY_FROM_BUNDLE" default:"false"`
+	BundleImage              string `envconfig:"NVIDIAGPU_BUNDLE_IMAGE"`
+	OperatorUpgradeToChannel string `envconfig:"NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL"`
 }
 
 // NewNvidiaGPUConfig returns instance of NvidiaGPUConfig type.
