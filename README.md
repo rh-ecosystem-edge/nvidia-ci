@@ -4,7 +4,7 @@ Ecosystem Edge NVIDIA-CI - Golang Automation CI
 
 ## Overview
 This repository is an automation/CI framework to test NVIDIA operators, starting with the GPU Operator.
-This project is based on golang + [ginkgo](https://onsi.github.io/ginkgo) framework.  
+This project is based on golang + [ginkgo](https://onsi.github.io/ginkgo) framework.
 
 ### Project requirements
 Golang and ginkgo versions based on versions specified in `go.mmod` file.
@@ -67,11 +67,11 @@ Parameters for the script are controlled by the following environment variables:
   - Example instance type: "g4dn.xlarge" in AWS, or "a2-highgpu-1g" in GCP, or "Standard_NC4as_T4_v3" in Azure - _required when need to scale cluster to add GPU node_
 - `NVIDIAGPU_CATALOGSOURCE`: custom catalogsource to be used.  If not specified, the default "certified-operators" catalog is used - _optional_
 - `NVIDIAGPU_SUBSCRIPTION_CHANNEL`: specific subscription channel to be used.  If not specified, the latest channel is used - _optional_
-- `NVIDIAGPU_BUNDLE_IMAGE`: GPU Operator bundle image to deploy with operator-sdk if NVIDIAGPU_DEPLOY_FROM_BUNDLE variable is set to true.  Default value for bundle image if not set: registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:master-latest - _optional when deploying from bundlle_
+- `NVIDIAGPU_BUNDLE_IMAGE`: GPU Operator bundle image to deploy with operator-sdk if NVIDIAGPU_DEPLOY_FROM_BUNDLE variable is set to true.  Default value for bundle image if not set: registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:main-latest - _optional when deploying from bundlle_
 - `NVIDIAGPU_DEPLOY_FROM_BUNDLE`: boolean flag to deploy GPU operator from bundle image with operator-sdk - Default value is false - _required when deploying from bundle_
 - `NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL`: specific subscription channel to upgrade to from previous version.  _required when running operator-upgrade testcase_
 - `NVIDIAGPU_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_
-- `TEST_LABELS`: ginkgo query passed to the label-filter option for including/excluding tests - _optional_ 
+- `TEST_LABELS`: ginkgo query passed to the label-filter option for including/excluding tests - _optional_
 - `VERBOSE_SCRIPT`: prints verbose script information when executing the script - _optional_
 - `TEST_VERBOSE`: executes ginkgo with verbose test output - _optional_
 - `TEST_TRACE`: includes full stack trace from ginkgo tests when a failure occurs - _optional_
@@ -90,15 +90,15 @@ $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE="g4dn.xlarge"
 $ export NVIDIAGPU_CATALOGSOURCE="certified-operators"
 $ export NVIDIAGPU_SUBSCRIPTION_CHANNEL="v23.9"
-$ make run-tests                    
+$ make run-tests
 Executing eco-gotests test-runner script
 scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu" ./tests/nvidiagpu
 ```
 
 Example running the GPU operator upgrade testcase (from v23.6 to v24.3) after the end-end testcase.
-Note:  you must run the end-to-end testcase first to deploy a previous version, set NVIDIAGPU_CLEANUP=false, 
-and specify the channel to upgrade to NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL=v24.3, along with the label 
+Note:  you must run the end-to-end testcase first to deploy a previous version, set NVIDIAGPU_CLEANUP=false,
+and specify the channel to upgrade to NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL=v24.3, along with the label
 'operator-upgrade' in TEST_LABELS.  Otherwise, the upgrade testcase will not be executed:
 ```
 $ export KUBECONFIG=/path/to/kubeconfig
@@ -113,7 +113,7 @@ $ export NVIDIAGPU_CATALOGSOURCE="certified-operators"
 $ export NVIDIAGPU_SUBSCRIPTION_CHANNEL="v23.9"
 $ export NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL=v24.3
 $ export NVIDIAGPU_CLEANUP=false
-$ make run-tests                    
+$ make run-tests
 Executing eco-gotests test-runner script
 scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,operator-upgrade" ./tests/nvidiagpu

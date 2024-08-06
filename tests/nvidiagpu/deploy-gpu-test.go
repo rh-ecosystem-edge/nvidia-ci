@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/v1"
 	nvidiagpuv1alpha1 "github.com/NVIDIA/k8s-operator-libs/api/upgrade/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
@@ -96,7 +97,7 @@ const (
 	gpuBurnPodName                      = "gpu-burn-pod"
 	gpuBurnPodLabel                     = "app=gpu-burn-app"
 	gpuBurnConfigmapName                = "gpu-burn-entrypoint"
-	gpuOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:master-latest"
+	gpuOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:main-latest"
 )
 
 var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {

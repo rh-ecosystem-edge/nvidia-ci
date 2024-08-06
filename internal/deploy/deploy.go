@@ -17,7 +17,7 @@ import (
 //go:generate mockgen -package=deploy -destination mock_appsv1.go k8s.io/client-go/kubernetes/typed/apps/v1 AppsV1Interface,DeploymentInterface
 
 type BundleConfig struct {
-	BundleImage string `required:"true" envconfig:"NVIDIAGPU_BUNDLE_IMAGE" default:"registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:master-latest"`
+	BundleImage string `required:"true" envconfig:"NVIDIAGPU_BUNDLE_IMAGE" default:"registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:main-latest"`
 }
 
 //go:generate mockgen -source=deploy.go -package=deploy -destination=mock_deploy.go

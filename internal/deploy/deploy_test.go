@@ -30,7 +30,7 @@ var _ = Describe("GetBundleConfig", func() {
 
 		bundleConfig, err := deploy.GetBundleConfig(logLevel)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(bundleConfig.BundleImage).To(Equal("registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:master-latest"))
+		Expect(bundleConfig.BundleImage).To(Equal("registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:main-latest"))
 	})
 
 	It("should override the default value", func() {
