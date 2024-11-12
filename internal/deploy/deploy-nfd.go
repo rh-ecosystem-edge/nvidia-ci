@@ -16,6 +16,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -450,4 +451,26 @@ func DeleteNFDCSV(apiClient *clients.Settings) error {
 	err = clusterNfdCSV.Delete()
 
 	return err
+}
+
+// DeleteAnyNFDCSV Deletes all CSVs that belong to a the NFD subscription (by name) in the NFD subscription namespace.
+// Equivalent to `oc delete csv -n <namespace> -l operators.coreos.com/<name>.<namespace>`
+func DeleteAnyNFDCSV(apiClient *clients.Settings) error {
+
+	csvList, err := apiClient.ClusterServiceVersions(nfdOperatorNamespace).List(context.TODO(),
+		metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("operators.coreos.com/%s.%s", nfdPackage, nfdOperatorNamespace),
+		})
+
+	if err != nil {
+		return err
+	}
+
+	for _, csv := range csvList.Items {
+		glog.V(gpuparams.GpuLogLevel).Infof("Attempt deleting NFD CSV %s in namespace %s", csv.Name, nfdOperatorNamespace)
+		if err := apiClient.ClusterServiceVersions(nfdOperatorNamespace).Delete(context.TODO(), csv.Name, metav1.DeleteOptions{}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

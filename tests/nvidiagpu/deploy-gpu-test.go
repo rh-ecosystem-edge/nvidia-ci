@@ -229,25 +229,20 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				err = deploy.CreateNFDOperatorGroup(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "error creating NFD OperatorGroup:  %v", err)
 
-				By("Deploy NFD Subscription in NFD namespace")
-				err = deploy.CreateNFDSubscription(inittools.APIClient)
-				Expect(err).ToNot(HaveOccurred(), "error creating NFD Subscription:  %v", err)
+				nfdDeployed := createNFDDeployment()
 
-				By("Sleep for 2 minutes to allow the NFD Operator deployment to be created")
-				glog.V(gpuparams.GpuLogLevel).Infof("Sleep for 2 minutes to allow the NFD Operator deployment" +
-					" to be created")
-				time.Sleep(2 * time.Minute)
+				if !nfdDeployed && strings.HasPrefix(ocpVersion, "4.15.") {
+					By(fmt.Sprintf("Applying workaround for NFD failing to deploy on OCP %s", ocpVersion))
+					err = deploy.DeleteNFDSubscription(inittools.APIClient)
+					Expect(err).ToNot(HaveOccurred(), "error deleting NFD subscription: %v", err)
 
-				By("Wait up to 5 mins for NFD Operator deployment to be created")
-				nfdDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, nfdOperatorDeploymentName, nfdOperatorNamespace,
-					30*time.Second, 5*time.Minute)
-				Expect(nfdDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy "+
-					"NFD operator")
+					err = deploy.DeleteAnyNFDCSV(inittools.APIClient)
+					Expect(err).ToNot(HaveOccurred(), "error deleting NFD CSV: %v", err)
 
-				By("Check if NFD Operator has been deployed")
-				nfdDeployed, err := deploy.CheckNFDOperatorDeployed(inittools.APIClient, 240*time.Second)
-				Expect(err).ToNot(HaveOccurred(), "error deploying NFD Operator in"+
-					" NFD namespace:  %v", err)
+					glog.V(gpuparams.GpuLogLevel).Info("Re-trying NFD deployment")
+					nfdDeployed = createNFDDeployment()
+				}
+
 				Expect(nfdDeployed).ToNot(BeFalse(), "failed to deploy NFD operator")
 
 				By("Deploy NFD CR instance in NFD namespace")
@@ -1048,3 +1043,27 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 	})
 })
+
+func createNFDDeployment() bool {
+
+	By("Deploy NFD Subscription in NFD namespace")
+	err := deploy.CreateNFDSubscription(inittools.APIClient)
+	Expect(err).ToNot(HaveOccurred(), "error creating NFD Subscription:  %v", err)
+
+	By("Sleep for 2 minutes to allow the NFD Operator deployment to be created")
+	glog.V(gpuparams.GpuLogLevel).Infof("Sleep for 2 minutes to allow the NFD Operator deployment" +
+		" to be created")
+	time.Sleep(2 * time.Minute)
+
+	By("Wait up to 5 mins for NFD Operator deployment to be created")
+	nfdDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, nfdOperatorDeploymentName, nfdOperatorNamespace,
+		30*time.Second, 5*time.Minute)
+	Expect(nfdDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy "+
+		"NFD operator")
+
+	By("Check if NFD Operator has been deployed")
+	nfdDeployed, err := deploy.CheckNFDOperatorDeployed(inittools.APIClient, 240*time.Second)
+	Expect(err).ToNot(HaveOccurred(), "error deploying NFD Operator in"+
+		" NFD namespace:  %v", err)
+	return nfdDeployed
+}
