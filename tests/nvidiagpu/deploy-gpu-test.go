@@ -10,6 +10,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
 
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/machine"
 
 	"strings"
@@ -341,6 +342,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 					err = deploy.DeleteAnyNFDCSV(inittools.APIClient)
 					Expect(err).ToNot(HaveOccurred(), "error deleting NFD CSV: %v", err)
+
+					err = deleteOLMPods(inittools.APIClient)
+					Expect(err).ToNot(HaveOccurred(), "error deleting OLM pods for operator cache workaround: %v", err)
 
 					glog.V(gpuparams.GpuLogLevel).Info("Re-trying NFD deployment")
 					nfdDeployed = createNFDDeployment()
@@ -1231,4 +1235,25 @@ func createNFDDeployment() bool {
 	Expect(err).ToNot(HaveOccurred(), "error deploying NFD Operator in"+
 		" NFD namespace:  %v", err)
 	return nfdDeployed
+}
+
+func deleteOLMPods(apiClient *clients.Settings) error {
+
+	olmNamespace := "openshift-operator-lifecycle-manager"
+	glog.V(gpuparams.GpuLogLevel).Info("Deleting catalog operator pods")
+	if err := apiClient.Pods(olmNamespace).DeleteCollection(context.TODO(),
+		metav1.DeleteOptions{},
+		metav1.ListOptions{LabelSelector: "app=catalog-operator"}); err != nil {
+		return err
+	}
+
+	glog.V(gpuparams.GpuLogLevel).Info("Deleting OLM operator pods")
+	if err := apiClient.Pods(olmNamespace).DeleteCollection(
+		context.TODO(),
+		metav1.DeleteOptions{},
+		metav1.ListOptions{LabelSelector: "app=olm-operator"}); err != nil {
+		return err
+	}
+
+	return nil
 }
