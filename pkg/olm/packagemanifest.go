@@ -3,13 +3,13 @@ package olm
 import (
 	"context"
 	"fmt"
-
 	"github.com/golang/glog"
 	pkgManifestV1 "github.com/operator-framework/operator-lifecycle-manager/pkg/package-server/apis/operators/v1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/msg"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"time"
 )
 
 // PackageManifestBuilder provides a struct for PackageManifest object from the cluster
@@ -61,6 +61,37 @@ func PullPackageManifest(apiClient *clients.Settings, name, nsname string) (*Pac
 	return builder, nil
 }
 
+// PullPackageManifestByCatalogWithTimeout loads an existing PackageManifest from specified catalog into Builder struct with timeout.
+func PullPackageManifestByCatalogWithTimeout(apiClient *clients.Settings, name, nsname,
+	catalog string, backoff time.Duration, timeout time.Duration) (*PackageManifestBuilder, error) {
+	glog.V(100).Infof("Pulling existing PackageManifest name %s in namespace %s and from catalog %s with backoff of %v and timeout of %v",
+		name, nsname, catalog, backoff, timeout)
+
+	packageManifests, err := ListPackageManifestWithTimeout(
+		apiClient,
+		nsname,
+		backoff,
+		timeout,
+		metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("catalog=%s", catalog),
+			FieldSelector: fmt.Sprintf("metadata.name=%s", name),
+		})
+	if err != nil {
+		glog.V(100).Infof("Failed to list PackageManifests with name %s in namespace %s from catalog"+
+			" %s and timeout %d due to %s", name, nsname, catalog, timeout, err.Error())
+		return nil, err
+	}
+	if len(packageManifests) == 0 {
+		glog.V(100).Infof("The list of matching PackageManifests is empty")
+		return nil, fmt.Errorf("no matching PackageManifests were found")
+	}
+	if len(packageManifests) > 1 {
+		glog.V(100).Infof("More than one matching PackageManifests were found")
+		return nil, fmt.Errorf("more than one matching PackageManifests were found")
+	}
+	return packageManifests[0], nil
+}
+
 // PullPackageManifestByCatalog loads an existing PackageManifest from specified catalog into Builder struct.
 func PullPackageManifestByCatalog(apiClient *clients.Settings, name, nsname,
 	catalog string) (*PackageManifestBuilder, error) {
@@ -71,26 +102,19 @@ func PullPackageManifestByCatalog(apiClient *clients.Settings, name, nsname,
 		LabelSelector: fmt.Sprintf("catalog=%s", catalog),
 		FieldSelector: fmt.Sprintf("metadata.name=%s", name),
 	})
-
 	if err != nil {
 		glog.V(100).Infof("Failed to list PackageManifests with name %s in namespace %s from catalog"+
 			" %s due to %s", name, nsname, catalog, err.Error())
-
 		return nil, err
 	}
-
 	if len(packageManifests) == 0 {
 		glog.V(100).Infof("The list of matching PackageManifests is empty")
-
 		return nil, fmt.Errorf("no matching PackageManifests were found")
 	}
-
 	if len(packageManifests) > 1 {
 		glog.V(100).Infof("More than one matching PackageManifests were found")
-
 		return nil, fmt.Errorf("more than one matching PackageManifests were found")
 	}
-
 	return packageManifests[0], nil
 }
 

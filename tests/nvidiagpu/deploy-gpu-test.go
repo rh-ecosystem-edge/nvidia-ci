@@ -263,8 +263,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				nfdCleanupAfterInstall = true
 
 				By("Check if 'nfd' packagemanifest exists in 'redhat-operators' default catalog")
-				nfdPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-					nfdPackage, nfdCatalogSourceNamespace, nfdCatalogSourceDefault)
+				nfdPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
+					nfdPackage, nfdCatalogSourceNamespace, nfdCatalogSourceDefault, time.Second, time.Minute)
 
 				if nfdPkgManifestBuilderByCatalog == nil {
 					glog.V(gpuparams.GpuLogLevel).Infof("NFD packagemanifest was not found in the default '%s'"+
@@ -509,8 +509,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				glog.V(gpuparams.GpuLogLevel).Infof("Using default GPU catalogsource '%s'",
 					gpuCatalogSourceDefault)
 
-				gpuPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-					gpuPackage, gpuCatalogSourceNamespace, gpuCatalogSourceDefault)
+				gpuPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
+					gpuPackage, gpuCatalogSourceNamespace, gpuCatalogSourceDefault, time.Second, time.Minute)
 
 				if err != nil {
 					glog.V(gpuparams.GpuLogLevel).Infof("Error trying to pull GPU packagemanifest '%s' from"+
