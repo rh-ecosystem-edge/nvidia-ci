@@ -335,7 +335,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 				nfdDeployed := createNFDDeployment()
 
-				if !nfdDeployed && strings.HasPrefix(ocpVersion, "4.15.") {
+				if !nfdDeployed {
 					By(fmt.Sprintf("Applying workaround for NFD failing to deploy on OCP %s", ocpVersion))
 					err = deploy.DeleteNFDSubscription(inittools.APIClient)
 					Expect(err).ToNot(HaveOccurred(), "error deleting NFD subscription: %v", err)
