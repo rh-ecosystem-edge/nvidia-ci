@@ -9,6 +9,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/msg"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"time"
 )
 
@@ -66,30 +67,54 @@ func PullPackageManifestByCatalogWithTimeout(apiClient *clients.Settings, name, 
 	catalog string, backoff time.Duration, timeout time.Duration) (*PackageManifestBuilder, error) {
 	glog.V(100).Infof("Pulling existing PackageManifest name %s in namespace %s and from catalog %s with backoff of %v and timeout of %v",
 		name, nsname, catalog, backoff, timeout)
-
-	packageManifests, err := ListPackageManifestWithTimeout(
-		apiClient,
-		nsname,
-		backoff,
-		timeout,
-		metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("catalog=%s", catalog),
-			FieldSelector: fmt.Sprintf("metadata.name=%s", name),
+	if nsname == "" {
+		glog.V(100).Infof("packagemanifest 'nsname' parameter can not be empty")
+		return nil, fmt.Errorf("failed to list packagemanifests, 'nsname' parameter is empty")
+	}
+	passedOptions := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("catalog=%s", catalog),
+		FieldSelector: fmt.Sprintf("metadata.name=%s", name),
+	}
+	logMessage := fmt.Sprintf("Listing PackageManifests in the namespace %s with the options %v", nsname, passedOptions)
+	glog.V(100).Infof(logMessage)
+	var pkgManifestList *pkgManifestV1.PackageManifestList
+	err := wait.PollUntilContextTimeout(
+		context.TODO(), backoff, timeout, true, func(ctx context.Context) (bool, error) {
+			var err error
+			pkgManifestList, err = apiClient.PackageManifestInterface.PackageManifests(nsname).List(context.TODO(),
+				passedOptions)
+			if err != nil {
+				return false, err
+			}
+			if len(pkgManifestList.Items) != 0 {
+				return true, nil
+			}
+			return false, nil
 		})
 	if err != nil {
-		glog.V(100).Infof("Failed to list PackageManifests with name %s in namespace %s from catalog"+
-			" %s and timeout %d due to %s", name, nsname, catalog, timeout, err.Error())
+		glog.V(100).Infof("Failed to list PackageManifests in the namespace %s due to %s",
+			nsname, err.Error())
 		return nil, err
 	}
-	if len(packageManifests) == 0 {
+	var pkgManifestObjects []*PackageManifestBuilder
+	for _, runningPkgManifest := range pkgManifestList.Items {
+		copiedPkgManifest := runningPkgManifest
+		pkgManifestBuilder := &PackageManifestBuilder{
+			apiClient:  apiClient,
+			Object:     &copiedPkgManifest,
+			Definition: &copiedPkgManifest,
+		}
+		pkgManifestObjects = append(pkgManifestObjects, pkgManifestBuilder)
+	}
+	if len(pkgManifestObjects) == 0 {
 		glog.V(100).Infof("The list of matching PackageManifests is empty")
 		return nil, fmt.Errorf("no matching PackageManifests were found")
 	}
-	if len(packageManifests) > 1 {
+	if len(pkgManifestObjects) > 1 {
 		glog.V(100).Infof("More than one matching PackageManifests were found")
 		return nil, fmt.Errorf("more than one matching PackageManifests were found")
 	}
-	return packageManifests[0], nil
+	return pkgManifestObjects[0], nil
 }
 
 // PullPackageManifestByCatalog loads an existing PackageManifest from specified catalog into Builder struct.
@@ -97,25 +122,42 @@ func PullPackageManifestByCatalog(apiClient *clients.Settings, name, nsname,
 	catalog string) (*PackageManifestBuilder, error) {
 	glog.V(100).Infof("Pulling existing PackageManifest name %s in namespace %s and from catalog %s",
 		name, nsname, catalog)
-
-	packageManifests, err := ListPackageManifest(apiClient, nsname, metav1.ListOptions{
+	if nsname == "" {
+		glog.V(100).Infof("packagemanifest 'nsname' parameter can not be empty")
+		return nil, fmt.Errorf("failed to list packagemanifests, 'nsname' parameter is empty")
+	}
+	passedOptions := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("catalog=%s", catalog),
 		FieldSelector: fmt.Sprintf("metadata.name=%s", name),
-	})
+	}
+	logMessage := fmt.Sprintf("Listing PackageManifests in the namespace %s with the options %v", nsname, passedOptions)
+	glog.V(100).Infof(logMessage)
+	pkgManifestList, err := apiClient.PackageManifestInterface.PackageManifests(nsname).List(context.TODO(),
+		passedOptions)
 	if err != nil {
-		glog.V(100).Infof("Failed to list PackageManifests with name %s in namespace %s from catalog"+
-			" %s due to %s", name, nsname, catalog, err.Error())
+		glog.V(100).Infof("Failed to list PackageManifests in the namespace %s due to %s",
+			nsname, err.Error())
 		return nil, err
 	}
-	if len(packageManifests) == 0 {
+	var pkgManifestObjects []*PackageManifestBuilder
+	for _, runningPkgManifest := range pkgManifestList.Items {
+		copiedPkgManifest := runningPkgManifest
+		pkgManifestBuilder := &PackageManifestBuilder{
+			apiClient:  apiClient,
+			Object:     &copiedPkgManifest,
+			Definition: &copiedPkgManifest,
+		}
+		pkgManifestObjects = append(pkgManifestObjects, pkgManifestBuilder)
+	}
+	if len(pkgManifestObjects) == 0 {
 		glog.V(100).Infof("The list of matching PackageManifests is empty")
 		return nil, fmt.Errorf("no matching PackageManifests were found")
 	}
-	if len(packageManifests) > 1 {
+	if len(pkgManifestObjects) > 1 {
 		glog.V(100).Infof("More than one matching PackageManifests were found")
 		return nil, fmt.Errorf("more than one matching PackageManifests were found")
 	}
-	return packageManifests[0], nil
+	return pkgManifestObjects[0], nil
 }
 
 // Exists checks whether the given PackageManifest exists.
