@@ -263,8 +263,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				nfdCleanupAfterInstall = true
 
 				By("Check if 'nfd' packagemanifest exists in 'redhat-operators' default catalog")
-				nfdPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
-					nfdPackage, nfdCatalogSourceNamespace, nfdCatalogSourceDefault, time.Second, time.Minute)
+				nfdPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
+					nfdPackage, nfdCatalogSourceNamespace, nfdCatalogSourceDefault)
 
 				if nfdPkgManifestBuilderByCatalog == nil {
 					glog.V(gpuparams.GpuLogLevel).Infof("NFD packagemanifest was not found in the default '%s'"+
@@ -298,8 +298,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 						Expect(createdNFDCustomCatalogSourceBuilder.IsReady(4 * time.Minute)).NotTo(BeFalse())
 
-						nfdPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-							nfdPackage, nfdCatalogSourceNamespace, nfdCustomCatalogSource)
+						nfdPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
+							nfdPackage, nfdCatalogSourceNamespace, nfdCustomCatalogSource, 30*time.Second, 5*time.Minute)
 
 						Expect(err).ToNot(HaveOccurred(), "error getting NFD packagemanifest '%s' "+
 							"from custom catalog '%s':  %v", nfdPackage, nfdCustomCatalogSource, err)
@@ -509,8 +509,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				glog.V(gpuparams.GpuLogLevel).Infof("Using default GPU catalogsource '%s'",
 					gpuCatalogSourceDefault)
 
-				gpuPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
-					gpuPackage, gpuCatalogSourceNamespace, gpuCatalogSourceDefault, time.Second, time.Minute)
+				gpuPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
+					gpuPackage, gpuCatalogSourceNamespace, gpuCatalogSourceDefault)
 
 				if err != nil {
 					glog.V(gpuparams.GpuLogLevel).Infof("Error trying to pull GPU packagemanifest '%s' from"+
@@ -554,8 +554,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 						glog.V(gpuparams.GpuLogLevel).Infof("Custom GPU catalogsource '%s' is now ready",
 							createdGPUCustomCatalogSourceBuilder.Definition.Name)
 
-						gpuPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-							gpuPackage, gpuCatalogSourceNamespace, gpuCustomCatalogSource)
+						gpuPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
+							gpuPackage, gpuCatalogSourceNamespace, gpuCustomCatalogSource, 30*time.Second, 5*time.Minute)
 
 						Expect(err).ToNot(HaveOccurred(), "error getting GPU packagemanifest '%s' "+
 							"from custom catalog '%s':  %v", gpuPackage, gpuCustomCatalogSource, err)
