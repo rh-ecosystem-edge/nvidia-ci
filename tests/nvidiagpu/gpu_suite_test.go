@@ -25,6 +25,9 @@ func TestGPUDeploy(t *testing.T) {
 }
 
 var _ = JustAfterEach(func() {
+	csr := CurrentSpecReport()
 	reporter.ReportIfFailed(
-		CurrentSpecReport(), currentFile, tsparams.ReporterNamespacesToDump, tsparams.ReporterCRDsToDump, clients.SetScheme)
+		csr, currentFile, tsparams.ReporterNamespacesToDump, tsparams.ReporterCRDsToDump, clients.SetScheme)
+	reporter.Report(
+		csr, currentFile, tsparams.ReporterNamespacesToDump, tsparams.ReporterCRDsToDump, clients.SetScheme)
 })

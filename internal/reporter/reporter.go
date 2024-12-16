@@ -130,3 +130,35 @@ func removeFile(fPath string) error {
 
 	return nil
 }
+
+// Report dumps requested cluster CRs to the given directory.
+func Report(
+	report types.SpecReport,
+	testSuite string,
+	nSpaces map[string]string,
+	cRDs []k8sreporter.CRData,
+	apiScheme func(scheme *runtime.Scheme) error) {
+
+	dumpDir := inittools.GeneralConfig.GetDumpTestReportLocation(testSuite)
+
+	if dumpDir != "" {
+		reporter, err := newReporter(dumpDir, nSpaces, apiScheme, cRDs)
+		if err != nil {
+			glog.Fatalf("Failed to create log reporter due to %s", err)
+		}
+
+		tcReportFolderName := strings.ReplaceAll(report.FullText(), " ", "_")
+		reporter.Dump(report.RunTime, tcReportFolderName)
+		_, podExecLogsFName := path.Split(pathToPodExecLogs)
+		err = moveFile(
+			pathToPodExecLogs, path.Join(inittools.GeneralConfig.ReportsDirAbsPath, tcReportFolderName, podExecLogsFName))
+
+		if err != nil {
+			glog.Fatalf("Failed to move pod exec logs %s to report folder: %s", pathToPodExecLogs, err)
+		}
+	}
+	err := removeFile(pathToPodExecLogs)
+	if err != nil {
+		glog.Fatalf(err.Error())
+	}
+}

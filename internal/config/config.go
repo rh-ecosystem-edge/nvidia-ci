@@ -100,8 +100,19 @@ func (cfg *GeneralConfig) GetDumpFailedTestReportLocation(file string) string {
 
 		return filepath.Join(cfg.ReportsDirAbsPath, fmt.Sprintf("failed_%s", dumpFileName))
 	}
-
 	return ""
+}
+
+// GetDumpTestReportLocation returns destination file for failed tests logs.
+func (cfg *GeneralConfig) GetDumpTestReportLocation(file string) string {
+	if _, err := os.Stat(cfg.ReportsDirAbsPath); os.IsNotExist(err) {
+		err := os.MkdirAll(cfg.ReportsDirAbsPath, 0744)
+		if err != nil {
+			log.Fatalf("panic: Failed to create report dir due to %s", err)
+		}
+	}
+	dumpFileName := strings.TrimSuffix(filepath.Base(file), filepath.Ext(filepath.Base(file)))
+	return filepath.Join(cfg.ReportsDirAbsPath, dumpFileName)
 }
 
 func readFile(cfg *GeneralConfig, cfgFile string) error {
