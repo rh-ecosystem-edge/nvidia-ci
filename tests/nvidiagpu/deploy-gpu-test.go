@@ -344,7 +344,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					Expect(err).ToNot(HaveOccurred(), "error deleting NFD CSV: %v", err)
 
 					err = deleteOLMPods(inittools.APIClient)
-					Expect(err).ToNot(HaveOccurred(), "error deleting OLM pods for operator cache workaround: %v", err)
+					Expect(err).ToNot(HaveOccurred(), "error deleting OLM pods for operator cache "+
+						"workaround: %v", err)
 
 					glog.V(gpuparams.GpuLogLevel).Info("Re-trying NFD deployment")
 					nfdDeployed = createNFDDeployment()

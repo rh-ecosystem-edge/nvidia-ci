@@ -9,6 +9,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidianetwork"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
@@ -36,6 +37,34 @@ func ClusterPolicyReady(apiClient *clients.Settings, clusterPolicyName string, p
 
 			glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy %s in now in %s state",
 				clusterPolicy.Object.Name, clusterPolicy.Object.Status.State)
+
+			return false, err
+		})
+}
+
+// NicClusterPolicyReady Waits until nicClusterPolicy is Ready.
+func NicClusterPolicyReady(apiClient *clients.Settings, nicClusterPolicyName string, pollInterval,
+	timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(
+		context.TODO(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			nicClusterPolicy, err := nvidianetwork.Pull(apiClient, nicClusterPolicyName)
+
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy pull from cluster error: %s\n", err)
+
+				return false, err
+			}
+
+			if nicClusterPolicy.Object.Status.State == "ready" {
+				glog.V(gpuparams.GpuLogLevel).Infof("NicClusterPolicy %s in now in %s state",
+					nicClusterPolicy.Object.Name, nicClusterPolicy.Object.Status.State)
+
+				// this exists out of the wait.PollImmediate()
+				return true, nil
+			}
+
+			glog.V(gpuparams.GpuLogLevel).Infof("NicClusterPolicy %s in now in %s state",
+				nicClusterPolicy.Object.Name, nicClusterPolicy.Object.Status.State)
 
 			return false, err
 		})

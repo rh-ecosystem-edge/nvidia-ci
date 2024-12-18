@@ -38,6 +38,7 @@ replace (
 )
 
 require (
+	github.com/Mellanox/network-operator v1.4.0
 	github.com/NVIDIA/gpu-operator v1.8.3-0.20240429200431-0fe1e8db32b0
 	github.com/NVIDIA/k8s-operator-libs v0.0.0-20240214071211-ea58a3ada15c
 	github.com/golang/glog v1.2.0
