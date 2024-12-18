@@ -33,4 +33,8 @@ RUN mkdir -p "${ARTIFACT_DIR}" && chmod 777 "${ARTIFACT_DIR}"
 RUN mkdir -p "${GOCACHE}" && chmod 777 "${GOCACHE}"
 RUN chmod 777 /root/nvidia-ci -R
 
+# Downloading Nvidia's must-gather.sh shell script
+RUN curl -o must-gather.sh -L https://raw.githubusercontent.com/NVIDIA/gpu-operator/main/hack/must-gather.sh && \
+    chmod +x must-gather.sh
+
 ENTRYPOINT ["bash"]

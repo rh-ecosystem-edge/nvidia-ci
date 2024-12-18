@@ -1,6 +1,10 @@
 package nvidiagpu
 
 import (
+	"fmt"
+	"github.com/golang/glog"
+	"os"
+	"os/exec"
 	"runtime"
 	"testing"
 
@@ -27,4 +31,11 @@ func TestGPUDeploy(t *testing.T) {
 var _ = JustAfterEach(func() {
 	reporter.ReportIfFailed(
 		CurrentSpecReport(), currentFile, tsparams.ReporterNamespacesToDump, tsparams.ReporterCRDsToDump, clients.SetScheme)
+	dumpDir := inittools.GeneralConfig.GetDumpFailedTestReportLocation(currentFile)
+	cmd := exec.Command("./must-gather.sh")
+	cmd.Env = append(os.Environ(), "ARTIFACT_DIR="+dumpDir)
+	_, err := cmd.CombinedOutput()
+	if err != nil {
+		glog.V(100).Infof("Error running must-gather.sh script %v", err)
+	}
 })
