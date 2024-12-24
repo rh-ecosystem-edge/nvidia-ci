@@ -1,0 +1,35 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "enabledManagers": ["regex"],
+  "regexManagers": [
+    {
+      "fileMatch": ["^versions\\.yaml$"],
+      "matchStrings": ["openshift_rc_version:\\s*\"(?<currentValue>.*?)\""],
+      "datasourceTemplate": "docker",
+      "registryUrlTemplate": "https://quay.io",
+      "packageNameTemplate": "openshift-release-dev/ocp-release",
+      "depNameTemplate": "openshift-rc",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-rc\\.(?<rc>\\d+)-x86_64$"
+    },
+    {
+      "fileMatch": ["^versions\\.yaml$"],
+      "matchStrings": ["openshift_version:\\s*\"(?<currentValue>.*?)\""],
+      "datasourceTemplate": "docker",
+      "registryUrlTemplate": "https://quay.io",
+      "packageNameTemplate": "openshift-release-dev/ocp-release",
+      "depNameTemplate": "openshift-stable",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-x86_64$"
+    },
+    {
+      "fileMatch": ["^versions\\.yaml$"],
+      "matchStrings": ["gpu_operator_version:\\s*\"(?<currentValue>.*?)\""],
+      "datasourceTemplate": "docker",
+      "registryUrlTemplate": "https://nvcr.io",
+      "packageNameTemplate": "nvidia/gpu-operator",
+      "depNameTemplate": "nvidia-gpu-operator"
+    }
+  ],
+  "schedule": ["at any time"],
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 0
+}
