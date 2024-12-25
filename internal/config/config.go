@@ -90,17 +90,15 @@ func (cfg *GeneralConfig) WriteReport(fileName string, content []byte) error {
 func (cfg *GeneralConfig) GetDumpFailedTestReportLocation(file string) string {
 	if cfg.DumpFailedTests {
 		if _, err := os.Stat(cfg.ReportsDirAbsPath); os.IsNotExist(err) {
+			log.Printf("Path to report dir %s does not exist, trying to create now", cfg.ReportsDirAbsPath)
 			err := os.MkdirAll(cfg.ReportsDirAbsPath, 0744)
 			if err != nil {
 				log.Fatalf("panic: Failed to create report dir due to %s", err)
 			}
 		}
-
 		dumpFileName := strings.TrimSuffix(filepath.Base(file), filepath.Ext(filepath.Base(file)))
-
 		return filepath.Join(cfg.ReportsDirAbsPath, fmt.Sprintf("failed_%s", dumpFileName))
 	}
-
 	return ""
 }
 

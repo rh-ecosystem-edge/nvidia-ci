@@ -46,7 +46,7 @@ fi
 
 
 # Build ginkgo command
-cmd="ginkgo -timeout=24h --keep-going --require-suite -r"
+cmd="PATH_TO_MUST_GATHER_SCRIPT=$(pwd)/gpu-operator-must-gather.sh ginkgo -timeout=24h --keep-going --require-suite -r"
 
 if [[ "${TEST_VERBOSE}" == "true" ]]; then
     cmd+=" -vv"
@@ -60,6 +60,7 @@ if [[ ! -z "${TEST_LABELS}" ]]; then
     cmd+=" --label-filter=\"${TEST_LABELS}\""
 fi
 cmd+=" "$feature_dirs" $@"   # + user args --xxx=yyy...
+
 
 # Execute ginkgo command
 echo $cmd

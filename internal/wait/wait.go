@@ -26,18 +26,22 @@ func ClusterPolicyReady(apiClient *clients.Settings, clusterPolicyName string, p
 				return false, err
 			}
 
-			if clusterPolicy.Object.Status.State == "ready" {
+			if clusterPolicy.Object != nil && clusterPolicy.Object.Status.State == "ready" {
 				glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy %s in now in %s state",
 					clusterPolicy.Object.Name, clusterPolicy.Object.Status.State)
 
 				// this exists out of the wait.PollImmediate()
 				return true, nil
 			}
+			if clusterPolicy.Object == nil {
+				glog.V(gpuparams.GpuLogLevel).Info("ClusterPolicy object is nil")
+				return false, nil
+			}
 
 			glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy %s in now in %s state",
 				clusterPolicy.Object.Name, clusterPolicy.Object.Status.State)
 
-			return false, err
+			return false, nil
 		})
 }
 
