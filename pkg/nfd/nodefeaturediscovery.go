@@ -263,3 +263,14 @@ func (builder *Builder) validate() (bool, error) {
 
 	return true, nil
 }
+
+func (builder *Builder) UpdatePciDevices(deviceClassWhitelist []string, deviceLabelFields []string) error {
+	cfg := NewConfig(builder.Definition.Spec.WorkerConfig.ConfigData)
+	cfg.SetPciWhitelistConfig(deviceClassWhitelist, deviceLabelFields)
+	var err error = nil
+	err, builder.Definition.Spec.WorkerConfig.ConfigData = cfg.GetYamlString()
+	if err != nil {
+		return err
+	}
+	return nil
+}
