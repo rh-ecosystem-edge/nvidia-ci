@@ -1,7 +1,8 @@
 package nfd
 
 import (
-	"github.com/golang/glog"
+	"log"
+
 	"gopkg.in/yaml.v2"
 )
 
@@ -33,29 +34,30 @@ type Sources struct {
 }
 
 func NewConfig(config string) *Config {
-	var cfg *Config
+	cfg := &Config{}
 	err := yaml.Unmarshal([]byte(config), cfg)
 	if err != nil {
-		glog.Errorf("Unmarshal: %v", err)
+		log.Printf("Unmarshal: %v", err)
 	}
 	return cfg
 }
 
-// CPUConfigLabels set cpu blacklist/whitelist.
+// SetPciWhitelistConfig updates the PCI device whitelist and label fields.
 func (cfg *Config) SetPciWhitelistConfig(DeviceClassWhitelist, DeviceLabelFields []string) {
 
 	if cfg.Sources.PCI == nil {
 		cfg.Sources.PCI = &PCIDevice{}
 	}
-
+	cfg.Sources.PCI.DeviceClassWhitelist = cfg.Sources.PCI.DeviceClassWhitelist[:0]
+	cfg.Sources.PCI.DeviceLabelFields = cfg.Sources.PCI.DeviceLabelFields[:0]
 	cfg.Sources.PCI.DeviceClassWhitelist = append(cfg.Sources.PCI.DeviceClassWhitelist, DeviceClassWhitelist...)
 	cfg.Sources.PCI.DeviceLabelFields = append(cfg.Sources.PCI.DeviceLabelFields, DeviceLabelFields...)
 }
 
-func (cfg *Config) GetYamlString() (error, string) {
+func (cfg *Config) GetYamlString() (string, error) {
 	modifiedCPUYAML, err := yaml.Marshal(cfg)
 	if err != nil {
-		return err, ""
+		return "", err
 	}
-	return nil, string(modifiedCPUYAML)
+	return string(modifiedCPUYAML), nil
 }
