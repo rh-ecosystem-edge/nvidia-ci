@@ -7,7 +7,7 @@ This repository is an automation/CI framework to test NVIDIA operators, the GPU 
 This project is based on golang + [ginkgo](https://onsi.github.io/ginkgo) framework.
 
 ### Project requirements
-Golang and ginkgo versions based on versions specified in `go.mmod` file.
+Golang and ginkgo versions based on versions specified in `go.mod` file.
 
 The framework in this repository is designed to test NVIDIA's operators on a pre-installed OpenShift Container Platform
 (OCP) cluster which meets the following requirements:
