@@ -1,12 +1,15 @@
 package reporter
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/openshift-kni/k8sreporter"
 
@@ -128,5 +131,34 @@ func removeFile(fPath string) error {
 		}
 	}
 
+	return nil
+}
+func MustGatherIfFailed(specReport types.SpecReport, artifactDir string, timeout time.Duration) error {
+	if !types.SpecStateFailureStates.Is(specReport.State) {
+		return nil
+	}
+	if artifactDir == "" {
+		return fmt.Errorf("artifact directory cannot be empty")
+	}
+
+	mustGatherScriptPath := os.Getenv("PATH_TO_MUST_GATHER_SCRIPT")
+	if mustGatherScriptPath == "" {
+		return fmt.Errorf("PATH_TO_MUST_GATHER_SCRIPT environment variable is not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, mustGatherScriptPath)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("ARTIFACT_DIR=%s", artifactDir))
+	output, err := cmd.CombinedOutput()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		glog.Errorf("%s script timed out: %v", mustGatherScriptPath, ctx.Err())
+		return fmt.Errorf("must gather script timed out: %w", ctx.Err())
+	}
+	if err != nil {
+		glog.Errorf("Error running %s script: %v\nOutput: %s", mustGatherScriptPath, err, output)
+		return fmt.Errorf("error running must gather script: %w", err)
+	}
+	glog.V(100).Infof("must gather script output: %s", output)
 	return nil
 }
