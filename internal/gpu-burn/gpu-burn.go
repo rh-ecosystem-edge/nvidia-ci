@@ -25,6 +25,12 @@ var (
   			echo "ERROR No GPUs found"
 			exit 1
 		fi
+		# This checks for negative GPU count is redundant but serves as a double-check
+		if [ $NUM_GPUS -lt 0 ]; then
+			echo "ERROR: Invalid GPU count"
+			exit 1
+		fi
+
 		./gpu_burn 300
 
 		if [ ! $? -eq 0 ]; then
