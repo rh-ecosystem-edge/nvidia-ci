@@ -10,7 +10,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
 
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
+	_ "github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/machine"
 
 	"strings"
@@ -77,41 +77,6 @@ var (
 	gpuCurrentCSV                         = ""
 	gpuCurrentCSVVersion                  = ""
 	clusterArchitecture                   = "undefined"
-)
-
-const (
-	nfdOperatorNamespace      = "openshift-nfd"
-	nfdCatalogSourceDefault   = "redhat-operators"
-	nfdCatalogSourceNamespace = "openshift-marketplace"
-	nfdOperatorDeploymentName = "nfd-controller-manager"
-	nfdPackage                = "nfd"
-	nfdCRName                 = "nfd-instance"
-	operatorVersionFile       = "operator.version"
-	openShiftVersionFile      = "ocp.version"
-
-	nvidiaGPUNamespace                  = "nvidia-gpu-operator"
-	nfdRhcosLabel                       = "feature.node.kubernetes.io/system-os_release.ID"
-	nfdRhcosLabelValue                  = "rhcos"
-	nvidiaGPULabel                      = "feature.node.kubernetes.io/pci-10de.present"
-	gpuOperatorGroupName                = "gpu-og"
-	gpuOperatorDeployment               = "gpu-operator"
-	gpuSubscriptionName                 = "gpu-subscription"
-	gpuSubscriptionNamespace            = "nvidia-gpu-operator"
-	gpuCatalogSourceDefault             = "certified-operators"
-	gpuCatalogSourceNamespace           = "openshift-marketplace"
-	gpuPackage                          = "gpu-operator-certified"
-	gpuClusterPolicyName                = "gpu-cluster-policy"
-	gpuBurnNamespace                    = "test-gpu-burn"
-	gpuBurnPodName                      = "gpu-burn-pod"
-	gpuBurnPodLabel                     = "app=gpu-burn-app"
-	gpuBurnConfigmapName                = "gpu-burn-entrypoint"
-	gpuOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:main-latest"
-
-	gpuCustomCatalogSourcePublisherName    = "Red Hat"
-	nfdCustomNFDCatalogSourcePublisherName = "Red Hat"
-
-	gpuCustomCatalogSourceDisplayName = "Certified Operators Custom"
-	nfdCustomCatalogSourceDisplayName = "Redhat Operators Custom"
 )
 
 var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
@@ -824,9 +789,10 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					err)
 			}
 
-			By("Wait up to 12 minutes for ClusterPolicy to be ready")
+			By(fmt.Sprintf("Wait up to %v for ClusterPolicy to be ready", ClusterPolicyTimeout))
 			glog.V(gpuparams.GpuLogLevel).Infof("Waiting for ClusterPolicy to be ready")
-			err = wait.ClusterPolicyReady(inittools.APIClient, gpuClusterPolicyName, 60*time.Second, 20*time.Minute)
+			err = wait.ClusterPolicyReady(inittools.APIClient, gpuClusterPolicyName,
+				ClusterPolicyInterval, ClusterPolicyTimeout)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("error waiting for ClusterPolicy to be Ready:  %v ", err)
 			Expect(err).ToNot(HaveOccurred(), "error waiting for ClusterPolicy to be Ready:  %v ",
@@ -849,35 +815,13 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					err)
 			}
 
-			By("Create GPU Burn namespace 'test-gpu-burn'")
+			By(fmt.Sprintf("Create GPU Burn namespace '%s'", gpuBurnNamespace))
 			gpuBurnNsBuilder := namespace.NewBuilder(inittools.APIClient, gpuBurnNamespace)
 			if gpuBurnNsBuilder.Exists() {
 				glog.V(gpuparams.GpuLogLevel).Infof("The namespace '%s' already exists",
 					gpuBurnNsBuilder.Object.Name)
 			} else {
-				glog.V(gpuparams.GpuLogLevel).Infof("Creating the gpu burn namespace '%s'",
-					gpuBurnNamespace)
-				createdGPUBurnNsBuilder, err := gpuBurnNsBuilder.Create()
-				Expect(err).ToNot(HaveOccurred(), "error creating gpu burn "+
-					"namespace '%s' :  %v ", gpuBurnNamespace, err)
-
-				glog.V(gpuparams.GpuLogLevel).Infof("Successfully created namespace '%s'",
-					createdGPUBurnNsBuilder.Object.Name)
-
-				glog.V(gpuparams.GpuLogLevel).Infof("Labeling the newly created namespace '%s'",
-					createdGPUBurnNsBuilder.Object.Name)
-
-				labeledGPUBurnNsBuilder := createdGPUBurnNsBuilder.WithMultipleLabels(map[string]string{
-					"openshift.io/cluster-monitoring":    "true",
-					"pod-security.kubernetes.io/enforce": "privileged",
-				})
-
-				newGPUBurnLabeledNsBuilder, err := labeledGPUBurnNsBuilder.Update()
-				Expect(err).ToNot(HaveOccurred(), "error labeling namespace %v :  %v ",
-					newGPUBurnLabeledNsBuilder.Definition.Name, err)
-
-				glog.V(gpuparams.GpuLogLevel).Infof("The nvidia-gpu-operator labeled namespace has "+
-					"labels:  %v", newGPUBurnLabeledNsBuilder.Object.Labels)
+				createAndLabelNamespace(gpuBurnNsBuilder, gpuBurnNamespace)
 			}
 
 			defer func() {
@@ -887,7 +831,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				}
 			}()
 
-			By("Deploy GPU Burn configmap in test-gpu-burn namespace")
+			By(fmt.Sprintf("Deploy GPU Burn configmap in '%s' namespace", gpuBurnNamespace))
 			gpuBurnConfigMap, err := gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, gpuBurnConfigmapName,
 				gpuBurnNamespace)
 			Expect(err).ToNot(HaveOccurred(), "Error Creating gpu burn configmap: %v", err)
@@ -940,6 +884,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				"namespace '%s' :  %v ", gpuBurnNamespace, err)
 
 			By("Cleanup gpu-burn pod only if cleanupAfterTest is true and gpuOperatorUpgradeToChannel is undefined")
+
 			defer func() {
 				if cleanupAfterTest && gpuOperatorUpgradeToChannel == "undefined" {
 					_, err := gpuPodPulled.Delete()
@@ -1213,48 +1158,3 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 	})
 })
-
-func createNFDDeployment() bool {
-
-	By("Deploy NFD Subscription in NFD namespace")
-	err := deploy.CreateNFDSubscription(inittools.APIClient, nfdCatalogSource)
-	Expect(err).ToNot(HaveOccurred(), "error creating NFD Subscription:  %v", err)
-
-	By("Sleep for 2 minutes to allow the NFD Operator deployment to be created")
-	glog.V(gpuparams.GpuLogLevel).Infof("Sleep for 2 minutes to allow the NFD Operator deployment" +
-		" to be created")
-	time.Sleep(2 * time.Minute)
-
-	By("Wait up to 5 mins for NFD Operator deployment to be created")
-	nfdDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, nfdOperatorDeploymentName, nfdOperatorNamespace,
-		30*time.Second, 5*time.Minute)
-	Expect(nfdDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy "+
-		"NFD operator")
-
-	By("Check if NFD Operator has been deployed")
-	nfdDeployed, err := deploy.CheckNFDOperatorDeployed(inittools.APIClient, 240*time.Second)
-	Expect(err).ToNot(HaveOccurred(), "error deploying NFD Operator in"+
-		" NFD namespace:  %v", err)
-	return nfdDeployed
-}
-
-func deleteOLMPods(apiClient *clients.Settings) error {
-
-	olmNamespace := "openshift-operator-lifecycle-manager"
-	glog.V(gpuparams.GpuLogLevel).Info("Deleting catalog operator pods")
-	if err := apiClient.Pods(olmNamespace).DeleteCollection(context.TODO(),
-		metav1.DeleteOptions{},
-		metav1.ListOptions{LabelSelector: "app=catalog-operator"}); err != nil {
-		return err
-	}
-
-	glog.V(gpuparams.GpuLogLevel).Info("Deleting OLM operator pods")
-	if err := apiClient.Pods(olmNamespace).DeleteCollection(
-		context.TODO(),
-		metav1.DeleteOptions{},
-		metav1.ListOptions{LabelSelector: "app=olm-operator"}); err != nil {
-		return err
-	}
-
-	return nil
-}
