@@ -229,7 +229,7 @@ func (builder *CatalogSourceBuilder) IsReady(timeout time.Duration) bool {
 				return false, err
 			}
 
-			if builder.Object.Status.GRPCConnectionState.LastObservedState == "READY" {
+			if builder.Object != nil && builder.Object.Status.GRPCConnectionState != nil && builder.Object.Status.GRPCConnectionState.LastObservedState == "READY" {
 				return true, nil
 			}
 

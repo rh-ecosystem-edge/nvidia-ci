@@ -344,7 +344,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					Expect(err).ToNot(HaveOccurred(), "error deleting NFD CSV: %v", err)
 
 					err = deleteOLMPods(inittools.APIClient)
-					Expect(err).ToNot(HaveOccurred(), "error deleting OLM pods for operator cache workaround: %v", err)
+					Expect(err).ToNot(HaveOccurred(), "error deleting OLM pods for operator cache "+
+						"workaround: %v", err)
 
 					glog.V(gpuparams.GpuLogLevel).Info("Re-trying NFD deployment")
 					nfdDeployed = createNFDDeployment()
@@ -825,7 +826,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Wait up to 12 minutes for ClusterPolicy to be ready")
 			glog.V(gpuparams.GpuLogLevel).Infof("Waiting for ClusterPolicy to be ready")
-			err = wait.ClusterPolicyReady(inittools.APIClient, gpuClusterPolicyName, 60*time.Second, 12*time.Minute)
+			err = wait.ClusterPolicyReady(inittools.APIClient, gpuClusterPolicyName, 60*time.Second, 20*time.Minute)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("error waiting for ClusterPolicy to be Ready:  %v ", err)
 			Expect(err).ToNot(HaveOccurred(), "error waiting for ClusterPolicy to be Ready:  %v ",

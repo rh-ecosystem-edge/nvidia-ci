@@ -40,7 +40,17 @@ TEST ?= ...
 unit-test:
 	go test github.com/rh-ecosystem-edge/nvidia-ci/$(TEST)
 
-run-tests:
+get-gpu-operator-must-gather:
+	test -s gpu-operator-must-gather.sh || (\
+    		SCRIPT_URL="https://raw.githubusercontent.com/NVIDIA/gpu-operator/v23.9.1/hack/must-gather.sh" && \
+    		if ! curl -SsL -o gpu-operator-must-gather.sh -L $$SCRIPT_URL; then \
+    			echo "Failed to download must-gather script" >&2; \
+    			exit 1; \
+    		fi && \
+    		chmod +x gpu-operator-must-gather.sh \
+    	)
+
+run-tests: get-gpu-operator-must-gather
 	@echo "Executing nvidiagpu test-runner script"
 	scripts/test-runner.sh
 
