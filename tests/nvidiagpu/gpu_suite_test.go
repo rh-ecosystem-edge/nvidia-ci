@@ -1,12 +1,8 @@
 package nvidiagpu
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"github.com/golang/glog"
-	"os"
-	"os/exec"
 	"runtime"
 	"testing"
 	"time"
@@ -32,31 +28,15 @@ func TestGPUDeploy(t *testing.T) {
 }
 
 var _ = JustAfterEach(func() {
+	specReport := CurrentSpecReport()
 	reporter.ReportIfFailed(
-		CurrentSpecReport(), currentFile, tsparams.ReporterNamespacesToDump, tsparams.ReporterCRDsToDump, clients.SetScheme)
+		specReport, currentFile, tsparams.ReporterNamespacesToDump, tsparams.ReporterCRDsToDump, clients.SetScheme)
 
 	dumpDir := inittools.GeneralConfig.GetDumpFailedTestReportLocation(currentFile)
 	if dumpDir != "" {
-		artifactDir := fmt.Sprintf("ARTIFACT_DIR=%s/gpu-must-gather", dumpDir)
-		mustGatherScriptPath := os.Getenv("PATH_TO_MUST_GATHER_SCRIPT")
-		if mustGatherScriptPath == "" {
-			glog.Error("PATH_TO_MUST_GATHER_SCRIPT environment variable is not set")
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		cmd := exec.CommandContext(ctx, mustGatherScriptPath)
-		cmd.Env = append(os.Environ(), artifactDir)
-		output, err := cmd.CombinedOutput()
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			glog.Errorf("gpu-operator-must-gather.sh script timed out: %v", ctx.Err())
-			return
-		}
-		if err != nil {
-			glog.Errorf("Error running gpu-operator-must-gather.sh script: %v\nOutput: %s", err, output)
-		} else {
-			glog.V(100).Infof("Must-gather script output: %s", output)
+		artifactDir := fmt.Sprintf("%s/gpu-must-gather", dumpDir)
+		if err := reporter.MustGatherIfFailed(specReport, artifactDir, 5*time.Minute); err != nil {
+			glog.Errorf("Error running MustGatherIfFailed, %v", err)
 		}
 	}
 })
