@@ -44,8 +44,6 @@ var (
 	ofedDriverVersion = os.Getenv("OFED_DRIVER_VERSION")
 	ofedRepository    = os.Getenv("OFED_REPOSITORY")
 
-	nfdCleanupAfterInstall bool = false
-
 	// NvidiaNetworkConfig provides access to general configuration parameters.
 	nvidiaNetworkConfig    *nvidianetworkconfig.NvidiaNetworkConfig
 	nnoCatalogSource                         = undefinedValue
@@ -59,13 +57,18 @@ var (
 	networkOperatorBundleImage           = ""
 	clusterArchitecture                  = undefinedValue
 
+	nnoCustomCatalogSource = undefinedValue
+
+	createNNOCustomCatalogsource bool = false
+
+	nnoCustomCatalogsourceIndexImage = undefinedValue
+
+	//NFD vars
 	nfdCatalogSource                      = undefinedValue
-	nnoCustomCatalogSource                = undefinedValue
-	nfdCustomCatalogSource                = undefinedValue
-	createNNOCustomCatalogsource     bool = false
-	createNFDCustomCatalogsource     bool = false
-	nnoCustomCatalogsourceIndexImage      = undefinedValue
+	nfdCleanupAfterInstall           bool = false
 	nfdCustomCatalogsourceIndexImage      = undefinedValue
+	nfdCustomCatalogSource                = undefinedValue
+	createNFDCustomCatalogsource     bool = false
 )
 
 const (
