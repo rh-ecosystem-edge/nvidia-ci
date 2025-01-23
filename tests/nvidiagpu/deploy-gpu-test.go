@@ -85,18 +85,11 @@ var (
 )
 
 const (
-	nfdOperatorNamespace      = "openshift-nfd"
-	nfdCatalogSourceDefault   = "redhat-operators"
-	nfdCatalogSourceNamespace = "openshift-marketplace"
-	nfdOperatorDeploymentName = "nfd-controller-manager"
-	nfdPackage                = "nfd"
-	nfdCRName                 = "nfd-instance"
-	operatorVersionFile       = "operator.version"
-	openShiftVersionFile      = "ocp.version"
+	operatorVersionFile  = "operator.version"
+	openShiftVersionFile = "ocp.version"
 
-	nvidiaGPUNamespace                  = "nvidia-gpu-operator"
-	nfdRhcosLabel                       = "feature.node.kubernetes.io/system-os_release.ID"
-	nfdRhcosLabelValue                  = "rhcos"
+	nvidiaGPUNamespace = "nvidia-gpu-operator"
+
 	nvidiaGPULabel                      = "feature.node.kubernetes.io/pci-10de.present"
 	gpuOperatorGroupName                = "gpu-og"
 	gpuOperatorDeployment               = "gpu-operator"
@@ -112,11 +105,21 @@ const (
 	gpuBurnConfigmapName                = "gpu-burn-entrypoint"
 	gpuOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:main-latest"
 
-	gpuCustomCatalogSourcePublisherName    = "Red Hat"
-	nfdCustomNFDCatalogSourcePublisherName = "Red Hat"
+	gpuCustomCatalogSourcePublisherName = "Red Hat"
 
 	gpuCustomCatalogSourceDisplayName = "Certified Operators Custom"
-	nfdCustomCatalogSourceDisplayName = "Redhat Operators Custom"
+
+	//NFD consts
+	nfdCustomCatalogSourceDisplayName      = "Redhat Operators Custom"
+	nfdCustomNFDCatalogSourcePublisherName = "Red Hat"
+	nfdRhcosLabel                          = "feature.node.kubernetes.io/system-os_release.ID"
+	nfdRhcosLabelValue                     = "rhcos"
+	nfdOperatorNamespace                   = "openshift-nfd"
+	nfdCatalogSourceDefault                = "redhat-operators"
+	nfdCatalogSourceNamespace              = "openshift-marketplace"
+	nfdOperatorDeploymentName              = "nfd-controller-manager"
+	nfdPackage                             = "nfd"
+	nfdCRName                              = "nfd-instance"
 )
 
 var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {

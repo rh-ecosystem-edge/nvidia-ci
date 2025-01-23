@@ -72,17 +72,9 @@ var (
 )
 
 const (
-	nfdOperatorNamespace      = "openshift-nfd"
-	nfdCatalogSourceDefault   = "redhat-operators"
-	nfdCatalogSourceNamespace = "openshift-marketplace"
-	nfdOperatorDeploymentName = "nfd-controller-manager"
-	nfdPackage                = "nfd"
-	nfdCRName                 = "nfd-instance"
-	operatorVersionFile       = "operator.version"
-	openShiftVersionFile      = "ocp.version"
+	operatorVersionFile  = "operator.version"
+	openShiftVersionFile = "ocp.version"
 
-	nfdRhcosLabel                           = "feature.node.kubernetes.io/system-os_release.ID"
-	nfdRhcosLabelValue                      = "rhcos"
 	nvidiaNetworkLabel                      = "feature.node.kubernetes.io/pci-15b3.present"
 	networkOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/network-operator/staging/network-operator-bundle:main-latest"
 
@@ -96,12 +88,23 @@ const (
 	nnoPackage                = "nvidia-network-operator"
 	nnoNicClusterPolicyName   = "nic-cluster-policy"
 
-	nnoCustomCatalogSourcePublisherName    = "Red Hat"
-	nfdCustomNFDCatalogSourcePublisherName = "Red Hat"
+	nnoCustomCatalogSourcePublisherName = "Red Hat"
 
 	nnoCustomCatalogSourceDisplayName = "Certified Operators Custom"
-	nfdCustomCatalogSourceDisplayName = "Redhat Operators Custom"
-	undefinedValue                    = "undefined"
+
+	undefinedValue = "undefined"
+
+	//NFD consts
+	nfdCustomNFDCatalogSourcePublisherName = "Red Hat"
+	nfdCustomCatalogSourceDisplayName      = "Redhat Operators Custom"
+	nfdRhcosLabel                          = "feature.node.kubernetes.io/system-os_release.ID"
+	nfdRhcosLabelValue                     = "rhcos"
+	nfdOperatorNamespace                   = "openshift-nfd"
+	nfdCatalogSourceDefault                = "redhat-operators"
+	nfdCatalogSourceNamespace              = "openshift-marketplace"
+	nfdOperatorDeploymentName              = "nfd-controller-manager"
+	nfdPackage                             = "nfd"
+	nfdCRName                              = "nfd-instance"
 )
 
 var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
