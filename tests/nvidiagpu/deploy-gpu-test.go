@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
 	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/v1"
 	nvidiagpuv1alpha1 "github.com/NVIDIA/k8s-operator-libs/api/upgrade/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
@@ -12,7 +11,7 @@ import (
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/machine"
-
+	. "github.com/rh-ecosystem-edge/nvidia-ci/tests/nfd"
 	"strings"
 	"time"
 
@@ -57,31 +56,31 @@ var (
 
 	// NvidiaGPUConfig provides access to general configuration parameters.
 	nvidiaGPUConfig  *nvidiagpuconfig.NvidiaGPUConfig
-	gpuScaleCluster  bool = false
-	gpuCatalogSource      = "undefined"
+	gpuScaleCluster  = false
+	gpuCatalogSource = "undefined"
 
 	gpuCustomCatalogSource = "undefined"
 
-	createGPUCustomCatalogsource bool = false
+	createGPUCustomCatalogsource = false
 
 	gpuCustomCatalogsourceIndexImage = "undefined"
 
-	gpuSubscriptionChannel             = "undefined"
-	gpuDefaultSubscriptionChannel      = "undefined"
-	gpuOperatorUpgradeToChannel        = "undefined"
-	cleanupAfterTest              bool = true
-	deployFromBundle              bool = false
-	gpuOperatorBundleImage             = ""
-	gpuCurrentCSV                      = ""
-	gpuCurrentCSVVersion               = ""
-	clusterArchitecture                = "undefined"
+	gpuSubscriptionChannel        = "undefined"
+	gpuDefaultSubscriptionChannel = "undefined"
+	gpuOperatorUpgradeToChannel   = "undefined"
+	cleanupAfterTest              = true
+	deployFromBundle              = false
+	gpuOperatorBundleImage        = ""
+	gpuCurrentCSV                 = ""
+	gpuCurrentCSVVersion          = ""
+	clusterArchitecture           = "undefined"
 
 	//NFD vars
-	nfdCustomCatalogsourceIndexImage      = "undefined"
-	createNFDCustomCatalogsource     bool = false
-	nfdCustomCatalogSource                = "undefined"
-	nfdCatalogSource                      = "undefined"
-	nfdCleanupAfterInstall           bool = false
+	nfdCustomCatalogsourceIndexImage = "undefined"
+	createNFDCustomCatalogsource     = false
+	nfdCustomCatalogSource           = "undefined"
+	nfdCatalogSource                 = "undefined"
+	nfdCleanupAfterInstall           = false
 )
 
 const (
@@ -108,18 +107,6 @@ const (
 	gpuCustomCatalogSourcePublisherName = "Red Hat"
 
 	gpuCustomCatalogSourceDisplayName = "Certified Operators Custom"
-
-	//NFD consts
-	nfdCustomCatalogSourceDisplayName      = "Redhat Operators Custom"
-	nfdCustomNFDCatalogSourcePublisherName = "Red Hat"
-	nfdRhcosLabel                          = "feature.node.kubernetes.io/system-os_release.ID"
-	nfdRhcosLabelValue                     = "rhcos"
-	nfdOperatorNamespace                   = "openshift-nfd"
-	nfdCatalogSourceDefault                = "redhat-operators"
-	nfdCatalogSourceNamespace              = "openshift-marketplace"
-	nfdOperatorDeploymentName              = "nfd-controller-manager"
-	nfdPackage                             = "nfd"
-	nfdCRName                              = "nfd-instance"
 )
 
 var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
@@ -237,7 +224,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 				createNFDCustomCatalogsource = true
 
-				nfdCustomCatalogSource = nfdCatalogSourceDefault + "-custom"
+				nfdCustomCatalogSource = NfdCatalogSourceDefault + "-custom"
 				glog.V(gpuparams.GpuLogLevel).Infof("Setting custom NFD catalogsource name to '%s'",
 					nfdCustomCatalogSource)
 
@@ -272,11 +259,11 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 				By("Check if 'nfd' packagemanifest exists in 'redhat-operators' default catalog")
 				nfdPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-					nfdPackage, nfdCatalogSourceNamespace, nfdCatalogSourceDefault)
+					NfdPackage, NfdCatalogSourceNamespace, NfdCatalogSourceDefault)
 
 				if nfdPkgManifestBuilderByCatalog == nil {
 					glog.V(gpuparams.GpuLogLevel).Infof("NFD packagemanifest was not found in the default '%s'"+
-						" catalog.", nfdCatalogSourceDefault)
+						" catalog.", NfdCatalogSourceDefault)
 
 					if createNFDCustomCatalogsource {
 						glog.V(gpuparams.GpuLogLevel).Infof("Creating custom catalogsource '%s' for NFD "+
@@ -285,15 +272,15 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 							"Operator with index image '%s'", nfdCustomCatalogSource, nfdCustomCatalogsourceIndexImage)
 
 						nfdCustomCatalogSourceBuilder := olm.NewCatalogSourceBuilderWithIndexImage(inittools.APIClient,
-							nfdCustomCatalogSource, nfdCatalogSourceNamespace, nfdCustomCatalogsourceIndexImage,
-							nfdCustomCatalogSourceDisplayName, nfdCustomNFDCatalogSourcePublisherName)
+							nfdCustomCatalogSource, NfdCatalogSourceNamespace, nfdCustomCatalogsourceIndexImage,
+							NfdCustomCatalogSourceDisplayName, NfdCustomNFDCatalogSourcePublisherName)
 
 						Expect(nfdCustomCatalogSourceBuilder).ToNot(BeNil(), "error creating custom "+
-							"NFD catalogsource %s:  %v", nfdPackage, nfdCustomCatalogSource, err)
+							"NFD catalogsource %s:  %v", NfdPackage, nfdCustomCatalogSource, err)
 
 						createdNFDCustomCatalogSourceBuilder, err := nfdCustomCatalogSourceBuilder.Create()
 						Expect(err).ToNot(HaveOccurred(), "error creating custom NFD "+
-							"catalogsource '%s':  %v", nfdPackage, nfdCustomCatalogSource, err)
+							"catalogsource '%s':  %v", NfdPackage, nfdCustomCatalogSource, err)
 
 						Expect(createdNFDCustomCatalogSourceBuilder).ToNot(BeNil(), "Failed to "+
 							" create custom NFD catalogsource '%s'", nfdCustomCatalogSource)
@@ -307,10 +294,10 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 						Expect(createdNFDCustomCatalogSourceBuilder.IsReady(4 * time.Minute)).NotTo(BeFalse())
 
 						nfdPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
-							nfdPackage, nfdCatalogSourceNamespace, nfdCustomCatalogSource, 30*time.Second, 5*time.Minute)
+							NfdPackage, NfdCatalogSourceNamespace, nfdCustomCatalogSource, 30*time.Second, 5*time.Minute)
 
 						Expect(err).ToNot(HaveOccurred(), "error getting NFD packagemanifest '%s' "+
-							"from custom catalog '%s':  %v", nfdPackage, nfdCustomCatalogSource, err)
+							"from custom catalog '%s':  %v", NfdPackage, nfdCustomCatalogSource, err)
 
 						nfdCatalogSource = nfdCustomCatalogSource
 						nfdChannel := nfdPkgManifestBuilderByCustomCatalog.Object.Status.DefaultChannel
@@ -324,9 +311,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 				} else {
 					glog.V(gpuparams.GpuLogLevel).Infof("The nfd packagemanifest '%s' was found in the default"+
-						" catalog '%s'", nfdPkgManifestBuilderByCatalog.Object.Name, nfdCatalogSourceDefault)
+						" catalog '%s'", nfdPkgManifestBuilderByCatalog.Object.Name, NfdCatalogSourceDefault)
 
-					nfdCatalogSource = nfdCatalogSourceDefault
+					nfdCatalogSource = NfdCatalogSourceDefault
 					nfdChannel := nfdPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
 					glog.V(gpuparams.GpuLogLevel).Infof("The NFD channel retrieved from packagemanifest is:  %v",
 						nfdChannel)
@@ -383,7 +370,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				// Here need to check if NFD CR is deployed, otherwise Deleting a non-existing CR will throw an error
 				// skipping error check for now cause any failure before entire NFD stack
 				By("Delete NFD CR instance in NFD namespace")
-				_ = deploy.NFDCRDeleteAndWait(inittools.APIClient, nfdCRName, nfdOperatorNamespace, 30*time.Second, 5*time.Minute)
+				_ = deploy.NFDCRDeleteAndWait(inittools.APIClient, NfdCRName, NfdOperatorNamespace, 30*time.Second, 5*time.Minute)
 
 				By("Delete NFD CSV")
 				_ = deploy.DeleteNFDCSV(inittools.APIClient)
@@ -402,12 +389,12 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 		It("Deploy NVIDIA GPU Operator with DTK", Label("nvidia-ci:gpu"), func() {
 
 			By("Check if NFD is installed %s")
-			nfdLabelDetected, err := check.AllNodeLabel(inittools.APIClient, nfdRhcosLabel, nfdRhcosLabelValue,
+			nfdLabelDetected, err := check.AllNodeLabel(inittools.APIClient, NfdRhcosLabel, NfdRhcosLabelValue,
 				inittools.GeneralConfig.WorkerLabelMap)
 
 			Expect(err).ToNot(HaveOccurred(), "error calling check.NodeLabel:  %v ", err)
 			Expect(nfdLabelDetected).NotTo(BeFalse(), "NFD node label check failed to match "+
-				"label %s and label value %s on all nodes", nfdRhcosLabel, nfdRhcosLabelValue)
+				"label %s and label value %s on all nodes", NfdRhcosLabel, NfdRhcosLabelValue)
 			glog.V(gpuparams.GpuLogLevel).Infof("The check for NFD label returned: %v", nfdLabelDetected)
 
 			isNfdInstalled, err := check.NFDDeploymentsReady(inittools.APIClient)
@@ -1234,7 +1221,7 @@ func createNFDDeployment() bool {
 	time.Sleep(2 * time.Minute)
 
 	By("Wait up to 5 mins for NFD Operator deployment to be created")
-	nfdDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, nfdOperatorDeploymentName, nfdOperatorNamespace,
+	nfdDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, NfdOperatorDeploymentName, NfdOperatorNamespace,
 		30*time.Second, 5*time.Minute)
 	Expect(nfdDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy "+
 		"NFD operator")
