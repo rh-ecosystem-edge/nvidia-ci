@@ -55,28 +55,33 @@ var (
 	replicas              int32 = 1
 	workerMachineSetLabel       = "machine.openshift.io/cluster-api-machine-role"
 
-	nfdCleanupAfterInstall bool = false
-
 	// NvidiaGPUConfig provides access to general configuration parameters.
-	nvidiaGPUConfig                  *nvidiagpuconfig.NvidiaGPUConfig
-	gpuScaleCluster                  bool = false
-	gpuCatalogSource                      = "undefined"
-	nfdCatalogSource                      = "undefined"
-	gpuCustomCatalogSource                = "undefined"
-	nfdCustomCatalogSource                = "undefined"
-	createGPUCustomCatalogsource     bool = false
-	createNFDCustomCatalogsource     bool = false
-	gpuCustomCatalogsourceIndexImage      = "undefined"
+	nvidiaGPUConfig  *nvidiagpuconfig.NvidiaGPUConfig
+	gpuScaleCluster  bool = false
+	gpuCatalogSource      = "undefined"
+
+	gpuCustomCatalogSource = "undefined"
+
+	createGPUCustomCatalogsource bool = false
+
+	gpuCustomCatalogsourceIndexImage = "undefined"
+
+	gpuSubscriptionChannel             = "undefined"
+	gpuDefaultSubscriptionChannel      = "undefined"
+	gpuOperatorUpgradeToChannel        = "undefined"
+	cleanupAfterTest              bool = true
+	deployFromBundle              bool = false
+	gpuOperatorBundleImage             = ""
+	gpuCurrentCSV                      = ""
+	gpuCurrentCSVVersion               = ""
+	clusterArchitecture                = "undefined"
+
+	//NFD vars
 	nfdCustomCatalogsourceIndexImage      = "undefined"
-	gpuSubscriptionChannel                = "undefined"
-	gpuDefaultSubscriptionChannel         = "undefined"
-	gpuOperatorUpgradeToChannel           = "undefined"
-	cleanupAfterTest                 bool = true
-	deployFromBundle                 bool = false
-	gpuOperatorBundleImage                = ""
-	gpuCurrentCSV                         = ""
-	gpuCurrentCSVVersion                  = ""
-	clusterArchitecture                   = "undefined"
+	createNFDCustomCatalogsource     bool = false
+	nfdCustomCatalogSource                = "undefined"
+	nfdCatalogSource                      = "undefined"
+	nfdCleanupAfterInstall           bool = false
 )
 
 const (
