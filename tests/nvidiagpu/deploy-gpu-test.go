@@ -57,36 +57,33 @@ var (
 	// NvidiaGPUConfig provides access to general configuration parameters.
 	nvidiaGPUConfig  *nvidiagpuconfig.NvidiaGPUConfig
 	gpuScaleCluster  = false
-	gpuCatalogSource = "undefined"
+	gpuCatalogSource = UndefinedValue
 
-	gpuCustomCatalogSource = "undefined"
+	gpuCustomCatalogSource = UndefinedValue
 
 	createGPUCustomCatalogsource = false
 
-	gpuCustomCatalogsourceIndexImage = "undefined"
+	gpuCustomCatalogsourceIndexImage = UndefinedValue
 
-	gpuSubscriptionChannel        = "undefined"
-	gpuDefaultSubscriptionChannel = "undefined"
-	gpuOperatorUpgradeToChannel   = "undefined"
+	gpuSubscriptionChannel        = UndefinedValue
+	gpuDefaultSubscriptionChannel = UndefinedValue
+	gpuOperatorUpgradeToChannel   = UndefinedValue
 	cleanupAfterTest              = true
 	deployFromBundle              = false
 	gpuOperatorBundleImage        = ""
 	gpuCurrentCSV                 = ""
 	gpuCurrentCSVVersion          = ""
-	clusterArchitecture           = "undefined"
+	clusterArchitecture           = UndefinedValue
 
 	//NFD vars
-	nfdCustomCatalogsourceIndexImage = "undefined"
+	nfdCustomCatalogsourceIndexImage = UndefinedValue
 	createNFDCustomCatalogsource     = false
-	nfdCustomCatalogSource           = "undefined"
-	nfdCatalogSource                 = "undefined"
+	nfdCustomCatalogSource           = UndefinedValue
+	nfdCatalogSource                 = UndefinedValue
 	nfdCleanupAfterInstall           = false
 )
 
 const (
-	operatorVersionFile  = "operator.version"
-	openShiftVersionFile = "ocp.version"
-
 	nvidiaGPUNamespace = "nvidia-gpu-operator"
 
 	nvidiaGPULabel                      = "feature.node.kubernetes.io/pci-10de.present"
@@ -144,7 +141,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			if nvidiaGPUConfig.SubscriptionChannel == "" {
 				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_SUBSCRIPTION_CHANNEL" +
 					" is not set, will deploy latest channel")
-				gpuSubscriptionChannel = "undefined"
+				gpuSubscriptionChannel = UndefinedValue
 			} else {
 				gpuSubscriptionChannel = nvidiaGPUConfig.SubscriptionChannel
 				glog.V(gpuparams.GpuLogLevel).Infof("GPU Subscription Channel now set to env variable "+
@@ -183,7 +180,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			if nvidiaGPUConfig.OperatorUpgradeToChannel == "" {
 				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL" +
 					" is not set, will not run the Upgrade Testcase")
-				gpuOperatorUpgradeToChannel = "undefined"
+				gpuOperatorUpgradeToChannel = UndefinedValue
 			} else {
 				gpuOperatorUpgradeToChannel = nvidiaGPUConfig.OperatorUpgradeToChannel
 				glog.V(gpuparams.GpuLogLevel).Infof("GPU Operator Upgrade to channel now set to env variable "+
@@ -240,7 +237,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			if err != nil {
 				glog.Error("Error getting OpenShift version: ", err)
-			} else if err := inittools.GeneralConfig.WriteReport(openShiftVersionFile, []byte(ocpVersion)); err != nil {
+			} else if err := inittools.GeneralConfig.WriteReport(OpenShiftVersionFile, []byte(ocpVersion)); err != nil {
 				glog.Error("Error writing an OpenShift version file: ", err)
 			}
 
@@ -662,7 +659,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				subBuilder := olm.NewSubscriptionBuilder(inittools.APIClient, gpuSubscriptionName, gpuSubscriptionNamespace,
 					gpuCatalogSource, gpuCatalogSourceNamespace, gpuPackage)
 
-				if gpuSubscriptionChannel != "undefined" {
+				if gpuSubscriptionChannel != UndefinedValue {
 					glog.V(gpuparams.GpuLogLevel).Infof("Setting the subscription channel to: '%s'",
 						gpuSubscriptionChannel)
 					subBuilder.WithChannel(gpuSubscriptionChannel)
@@ -745,7 +742,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("ClusterServiceVersion version to be written in the operator "+
 				"version file is: '%s'", csvVersionString)
 
-			if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(csvVersionString)); err != nil {
+			if err := inittools.GeneralConfig.WriteReport(OperatorVersionFile, []byte(csvVersionString)); err != nil {
 				glog.Error("Error writing an operator version file: ", err)
 			}
 
@@ -936,7 +933,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Cleanup gpu-burn pod only if cleanupAfterTest is true and gpuOperatorUpgradeToChannel is undefined")
 			defer func() {
-				if cleanupAfterTest && gpuOperatorUpgradeToChannel == "undefined" {
+				if cleanupAfterTest && gpuOperatorUpgradeToChannel == UndefinedValue {
 					_, err := gpuPodPulled.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -975,7 +972,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 		It("Upgrade NVIDIA GPU Operator", Label("operator-upgrade"), func() {
 
-			if gpuOperatorUpgradeToChannel == "undefined" {
+			if gpuOperatorUpgradeToChannel == UndefinedValue {
 				glog.V(gpuparams.GpuLogLevel).Infof("Operator Upgrade To Channel not set, skipping " +
 					"Operator Upgrade Testcase")
 				Skip("Operator Upgrade To Channel not set, skipping Operator Upgrade Testcase")

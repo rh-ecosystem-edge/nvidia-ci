@@ -46,35 +46,32 @@ var (
 
 	// NvidiaNetworkConfig provides access to general configuration parameters.
 	nvidiaNetworkConfig    *nvidianetworkconfig.NvidiaNetworkConfig
-	nnoCatalogSource                         = undefinedValue
-	nnoSubscriptionChannel                   = undefinedValue
+	nnoCatalogSource                         = UndefinedValue
+	nnoSubscriptionChannel                   = UndefinedValue
 	nnoInstallPlanApproval v1alpha1.Approval = "Automatic"
 
-	nnoDefaultSubscriptionChannel        = undefinedValue
-	networkOperatorUpgradeToChannel      = undefinedValue
+	nnoDefaultSubscriptionChannel        = UndefinedValue
+	networkOperatorUpgradeToChannel      = UndefinedValue
 	cleanupAfterTest                bool = true
 	deployFromBundle                bool = false
 	networkOperatorBundleImage           = ""
-	clusterArchitecture                  = undefinedValue
+	clusterArchitecture                  = UndefinedValue
 
-	nnoCustomCatalogSource = undefinedValue
+	nnoCustomCatalogSource = UndefinedValue
 
 	createNNOCustomCatalogsource bool = false
 
-	nnoCustomCatalogsourceIndexImage = undefinedValue
+	nnoCustomCatalogsourceIndexImage = UndefinedValue
 
 	//NFD vars
-	nfdCatalogSource                      = undefinedValue
+	nfdCatalogSource                      = UndefinedValue
 	nfdCleanupAfterInstall           bool = false
-	nfdCustomCatalogsourceIndexImage      = undefinedValue
-	nfdCustomCatalogSource                = undefinedValue
+	nfdCustomCatalogsourceIndexImage      = UndefinedValue
+	nfdCustomCatalogSource                = UndefinedValue
 	createNFDCustomCatalogsource     bool = false
 )
 
 const (
-	operatorVersionFile  = "operator.version"
-	openShiftVersionFile = "ocp.version"
-
 	nvidiaNetworkLabel                      = "feature.node.kubernetes.io/pci-15b3.present"
 	networkOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/network-operator/staging/network-operator-bundle:main-latest"
 
@@ -91,8 +88,6 @@ const (
 	nnoCustomCatalogSourcePublisherName = "Red Hat"
 
 	nnoCustomCatalogSourceDisplayName = "Certified Operators Custom"
-
-	undefinedValue = "undefined"
 )
 
 var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
@@ -120,7 +115,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			if nvidiaNetworkConfig.SubscriptionChannel == "" {
 				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_SUBSCRIPTION_CHANNEL" +
 					" is not set, will deploy latest channel")
-				nnoSubscriptionChannel = undefinedValue
+				nnoSubscriptionChannel = UndefinedValue
 			} else {
 				nnoSubscriptionChannel = nvidiaNetworkConfig.SubscriptionChannel
 				glog.V(networkparams.LogLevel).Infof("NNO Subscription Channel now set to env variable "+
@@ -159,7 +154,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			if nvidiaNetworkConfig.OperatorUpgradeToChannel == "" {
 				glog.V(networkparams.LogLevel).Infof("env variable " +
 					"NVIDIANETWORK_SUBSCRIPTION_UPGRADE_TO_CHANNEL is not set, will not run the Upgrade Testcase")
-				networkOperatorUpgradeToChannel = undefinedValue
+				networkOperatorUpgradeToChannel = UndefinedValue
 			} else {
 				networkOperatorUpgradeToChannel = nvidiaNetworkConfig.OperatorUpgradeToChannel
 				glog.V(networkparams.LogLevel).Infof("Network Operator Upgrade to channel now set to env"+
@@ -217,7 +212,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			if err != nil {
 				glog.Error("Error getting OpenShift version: ", err)
 			} else {
-				if writeErr := inittools.GeneralConfig.WriteReport(openShiftVersionFile,
+				if writeErr := inittools.GeneralConfig.WriteReport(OpenShiftVersionFile,
 					[]byte(ocpVersion)); writeErr != nil {
 					glog.Error("Error writing OpenShift version file: ", writeErr)
 				}
@@ -586,7 +581,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				subBuilder := olm.NewSubscriptionBuilder(inittools.APIClient, nnoSubscriptionName,
 					nnoSubscriptionNamespace, nnoCatalogSource, nnoCatalogSourceNamespace, nnoPackage)
 
-				if nnoSubscriptionChannel != undefinedValue {
+				if nnoSubscriptionChannel != UndefinedValue {
 					glog.V(networkparams.LogLevel).Infof("Setting the NNO subscription channel to: '%s'",
 						nnoSubscriptionChannel)
 					subBuilder.WithChannel(nnoSubscriptionChannel)
@@ -665,7 +660,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(networkparams.LogLevel).Infof("ClusterServiceVersion version to be written in the operator "+
 				"version file is: '%s'", csvVersionString)
 
-			if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(csvVersionString)); err != nil {
+			if err := inittools.GeneralConfig.WriteReport(OperatorVersionFile, []byte(csvVersionString)); err != nil {
 				glog.Error("Error writing an operator version file: ", err)
 			}
 

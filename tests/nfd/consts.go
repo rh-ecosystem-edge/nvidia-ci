@@ -11,4 +11,9 @@ const (
 	NfdOperatorDeploymentName              = "nfd-controller-manager"
 	NfdPackage                             = "nfd"
 	NfdCRName                              = "nfd-instance"
+
+	//not related to NFD but common consts between gpu and nno
+	UndefinedValue       = "undefined"
+	OperatorVersionFile  = "operator.version"
+	OpenShiftVersionFile = "ocp.version"
 )
