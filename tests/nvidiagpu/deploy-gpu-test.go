@@ -252,13 +252,12 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 						Expect(createdNFDCustomCatalogSourceBuilder).ToNot(BeNil(), "Failed to "+
 							" create custom NFD catalogsource '%s'", NfdCustomCatalogSource)
 
-						By("Sleep for 30 seconds to allow the NFD custom catalogsource to be created")
-						time.Sleep(30 * time.Second)
+						By(fmt.Sprintf("Sleep for %s to allow the NFD custom catalogsource to be created", nvidiagpu.SleepDuration.String()))
+						time.Sleep(nvidiagpu.SleepDuration)
 
-						glog.V(gpuparams.GpuLogLevel).Infof("Wait up to 4 mins for custom NFD catalogsource "+
-							"'%s' to be ready", createdNFDCustomCatalogSourceBuilder.Definition.Name)
+						glog.V(gpuparams.GpuLogLevel).Infof("Wait up to %s for custom NFD catalogsource '%s' to be ready", nvidiagpu.WaitDuration.String(), createdNFDCustomCatalogSourceBuilder.Definition.Name)
 
-						Expect(createdNFDCustomCatalogSourceBuilder.IsReady(4 * time.Minute)).NotTo(BeFalse())
+						Expect(createdNFDCustomCatalogSourceBuilder.IsReady(nvidiagpu.WaitDuration)).NotTo(BeFalse())
 
 						nfdPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
 							NfdPackage, NfdCatalogSourceNamespace, NfdCustomCatalogSource, 30*time.Second, 5*time.Minute)
@@ -337,7 +336,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				// Here need to check if NFD CR is deployed, otherwise Deleting a non-existing CR will throw an error
 				// skipping error check for now cause any failure before entire NFD stack
 				By("Delete NFD CR instance in NFD namespace")
-				_ = deploy.NFDCRDeleteAndWait(inittools.APIClient, NfdCRName, NfdOperatorNamespace, 30*time.Second, 5*time.Minute)
+				_ = deploy.NFDCRDeleteAndWait(inittools.APIClient, NfdCRName, NfdOperatorNamespace, nvidiagpu.DeletionPollInterval, nvidiagpu.DeletionTimeoutDuration)
 
 				By("Delete NFD CSV")
 				_ = deploy.DeleteNFDCSV(inittools.APIClient)
@@ -423,7 +422,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					"to be in Ready state", createdMsBuilder.Definition.ObjectMeta.Name)
 
 				err = machine.WaitForMachineSetReady(inittools.APIClient, createdMsBuilder.Definition.ObjectMeta.Name,
-					machineSetNamespace, 15*time.Minute)
+					machineSetNamespace, nvidiagpu.MachineReadyWaitDuration)
 
 				Expect(err).ToNot(HaveOccurred(), "Failed to detect at least one replica"+
 					" of MachineSet %s in Ready state during 15 min polling interval: %v",
@@ -440,9 +439,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			// Here we don't need this step is we already have a GPU worker node on cluster
 			if gpuScaleCluster {
-				glog.V(gpuparams.GpuLogLevel).Infof("Sleeping for 2 minutes to allow the newly created GPU " +
-					"worker node to be labeled by NFD")
-				time.Sleep(2 * time.Minute)
+				glog.V(gpuparams.GpuLogLevel).Infof("Sleeping for %s to allow the newly created GPU worker node to be labeled by NFD", nvidiagpu.NodeLabelingDelay.String())
+				time.Sleep(nvidiagpu.NodeLabelingDelay)
 			}
 
 			By("Get Cluster Architecture from first GPU enabled worker node")
@@ -504,13 +502,12 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 						Expect(err).ToNot(HaveOccurred(), "error creating custom GPU catalogsource "+
 							"builder Object name %s:  %v", gpuCustomCatalogSource, err)
 
-						By("Sleep for 30 seconds to allow the GPU custom catalogsource to be created")
-						time.Sleep(30 * time.Second)
+						By(fmt.Sprintf("Sleep for %s to allow the GPU custom catalogsource to be created", nvidiagpu.CatalogSourceCreationDelay))
+						time.Sleep(nvidiagpu.CatalogSourceCreationDelay)
 
-						glog.V(gpuparams.GpuLogLevel).Infof("Wait up to 4 mins for custom GPU catalogsource " +
-							"to be ready")
+						glog.V(gpuparams.GpuLogLevel).Infof("Wait up to %s for custom GPU catalogsource to be ready", nvidiagpu.CatalogSourceReadyTimeout)
 
-						Expect(createdGPUCustomCatalogSourceBuilder.IsReady(4 * time.Minute)).NotTo(BeFalse())
+						Expect(createdGPUCustomCatalogSourceBuilder.IsReady(nvidiagpu.CatalogSourceReadyTimeout)).NotTo(BeFalse())
 
 						gpuCatalogSource = createdGPUCustomCatalogSourceBuilder.Definition.Name
 
@@ -518,7 +515,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 							createdGPUCustomCatalogSourceBuilder.Definition.Name)
 
 						gpuPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
-							nvidiagpu.Package, nvidiagpu.CatalogSourceNamespace, gpuCustomCatalogSource, 30*time.Second, 5*time.Minute)
+							nvidiagpu.Package, nvidiagpu.CatalogSourceNamespace, gpuCustomCatalogSource,
+							nvidiagpu.PackageManifestCheckInterval, nvidiagpu.PackageManifestTimeout)
 
 						Expect(err).ToNot(HaveOccurred(), "error getting GPU packagemanifest '%s' "+
 							"from custom catalog '%s':  %v", nvidiagpu.Package, gpuCustomCatalogSource, err)
@@ -597,7 +595,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				glog.V(gpuparams.GpuLogLevel).Infof("Deploy the GPU Operator bundle '%s'",
 					gpuBundleConfig.BundleImage)
 				err = deployBundle.DeployBundle(gpuparams.GpuLogLevel, gpuBundleConfig, nvidiagpu.NvidiaGPUNamespace,
-					5*time.Minute)
+					nvidiagpu.GpuBundleDeploymentTimeout)
 				Expect(err).ToNot(HaveOccurred(), "error from deploy.DeployBundle():  '%v' ", err)
 
 				glog.V(gpuparams.GpuLogLevel).Infof("GPU Operator bundle image '%s' deployed successfully "+
@@ -665,16 +663,19 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			}
 
-			By("Sleep for 2 minutes to allow the GPU Operator deployment to be created")
-			glog.V(gpuparams.GpuLogLevel).Infof("Sleep for 2 minutes to allow the GPU Operator deployment" +
-				" to be created")
-			time.Sleep(2 * time.Minute)
+			By(fmt.Sprintf("Sleep for %s to allow the GPU Operator deployment to be created", nvidiagpu.OperatorDeploymentCreationDelay))
+			glog.V(gpuparams.GpuLogLevel).Infof("Sleep for %s to allow the GPU Operator deployment to be created", nvidiagpu.OperatorDeploymentCreationDelay)
+			time.Sleep(nvidiagpu.OperatorDeploymentCreationDelay)
 
-			By("Wait for up to 4 minutes for GPU Operator deployment to be created")
-			gpuDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, nvidiagpu.OperatorDeployment, nvidiagpu.NvidiaGPUNamespace,
-				30*time.Second, 4*time.Minute)
-			Expect(gpuDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy "+
-				"GPU operator")
+			By(fmt.Sprintf("Wait for up to %s for GPU Operator deployment to be created", nvidiagpu.DeploymentCreationTimeout))
+			gpuDeploymentCreated := wait.DeploymentCreated(
+				inittools.APIClient,
+				nvidiagpu.OperatorDeployment,
+				nvidiagpu.NvidiaGPUNamespace,
+				nvidiagpu.DeploymentCreationCheckInterval,
+				nvidiagpu.DeploymentCreationTimeout)
+
+			Expect(gpuDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy GPU operator")
 
 			By("Check if the GPU operator deployment is ready")
 			gpuOperatorDeployment, err := deployment.Pull(inittools.APIClient, nvidiagpu.OperatorDeployment, nvidiagpu.NvidiaGPUNamespace)
@@ -685,7 +686,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("Pulled GPU operator deployment is:  %v ",
 				gpuOperatorDeployment.Definition.Name)
 
-			if gpuOperatorDeployment.IsReady(4 * time.Minute) {
+			if gpuOperatorDeployment.IsReady(nvidiagpu.OperatorDeploymentReadyTimeout) {
 				glog.V(gpuparams.GpuLogLevel).Infof("Pulled GPU operator deployment '%s' is Ready",
 					gpuOperatorDeployment.Definition.Name)
 			}
@@ -719,8 +720,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			By("Wait for deployed ClusterServiceVersion to be in Succeeded phase")
 			glog.V(gpuparams.GpuLogLevel).Infof("Waiting for ClusterServiceVersion '%s' to be in Succeeded phase",
 				gpuCurrentCSV)
-			err = wait.CSVSucceeded(inittools.APIClient, gpuCurrentCSV, nvidiagpu.NvidiaGPUNamespace, 60*time.Second,
-				5*time.Minute)
+			err = wait.CSVSucceeded(inittools.APIClient, gpuCurrentCSV, nvidiagpu.NvidiaGPUNamespace,
+				nvidiagpu.CsvSucceededCheckInterval, nvidiagpu.CsvSucceededTimeout)
 			glog.V(gpuparams.GpuLogLevel).Info("error waiting for ClusterServiceVersion '%s' to be "+
 				"in Succeeded phase:  %v ", gpuCurrentCSV, err)
 			Expect(err).ToNot(HaveOccurred(), "error waiting for ClusterServiceVersion to be "+
@@ -786,9 +787,10 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					err)
 			}
 
-			By("Wait up to 12 minutes for ClusterPolicy to be ready")
-			glog.V(gpuparams.GpuLogLevel).Infof("Waiting for ClusterPolicy to be ready")
-			err = wait.ClusterPolicyReady(inittools.APIClient, nvidiagpu.ClusterPolicyName, 60*time.Second, 20*time.Minute)
+			By(fmt.Sprintf("Wait up to %s for ClusterPolicy to be ready", nvidiagpu.ClusterPolicyReadyTimeout))
+			glog.V(gpuparams.GpuLogLevel).Infof("Waiting up to %s for ClusterPolicy to be ready", nvidiagpu.ClusterPolicyReadyTimeout)
+			err = wait.ClusterPolicyReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
+				nvidiagpu.ClusterPolicyReadyCheckInterval, nvidiagpu.ClusterPolicyReadyTimeout)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("error waiting for ClusterPolicy to be Ready:  %v ", err)
 			Expect(err).ToNot(HaveOccurred(), "error waiting for ClusterPolicy to be Ready:  %v ",
@@ -876,7 +878,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				gpuBurnImageName[clusterArchitecture], nvidiagpu.BurnNamespace)
 
 			gpuBurnPod, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace,
-				gpuBurnImageName[(clusterArchitecture)], 5*time.Minute)
+				gpuBurnImageName[(clusterArchitecture)], nvidiagpu.BurnPodCreationTimeout)
 			Expect(err).ToNot(HaveOccurred(), "Error creating gpu burn pod: %v", err)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("Creating gpu-burn pod '%s' in namespace '%s'",
@@ -909,14 +911,15 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				}
 			}()
 
-			By("Wait for up to 3 minutes for gpu-burn pod to be in Running phase")
-			err = gpuPodPulled.WaitUntilInStatus(corev1.PodRunning, 3*time.Minute)
+			By(fmt.Sprintf("Wait for up to %s for gpu-burn pod to be in Running phase", nvidiagpu.BurnPodRunningTimeout))
+			err = gpuPodPulled.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
 			Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod in "+
 				"namespace '%s' to go to Running phase:  %v ", nvidiagpu.BurnNamespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Running phase")
 
-			By("Wait for gpu-burn pod to run to completion and be in Succeeded phase/Completed status")
-			err = gpuPodPulled.WaitUntilInStatus(corev1.PodSucceeded, 8*time.Minute)
+			By(fmt.Sprintf("Wait for up to %s for gpu-burn pod to run to completion and be in Succeeded phase/Completed status", nvidiagpu.BurnPodSuccessTimeout))
+			err = gpuPodPulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.BurnPodSuccessTimeout)
+
 			Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod '%s' in "+
 				"namespace '%s'to go Succeeded phase/Completed status:  %v ", nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Succeeded Phase/Completed status")
@@ -924,7 +927,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			By("Get the gpu-burn pod logs")
 			glog.V(gpuparams.GpuLogLevel).Infof("Get the gpu-burn pod logs")
 
-			gpuBurnLogs, err := gpuPodPulled.GetLog(500*time.Second, "gpu-burn-ctr")
+			gpuBurnLogs, err := gpuPodPulled.GetLog(nvidiagpu.BurnLogCollectionPeriod, "gpu-burn-ctr")
 
 			Expect(err).ToNot(HaveOccurred(), "error getting gpu-burn pod '%s' logs "+
 				"from gpu burn namespace '%s' :  %v ", nvidiagpu.BurnNamespace, err)
@@ -1035,8 +1038,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(100).Infof("Successfully updated Subscription Channel to upgrade to '%s'",
 				updatedPulledSubBuilder.Definition.Spec.Channel)
 
-			glog.V(100).Infof("Sleeping 2 minute to allow new CSV to be deployed")
-			time.Sleep(2 * time.Minute)
+			glog.V(100).Infof("Sleeping for %s to allow new CSV to be deployed", nvidiagpu.CsvDeploymentSleepInterval)
+			time.Sleep(nvidiagpu.CsvDeploymentSleepInterval)
 
 			glog.V(100).Infof("After Subscription Channel upgrade, the StartingCSV is now '%s'",
 				updatedPulledSubBuilder.Object.Spec.StartingCSV)
@@ -1109,7 +1112,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				clusterArch)
 
 			gpuBurnPod2, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace,
-				gpuBurnImageName[(clusterArch)], 5*time.Minute)
+				gpuBurnImageName[(clusterArch)], nvidiagpu.BurnPodPostUpgradeCreationTimeout)
 			Expect(err).ToNot(HaveOccurred(), "Error re-building gpu burn pod object after "+
 				"upgrade: %v", err)
 
@@ -1142,14 +1145,14 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				}
 			}()
 
-			By("Wait for up to 3 minutes for re-deployed gpu-burn pod to be in Running phase")
-			err = gpuBurnPod2Pulled.WaitUntilInStatus(corev1.PodRunning, 3*time.Minute)
+			By(fmt.Sprintf("Wait for up to %s for re-deployed burn pod to be in Running phase", nvidiagpu.RedeployedBurnPodRunningTimeout))
+			err = gpuBurnPod2Pulled.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.RedeployedBurnPodRunningTimeout)
 			Expect(err).ToNot(HaveOccurred(), "timeout waiting for re-deployed gpu-burn pod in "+
 				"namespace '%s' to go to Running phase:  %v ", nvidiagpu.BurnNamespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Running phase")
 
-			By("Wait for re-deployed gpu-burn pod to run to completion and be in Succeeded phase/Completed status")
-			err = gpuBurnPod2Pulled.WaitUntilInStatus(corev1.PodSucceeded, 8*time.Minute)
+			By(fmt.Sprintf("Wait for up to %s for re-deployed burn pod to run to completion and be in Succeeded phase/Completed status", nvidiagpu.RedeployedBurnPodSuccessTimeout))
+			err = gpuBurnPod2Pulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.RedeployedBurnPodSuccessTimeout)
 			Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod '%s' in "+
 				"namespace '%s'to go Succeeded phase/Completed status:  %v ", nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Succeeded Phase/Completed status")
@@ -1157,7 +1160,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			By("Get the gpu-burn pod logs")
 			glog.V(gpuparams.GpuLogLevel).Infof("Get the re-created gpu-burn pod logs")
 
-			gpuBurnPod2Logs, err := gpuBurnPod2Pulled.GetLog(500*time.Second, "gpu-burn-ctr")
+			gpuBurnPod2Logs, err := gpuBurnPod2Pulled.GetLog(nvidiagpu.RedeployedBurnLogCollectionPeriod, "gpu-burn-ctr")
 
 			Expect(err).ToNot(HaveOccurred(), "error getting gpu-burn pod '%s' logs "+
 				"from gpu burn namespace '%s' :  %v ", nvidiagpu.BurnNamespace, err)
