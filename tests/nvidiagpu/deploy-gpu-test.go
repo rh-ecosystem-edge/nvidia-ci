@@ -11,7 +11,7 @@ import (
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/machine"
-	. "github.com/rh-ecosystem-edge/nvidia-ci/tests/nfd"
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 	"strings"
 	"time"
 
