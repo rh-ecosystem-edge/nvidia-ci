@@ -13,7 +13,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
-	. "github.com/rh-ecosystem-edge/nvidia-ci/tests/nfd"
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	"time"
