@@ -12,6 +12,9 @@ const (
 	NfdPackage                             = "nfd"
 	NfdCRName                              = "nfd-instance"
 
+	resourceCRD = "NodeFeatureDiscovery"
+	LogLevel    = 100
+
 	//not related to NFD but common consts between gpu and nno
 	UndefinedValue       = "undefined"
 	OperatorVersionFile  = "operator.version"
