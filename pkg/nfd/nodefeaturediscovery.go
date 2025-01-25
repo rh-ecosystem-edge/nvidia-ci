@@ -30,12 +30,12 @@ type Builder struct {
 
 // NewBuilderFromObjectString creates a Builder object from CSV alm-examples.
 func NewBuilderFromObjectString(apiClient *clients.Settings, almExample string) *Builder {
-	glog.V(100).Infof(
+	glog.V(LogLevel).Infof(
 		"Initializing new Builder structure from almExample string")
 
 	nodeFeatureDiscovery, err := getNodeFeatureDiscoveryFromAlmExample(almExample)
 
-	glog.V(100).Infof(
+	glog.V(LogLevel).Infof(
 		"Initializing Builder definition to NodeFeatureDiscovery object")
 
 	builder := Builder{
@@ -44,7 +44,7 @@ func NewBuilderFromObjectString(apiClient *clients.Settings, almExample string) 
 	}
 
 	if err != nil {
-		glog.V(100).Infof(
+		glog.V(LogLevel).Infof(
 			"Error initializing NodeFeatureDiscovery from alm-examples: %s", err.Error())
 
 		builder.errorMsg = fmt.Sprintf("Error initializing NodeFeatureDiscovery from alm-examples: %s",
@@ -52,7 +52,7 @@ func NewBuilderFromObjectString(apiClient *clients.Settings, almExample string) 
 	}
 
 	if builder.Definition == nil {
-		glog.V(100).Infof("The NodeFeatureDiscovery object definition is nil")
+		glog.V(LogLevel).Infof("The NodeFeatureDiscovery object definition is nil")
 
 		builder.errorMsg = "NodeFeatureDiscovery definition is nil"
 	}
@@ -66,7 +66,7 @@ func (builder *Builder) Get() (*nfdv1.NodeFeatureDiscovery, error) {
 		return nil, err
 	}
 
-	glog.V(100).Infof("Collecting NodeFeatureDiscovery object %s in namespace %s",
+	glog.V(LogLevel).Infof("Collecting NodeFeatureDiscovery object %s in namespace %s",
 		builder.Definition.Name, builder.Definition.Namespace)
 
 	nodeFeatureDiscovery := &nfdv1.NodeFeatureDiscovery{}
@@ -76,7 +76,7 @@ func (builder *Builder) Get() (*nfdv1.NodeFeatureDiscovery, error) {
 	}, nodeFeatureDiscovery)
 
 	if err != nil {
-		glog.V(100).Infof("NodeFeatureDiscovery object %s doesn't exist in namespace %s",
+		glog.V(LogLevel).Infof("NodeFeatureDiscovery object %s doesn't exist in namespace %s",
 			builder.Definition.Name, builder.Definition.Namespace)
 
 		return nil, err
@@ -87,7 +87,7 @@ func (builder *Builder) Get() (*nfdv1.NodeFeatureDiscovery, error) {
 
 // Pull loads an existing NodeFeatureDiscovery into Builder struct.
 func Pull(apiClient *clients.Settings, name, namespace string) (*Builder, error) {
-	glog.V(100).Infof("Pulling existing nodeFeatureDiscovery name: %s in namespace: %s", name, namespace)
+	glog.V(LogLevel).Infof("Pulling existing nodeFeatureDiscovery name: %s in namespace: %s", name, namespace)
 
 	builder := Builder{
 		apiClient: apiClient,
@@ -100,13 +100,13 @@ func Pull(apiClient *clients.Settings, name, namespace string) (*Builder, error)
 	}
 
 	if name == "" {
-		glog.V(100).Infof("NodeFeatureDiscovery name is empty")
+		glog.V(LogLevel).Infof("NodeFeatureDiscovery name is empty")
 
 		builder.errorMsg = "NodeFeatureDiscovery 'name' cannot be empty"
 	}
 
 	if namespace == "" {
-		glog.V(100).Infof("NodeFeatureDiscovery namespace is empty")
+		glog.V(LogLevel).Infof("NodeFeatureDiscovery namespace is empty")
 
 		builder.errorMsg = "NodeFeatureDiscovery 'namespace' cannot be empty"
 	}
@@ -126,7 +126,7 @@ func (builder *Builder) Exists() bool {
 		return false
 	}
 
-	glog.V(100).Infof(
+	glog.V(LogLevel).Infof(
 		"Checking if NodeFeatureDiscovery %s exists in namespace %s", builder.Definition.Name,
 		builder.Definition.Namespace)
 
@@ -134,7 +134,7 @@ func (builder *Builder) Exists() bool {
 	builder.Object, err = builder.Get()
 
 	if err != nil {
-		glog.V(100).Infof("Failed to collect NodeFeatureDiscovery object due to %s", err.Error())
+		glog.V(LogLevel).Infof("Failed to collect NodeFeatureDiscovery object due to %s", err.Error())
 	}
 
 	return err == nil || !k8serrors.IsNotFound(err)
@@ -146,7 +146,7 @@ func (builder *Builder) Delete() (*Builder, error) {
 		return builder, err
 	}
 
-	glog.V(100).Infof("Deleting NodeFeatureDiscovery %s in namespace %s", builder.Definition.Name,
+	glog.V(LogLevel).Infof("Deleting NodeFeatureDiscovery %s in namespace %s", builder.Definition.Name,
 		builder.Definition.Namespace)
 
 	if !builder.Exists() {
@@ -170,7 +170,7 @@ func (builder *Builder) Create() (*Builder, error) {
 		return builder, err
 	}
 
-	glog.V(100).Infof("Creating the NodeFeatureDiscovery %s in namespace %s", builder.Definition.Name,
+	glog.V(LogLevel).Infof("Creating the NodeFeatureDiscovery %s in namespace %s", builder.Definition.Name,
 		builder.Definition.Namespace)
 
 	var err error
@@ -191,20 +191,20 @@ func (builder *Builder) Update(force bool) (*Builder, error) {
 		return builder, err
 	}
 
-	glog.V(100).Infof("Updating the NodeFeatureDiscovery object named: %s in namespace: %s",
+	glog.V(LogLevel).Infof("Updating the NodeFeatureDiscovery object named: %s in namespace: %s",
 		builder.Definition.Name, builder.Definition.Namespace)
 
 	err := builder.apiClient.Update(context.TODO(), builder.Definition)
 
 	if err != nil {
 		if force {
-			glog.V(100).Infof(
+			glog.V(LogLevel).Infof(
 				msg.FailToUpdateNotification("NodeFeatureDiscovery", builder.Definition.Name, builder.Definition.Namespace))
 
 			builder, err := builder.Delete()
 
 			if err != nil {
-				glog.V(100).Infof(
+				glog.V(LogLevel).Infof(
 					msg.FailToUpdateError("NodeFeatureDiscovery", builder.Definition.Name, builder.Definition.Namespace))
 
 				return nil, err
@@ -241,22 +241,21 @@ func getNodeFeatureDiscoveryFromAlmExample(almExample string) (*nfdv1.NodeFeatur
 // validate will check that the builder and builder definition are properly initialized before
 // accessing any member fields.
 func (builder *Builder) validate() (bool, error) {
-	resourceCRD := "NodeFeatureDiscovery"
 
 	if builder == nil {
-		glog.V(100).Infof("The %s builder is uninitialized", resourceCRD)
+		glog.V(LogLevel).Infof("The %s builder is uninitialized", resourceCRD)
 
 		return false, fmt.Errorf("error: received nil %s builder", resourceCRD)
 	}
 
 	if builder.Definition == nil {
-		glog.V(100).Infof("The %s is undefined", resourceCRD)
+		glog.V(LogLevel).Infof("The %s is undefined", resourceCRD)
 
 		return false, fmt.Errorf(msg.UndefinedCrdObjectErrString(resourceCRD))
 	}
 
 	if builder.apiClient == nil {
-		glog.V(100).Infof("The %s builder apiclient is nil", resourceCRD)
+		glog.V(LogLevel).Infof("The %s builder apiclient is nil", resourceCRD)
 
 		return false, fmt.Errorf("%s builder cannot have nil apiClient", resourceCRD)
 	}
