@@ -3,6 +3,7 @@ package nfd
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/golang/glog"
 	nfdv1 "github.com/openshift/cluster-nfd-operator/api/v1"
@@ -261,4 +262,49 @@ func (builder *Builder) validate() (bool, error) {
 	}
 
 	return true, nil
+}
+
+// UpdatePciDevices updates the PCI device whitelist configuration in the worker config.
+// Parameters:
+//   - deviceClassWhitelist: List of PCI device class IDs to whitelist
+//   - deviceLabelFields: List of fields to be used as labels for the PCI devices
+//
+// Returns an error if the configuration update fails or if invalid parameters are provided.
+func (builder *Builder) UpdatePciDevices(deviceClassWhitelist []string, deviceLabelFields []string) error {
+
+	if deviceClassWhitelist == nil || deviceLabelFields == nil {
+		return fmt.Errorf("deviceClassWhitelist and deviceLabelFields cannot be nil")
+	}
+
+	if builder.Definition == nil || builder.Definition.Spec.WorkerConfig.ConfigData == "" {
+		return fmt.Errorf("worker config data is not initialized")
+	}
+	// Validate device class format
+	for _, class := range deviceClassWhitelist {
+		if len(class) != 4 || !isValidHexString(class) {
+			return fmt.Errorf("invalid device class ID format: %s. Expected 4-digit hexadecimal", class)
+		}
+	}
+
+	// Validate label fields
+	allowedFields := map[string]bool{"class": true, "vendor": true, "device": true, "subsystem_vendor": true, "subsystem_device": true}
+	for _, field := range deviceLabelFields {
+		if !allowedFields[field] {
+			return fmt.Errorf("invalid label field: %s. Must be one of: class, vendor, device, subsystem_vendor, subsystem_device", field)
+		}
+	}
+	cfg := NewConfig(builder.Definition.Spec.WorkerConfig.ConfigData)
+	cfg.SetPciWhitelistConfig(deviceClassWhitelist, deviceLabelFields)
+
+	var err error
+	builder.Definition.Spec.WorkerConfig.ConfigData, err = cfg.GetYamlString()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func isValidHexString(s string) bool {
+	_, err := strconv.ParseUint(s, 16, 16)
+	return err == nil
 }
