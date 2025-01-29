@@ -6,17 +6,18 @@ import (
 	"fmt"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidianetworkconfig"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"os"
-
-	"time"
 
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
+	nfd "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"os"
+	"time"
 
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
@@ -31,6 +32,8 @@ import (
 )
 
 var (
+	Nfd = nfd.NewConfig()
+
 	nnoWorkerNodeSelector = map[string]string{
 		inittools.GeneralConfig.WorkerLabel: "",
 		nvidiaNetworkLabel:                  "true",
@@ -44,42 +47,27 @@ var (
 	ofedDriverVersion = os.Getenv("OFED_DRIVER_VERSION")
 	ofedRepository    = os.Getenv("OFED_REPOSITORY")
 
-	nfdCleanupAfterInstall bool = false
-
 	// NvidiaNetworkConfig provides access to general configuration parameters.
 	nvidiaNetworkConfig    *nvidianetworkconfig.NvidiaNetworkConfig
-	nnoCatalogSource                         = undefinedValue
-	nnoSubscriptionChannel                   = undefinedValue
+	nnoCatalogSource                         = UndefinedValue
+	nnoSubscriptionChannel                   = UndefinedValue
 	nnoInstallPlanApproval v1alpha1.Approval = "Automatic"
 
-	nnoDefaultSubscriptionChannel        = undefinedValue
-	networkOperatorUpgradeToChannel      = undefinedValue
+	nnoDefaultSubscriptionChannel        = UndefinedValue
+	networkOperatorUpgradeToChannel      = UndefinedValue
 	cleanupAfterTest                bool = true
 	deployFromBundle                bool = false
 	networkOperatorBundleImage           = ""
-	clusterArchitecture                  = undefinedValue
+	clusterArchitecture                  = UndefinedValue
 
-	nfdCatalogSource                      = undefinedValue
-	nnoCustomCatalogSource                = undefinedValue
-	nfdCustomCatalogSource                = undefinedValue
-	createNNOCustomCatalogsource     bool = false
-	createNFDCustomCatalogsource     bool = false
-	nnoCustomCatalogsourceIndexImage      = undefinedValue
-	nfdCustomCatalogsourceIndexImage      = undefinedValue
+	nnoCustomCatalogSource = UndefinedValue
+
+	createNNOCustomCatalogsource bool = false
+
+	nnoCustomCatalogsourceIndexImage = UndefinedValue
 )
 
 const (
-	nfdOperatorNamespace      = "openshift-nfd"
-	nfdCatalogSourceDefault   = "redhat-operators"
-	nfdCatalogSourceNamespace = "openshift-marketplace"
-	nfdOperatorDeploymentName = "nfd-controller-manager"
-	nfdPackage                = "nfd"
-	nfdCRName                 = "nfd-instance"
-	operatorVersionFile       = "operator.version"
-	openShiftVersionFile      = "ocp.version"
-
-	nfdRhcosLabel                           = "feature.node.kubernetes.io/system-os_release.ID"
-	nfdRhcosLabelValue                      = "rhcos"
 	nvidiaNetworkLabel                      = "feature.node.kubernetes.io/pci-15b3.present"
 	networkOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/network-operator/staging/network-operator-bundle:main-latest"
 
@@ -89,16 +77,13 @@ const (
 	nnoSubscriptionName       = "nno-subscription"
 	nnoSubscriptionNamespace  = "nvidia-network-operator"
 	nnoCatalogSourceDefault   = "certified-operators"
-	nnoCatalogSourceNamespace = "openshift-marketplace"
+	nnoCatalogSourceNamespace = nfd.CatalogSourceNamespace
 	nnoPackage                = "nvidia-network-operator"
 	nnoNicClusterPolicyName   = "nic-cluster-policy"
 
-	nnoCustomCatalogSourcePublisherName    = "Red Hat"
-	nfdCustomNFDCatalogSourcePublisherName = "Red Hat"
+	nnoCustomCatalogSourcePublisherName = "Red Hat"
 
 	nnoCustomCatalogSourceDisplayName = "Certified Operators Custom"
-	nfdCustomCatalogSourceDisplayName = "Redhat Operators Custom"
-	undefinedValue                    = "undefined"
 )
 
 var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
@@ -126,7 +111,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			if nvidiaNetworkConfig.SubscriptionChannel == "" {
 				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_SUBSCRIPTION_CHANNEL" +
 					" is not set, will deploy latest channel")
-				nnoSubscriptionChannel = undefinedValue
+				nnoSubscriptionChannel = UndefinedValue
 			} else {
 				nnoSubscriptionChannel = nvidiaNetworkConfig.SubscriptionChannel
 				glog.V(networkparams.LogLevel).Infof("NNO Subscription Channel now set to env variable "+
@@ -165,7 +150,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			if nvidiaNetworkConfig.OperatorUpgradeToChannel == "" {
 				glog.V(networkparams.LogLevel).Infof("env variable " +
 					"NVIDIANETWORK_SUBSCRIPTION_UPGRADE_TO_CHANNEL is not set, will not run the Upgrade Testcase")
-				networkOperatorUpgradeToChannel = undefinedValue
+				networkOperatorUpgradeToChannel = UndefinedValue
 			} else {
 				networkOperatorUpgradeToChannel = nvidiaNetworkConfig.OperatorUpgradeToChannel
 				glog.V(networkparams.LogLevel).Infof("Network Operator Upgrade to channel now set to env"+
@@ -199,21 +184,21 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					"NVIDIANETWORK_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE is set, and has value: '%s'",
 					nvidiaNetworkConfig.NFDFallbackCatalogsourceIndexImage)
 
-				nfdCustomCatalogsourceIndexImage = nvidiaNetworkConfig.NFDFallbackCatalogsourceIndexImage
+				Nfd.CustomCatalogSourceIndexImage = nvidiaNetworkConfig.NFDFallbackCatalogsourceIndexImage
 
 				glog.V(networkparams.LogLevel).Infof("Setting flag to create custom NFD operator " +
 					"catalogsource from fall back index image to True")
 
-				createNFDCustomCatalogsource = true
+				Nfd.CreateCustomCatalogsource = true
 
-				nfdCustomCatalogSource = nfdCatalogSourceDefault + "-custom"
+				Nfd.CustomCatalogSource = nfd.CatalogSourceDefault + "-custom"
 				glog.V(networkparams.LogLevel).Infof("Setting custom NFD catalogsource name to '%s'",
-					nfdCustomCatalogSource)
+					Nfd.CustomCatalogSource)
 
 			} else {
 				glog.V(networkparams.LogLevel).Infof("Setting flag to create custom NFD operator " +
 					"catalogsource from fall back index image to False")
-				createNFDCustomCatalogsource = false
+				Nfd.CreateCustomCatalogsource = false
 			}
 
 			By("Report OpenShift version")
@@ -223,7 +208,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			if err != nil {
 				glog.Error("Error getting OpenShift version: ", err)
 			} else {
-				if writeErr := inittools.GeneralConfig.WriteReport(openShiftVersionFile,
+				if writeErr := inittools.GeneralConfig.WriteReport(OpenShiftVersionFile,
 					[]byte(ocpVersion)); writeErr != nil {
 					glog.Error("Error writing OpenShift version file: ", writeErr)
 				}
@@ -241,35 +226,35 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				glog.V(networkparams.LogLevel).Infof("NFD is not currently installed on this cluster")
 				glog.V(networkparams.LogLevel).Infof("Deploying NFD Operator and CR instance on this cluster")
 
-				nfdCleanupAfterInstall = true
+				Nfd.CleanupAfterInstall = true
 
 				By("Check if 'nfd' packagemanifest exists in 'redhat-operators' default catalog")
 				nfdPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-					nfdPackage, nfdCatalogSourceNamespace, nfdCatalogSourceDefault)
+					nfd.Package, nfd.CatalogSourceNamespace, nfd.CatalogSourceDefault)
 
 				if nfdPkgManifestBuilderByCatalog == nil {
 					glog.V(networkparams.LogLevel).Infof("NFD packagemanifest was not found in the "+
-						"default '%s' catalog.", nfdCatalogSourceDefault)
+						"default '%s' catalog.", nfd.CatalogSourceNamespace)
 
-					if createNFDCustomCatalogsource {
+					if Nfd.CreateCustomCatalogsource {
 						glog.V(networkparams.LogLevel).Infof("Creating custom catalogsource '%s' for NFD "+
-							"catalog.", nfdCustomCatalogSource)
+							"catalog.", Nfd.CustomCatalogSource)
 						glog.V(networkparams.LogLevel).Infof("Creating custom catalogsource '%s' for NFD "+
-							"Operator with index image '%s'", nfdCustomCatalogSource, nfdCustomCatalogsourceIndexImage)
+							"Operator with index image '%s'", Nfd.CustomCatalogSource, Nfd.CustomCatalogSourceIndexImage)
 
 						nfdCustomCatalogSourceBuilder := olm.NewCatalogSourceBuilderWithIndexImage(inittools.APIClient,
-							nfdCustomCatalogSource, nfdCatalogSourceNamespace, nfdCustomCatalogsourceIndexImage,
-							nfdCustomCatalogSourceDisplayName, nfdCustomNFDCatalogSourcePublisherName)
+							Nfd.CustomCatalogSource, nfd.CatalogSourceNamespace, Nfd.CustomCatalogSourceIndexImage,
+							nfd.CustomCatalogSourceDisplayName, nfd.CustomNFDCatalogSourcePublisherName)
 
 						Expect(nfdCustomCatalogSourceBuilder).ToNot(BeNil(), "error creating custom "+
-							"NFD catalogsource %s:  %v", nfdPackage, nfdCustomCatalogSource, err)
+							"NFD catalogsource %s:  %v", nfd.Package, Nfd.CustomCatalogSource, err)
 
 						createdNFDCustomCatalogSourceBuilder, err := nfdCustomCatalogSourceBuilder.Create()
 						Expect(err).ToNot(HaveOccurred(), "error creating custom NFD "+
-							"catalogsource '%s':  %v", nfdPackage, nfdCustomCatalogSource, err)
+							"catalogsource '%s':  %v", nfd.Package, Nfd.CustomCatalogSource, err)
 
 						Expect(createdNFDCustomCatalogSourceBuilder).ToNot(BeNil(), "Failed to "+
-							" create custom NFD catalogsource '%s'", nfdCustomCatalogSource)
+							" create custom NFD catalogsource '%s'", Nfd.CustomCatalogSource)
 
 						By("Sleep for 60 seconds to allow the NFD custom catalogsource to be created")
 						time.Sleep(60 * time.Second)
@@ -280,16 +265,16 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 						Expect(createdNFDCustomCatalogSourceBuilder.IsReady(4 * time.Minute)).NotTo(BeFalse())
 
 						nfdPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(
-							inittools.APIClient, nfdPackage, nfdCatalogSourceNamespace, nfdCustomCatalogSource,
+							inittools.APIClient, nfd.Package, nfd.CatalogSourceNamespace, Nfd.CustomCatalogSource,
 							30*time.Second, 5*time.Minute)
 
 						Expect(err).ToNot(HaveOccurred(), "error getting NFD packagemanifest '%s' "+
-							"from custom catalog '%s':  %v", nfdPackage, nfdCustomCatalogSource, err)
+							"from custom catalog '%s':  %v", nfd.Package, Nfd.CustomCatalogSource, err)
 
-						nfdCatalogSource = nfdCustomCatalogSource
+						Nfd.CatalogSource = Nfd.CustomCatalogSource
 						nfdChannel := nfdPkgManifestBuilderByCustomCatalog.Object.Status.DefaultChannel
 						glog.V(networkparams.LogLevel).Infof("NFD channel '%s' retrieved from "+
-							"packagemanifest of custom catalogsource '%s'", nfdChannel, nfdCustomCatalogSource)
+							"packagemanifest of custom catalogsource '%s'", nfdChannel, Nfd.CustomCatalogSource)
 
 					} else {
 						glog.V(networkparams.LogLevel).Info("Skipping test due to missing NFD Packagemanifest " +
@@ -301,9 +286,9 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 				} else {
 					glog.V(networkparams.LogLevel).Infof("The nfd packagemanifest '%s' was found in the "+
-						"default catalog '%s'", nfdPkgManifestBuilderByCatalog.Object.Name, nfdCatalogSourceDefault)
+						"default catalog '%s'", nfdPkgManifestBuilderByCatalog.Object.Name, nfd.CatalogSourceNamespace)
 
-					nfdCatalogSource = nfdCatalogSourceDefault
+					Nfd.CatalogSource = nfd.CatalogSourceNamespace
 					nfdChannel := nfdPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
 					glog.V(networkparams.LogLevel).Infof("The NFD channel retrieved from "+
 						"packagemanifest is:  %v", nfdChannel)
@@ -356,11 +341,11 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 		AfterAll(func() {
 
-			if nfdCleanupAfterInstall && cleanupAfterTest {
+			if Nfd.CleanupAfterInstall && cleanupAfterTest {
 				// Here need to check if NFD CR is deployed, otherwise Deleting a non-existing CR will throw an error
 				// skipping error check for now cause any failure before entire NFD stack
 				By("Delete NFD CR instance in NFD namespace")
-				_ = deploy.NFDCRDeleteAndWait(inittools.APIClient, nfdCRName, nfdOperatorNamespace, 30*time.Second,
+				_ = deploy.NFDCRDeleteAndWait(inittools.APIClient, nfd.CRName, nfd.OperatorNamespace, 30*time.Second,
 					5*time.Minute)
 
 				By("Delete NFD CSV")
@@ -381,12 +366,12 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 		It("Deploy NVIDIA Network Operator with DTK", Label("nno"), func() {
 
 			By("Check if NFD is installed %s")
-			nfdLabelDetected, err := check.AllNodeLabel(inittools.APIClient, nfdRhcosLabel, nfdRhcosLabelValue,
+			nfdLabelDetected, err := check.AllNodeLabel(inittools.APIClient, nfd.RhcosLabel, nfd.RhcosLabelValue,
 				inittools.GeneralConfig.WorkerLabelMap)
 
 			Expect(err).ToNot(HaveOccurred(), "error calling check.NodeLabel:  %v ", err)
 			Expect(nfdLabelDetected).NotTo(BeFalse(), "NFD node label check failed to match "+
-				"label %s and label value %s on all nodes", nfdRhcosLabel, nfdRhcosLabelValue)
+				"label %s and label value %s on all nodes", nfd.RhcosLabel, nfd.RhcosLabelValue)
 			glog.V(networkparams.LogLevel).Infof("The check for NFD label returned: %v", nfdLabelDetected)
 
 			isNfdInstalled, err := check.NFDDeploymentsReady(inittools.APIClient)
@@ -592,7 +577,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				subBuilder := olm.NewSubscriptionBuilder(inittools.APIClient, nnoSubscriptionName,
 					nnoSubscriptionNamespace, nnoCatalogSource, nnoCatalogSourceNamespace, nnoPackage)
 
-				if nnoSubscriptionChannel != undefinedValue {
+				if nnoSubscriptionChannel != UndefinedValue {
 					glog.V(networkparams.LogLevel).Infof("Setting the NNO subscription channel to: '%s'",
 						nnoSubscriptionChannel)
 					subBuilder.WithChannel(nnoSubscriptionChannel)
@@ -671,7 +656,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(networkparams.LogLevel).Infof("ClusterServiceVersion version to be written in the operator "+
 				"version file is: '%s'", csvVersionString)
 
-			if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(csvVersionString)); err != nil {
+			if err := inittools.GeneralConfig.WriteReport(OperatorVersionFile, []byte(csvVersionString)); err != nil {
 				glog.Error("Error writing an operator version file: ", err)
 			}
 
@@ -786,7 +771,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 func createNFDDeployment() bool {
 
 	By("Deploy NFD Subscription in NFD namespace")
-	err := deploy.CreateNFDSubscription(inittools.APIClient, nfdCatalogSource)
+	err := deploy.CreateNFDSubscription(inittools.APIClient, Nfd.CatalogSource)
 	Expect(err).ToNot(HaveOccurred(), "error creating NFD Subscription:  %v", err)
 
 	By("Sleep for 2 minutes to allow the NFD Operator deployment to be created")
@@ -795,7 +780,7 @@ func createNFDDeployment() bool {
 	time.Sleep(2 * time.Minute)
 
 	By("Wait up to 5 mins for NFD Operator deployment to be created")
-	nfdDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, nfdOperatorDeploymentName, nfdOperatorNamespace,
+	nfdDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, nfd.OperatorDeploymentName, nfd.OperatorNamespace,
 		30*time.Second, 5*time.Minute)
 	Expect(nfdDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy "+
 		"NFD operator")
