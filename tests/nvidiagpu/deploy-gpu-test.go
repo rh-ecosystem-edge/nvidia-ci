@@ -38,7 +38,7 @@ import (
 )
 
 var (
-	Nfd                                      = nfd.NewConfig()
+	Nfd                                      = nfd.NewCustomConfig()
 	gpuInstallPlanApproval v1alpha1.Approval = "Automatic"
 
 	gpuWorkerNodeSelector = map[string]string{
