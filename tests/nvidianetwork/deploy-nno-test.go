@@ -32,7 +32,7 @@ import (
 )
 
 var (
-	Nfd = nfd.NewConfig()
+	Nfd = nfd.NewCustomConfig()
 
 	nnoWorkerNodeSelector = map[string]string{
 		inittools.GeneralConfig.WorkerLabel: "",
