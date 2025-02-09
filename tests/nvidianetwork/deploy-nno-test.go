@@ -286,9 +286,9 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 				} else {
 					glog.V(networkparams.LogLevel).Infof("The nfd packagemanifest '%s' was found in the "+
-						"default catalog '%s'", nfdPkgManifestBuilderByCatalog.Object.Name, nfd.CatalogSourceNamespace)
+						"default catalog '%s'", nfdPkgManifestBuilderByCatalog.Object.Name, nfd.CatalogSourceDefault)
 
-					Nfd.CatalogSource = nfd.CatalogSourceNamespace
+					Nfd.CatalogSource = nfd.CatalogSourceDefault
 					nfdChannel := nfdPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
 					glog.V(networkparams.LogLevel).Infof("The NFD channel retrieved from "+
 						"packagemanifest is:  %v", nfdChannel)
