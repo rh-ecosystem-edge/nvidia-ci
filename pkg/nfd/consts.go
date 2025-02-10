@@ -1,5 +1,7 @@
 package nfd
 
+import "time"
+
 const (
 	CustomNFDCatalogSourcePublisherName = "Red Hat"
 	CustomCatalogSourceDisplayName      = "Redhat Operators Custom"
@@ -12,6 +14,8 @@ const (
 	Package                             = "nfd"
 	CRName                              = "nfd-instance"
 
-	resourceCRD = "NodeFeatureDiscovery"
-	LogLevel    = 100
+	NFDOperatorCheckInterval = 30 * time.Second
+	NFDOperatorTimeout       = 5 * time.Minute
+	resourceCRD              = "NodeFeatureDiscovery"
+	LogLevel                 = 100
 )
