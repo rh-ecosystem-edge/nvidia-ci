@@ -303,7 +303,9 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				err = deploy.CreateNFDOperatorGroup(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "error creating NFD OperatorGroup:  %v", err)
 
-				nfdDeployed := createNFDDeployment()
+				nfdDeployed := deploy.CreateNFDDeployment(inittools.APIClient, Nfd.CatalogSource, nfd.OperatorDeploymentName,
+					nfd.OperatorNamespace, nfd.NFDOperatorCheckInterval,
+					nfd.NFDOperatorTimeout, networkparams.LogLevel)
 
 				if !nfdDeployed {
 					By(fmt.Sprintf("Applying workaround for NFD failing to deploy on OCP %s", ocpVersion))
@@ -318,7 +320,10 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 						"workaround: %v", err)
 
 					glog.V(networkparams.LogLevel).Info("Re-trying NFD deployment")
-					nfdDeployed = createNFDDeployment()
+
+					nfdDeployed = deploy.CreateNFDDeployment(inittools.APIClient, Nfd.CatalogSource, nfd.OperatorDeploymentName,
+						nfd.OperatorNamespace, nfd.NFDOperatorCheckInterval,
+						nfd.NFDOperatorTimeout, networkparams.LogLevel)
 				}
 
 				Expect(nfdDeployed).ToNot(BeFalse(), "failed to deploy NFD operator")
@@ -365,20 +370,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 		It("Deploy NVIDIA Network Operator with DTK", Label("nno"), func() {
 
-			By("Check if NFD is installed %s")
-			nfdLabelDetected, err := check.AllNodeLabel(inittools.APIClient, nfd.RhcosLabel, nfd.RhcosLabelValue,
-				inittools.GeneralConfig.WorkerLabelMap)
-
-			Expect(err).ToNot(HaveOccurred(), "error calling check.NodeLabel:  %v ", err)
-			Expect(nfdLabelDetected).NotTo(BeFalse(), "NFD node label check failed to match "+
-				"label %s and label value %s on all nodes", nfd.RhcosLabel, nfd.RhcosLabelValue)
-			glog.V(networkparams.LogLevel).Infof("The check for NFD label returned: %v", nfdLabelDetected)
-
-			isNfdInstalled, err := check.NFDDeploymentsReady(inittools.APIClient)
-			Expect(err).ToNot(HaveOccurred(), "error checking if NFD deployments are ready:  "+
-				"%v ", err)
-			glog.V(networkparams.LogLevel).Infof("The check for NFD deployments ready returned: %v",
-				isNfdInstalled)
+			nfd.CheckNfdInstallation(inittools.APIClient, nfd.RhcosLabel, nfd.RhcosLabelValue, inittools.GeneralConfig.WorkerLabelMap, networkparams.LogLevel)
 
 			By("Check if at least one worker node is has label for Mellanox cards enabled")
 			networkNodeFound, _ := check.NodeWithLabel(inittools.APIClient, nvidiaNetworkLabel,
@@ -767,30 +759,6 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 	})
 })
-
-func createNFDDeployment() bool {
-
-	By("Deploy NFD Subscription in NFD namespace")
-	err := deploy.CreateNFDSubscription(inittools.APIClient, Nfd.CatalogSource)
-	Expect(err).ToNot(HaveOccurred(), "error creating NFD Subscription:  %v", err)
-
-	By("Sleep for 2 minutes to allow the NFD Operator deployment to be created")
-	glog.V(networkparams.LogLevel).Infof("Sleep for 2 minutes to allow the NFD Operator deployment" +
-		" to be created")
-	time.Sleep(2 * time.Minute)
-
-	By("Wait up to 5 mins for NFD Operator deployment to be created")
-	nfdDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, nfd.OperatorDeploymentName, nfd.OperatorNamespace,
-		30*time.Second, 5*time.Minute)
-	Expect(nfdDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy "+
-		"NFD operator")
-
-	By("Check if NFD Operator has been deployed")
-	nfdDeployed, err := deploy.CheckNFDOperatorDeployed(inittools.APIClient, 240*time.Second)
-	Expect(err).ToNot(HaveOccurred(), "error deploying NFD Operator in"+
-		" NFD namespace:  %v", err)
-	return nfdDeployed
-}
 
 func deleteOLMPods(apiClient *clients.Settings) error {
 
