@@ -14,10 +14,6 @@ const (
 	CatalogSourceNamespace           = "openshift-marketplace"
 	Package                          = "gpu-operator-certified"
 	ClusterPolicyName                = "gpu-cluster-policy"
-	BurnNamespace                    = "test-gpu-burn"
-	BurnPodName                      = "gpu-burn-pod"
-	BurnPodLabel                     = "app=gpu-burn-app"
-	BurnConfigmapName                = "gpu-burn-entrypoint"
 	OperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:main-latest"
 
 	CustomCatalogSourcePublisherName = "Red Hat"

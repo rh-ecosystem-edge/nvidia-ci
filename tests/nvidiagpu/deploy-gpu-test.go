@@ -39,7 +39,9 @@ import (
 )
 
 var (
-	Nfd                                      = nfd.NewCustomConfig()
+	Nfd  = nfd.NewCustomConfig()
+	burn = nvidiagpu.NewDefaultGPUBurnConfig()
+
 	gpuInstallPlanApproval v1alpha1.Approval = "Automatic"
 
 	gpuWorkerNodeSelector = map[string]string{
@@ -807,16 +809,16 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			By("Create GPU Burn namespace 'test-gpu-burn'")
-			gpuBurnNsBuilder := namespace.NewBuilder(inittools.APIClient, nvidiagpu.BurnNamespace)
+			gpuBurnNsBuilder := namespace.NewBuilder(inittools.APIClient, burn.Namespace)
 			if gpuBurnNsBuilder.Exists() {
 				glog.V(gpuparams.GpuLogLevel).Infof("The namespace '%s' already exists",
 					gpuBurnNsBuilder.Object.Name)
 			} else {
 				glog.V(gpuparams.GpuLogLevel).Infof("Creating the gpu burn namespace '%s'",
-					nvidiagpu.BurnNamespace)
+					burn.Namespace)
 				createdGPUBurnNsBuilder, err := gpuBurnNsBuilder.Create()
 				Expect(err).ToNot(HaveOccurred(), "error creating gpu burn "+
-					"namespace '%s' :  %v ", nvidiagpu.BurnNamespace, err)
+					"namespace '%s' :  %v ", burn.Namespace, err)
 
 				glog.V(gpuparams.GpuLogLevel).Infof("Successfully created namespace '%s'",
 					createdGPUBurnNsBuilder.Object.Name)
@@ -845,16 +847,16 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}()
 
 			By("Deploy GPU Burn configmap in test-gpu-burn namespace")
-			gpuBurnConfigMap, err := gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, nvidiagpu.BurnConfigmapName,
-				nvidiagpu.BurnNamespace)
+			gpuBurnConfigMap, err := gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName,
+				burn.Namespace)
 			Expect(err).ToNot(HaveOccurred(), "Error Creating gpu burn configmap: %v", err)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("The created gpuBurnConfigMap has name: %s",
 				gpuBurnConfigMap.Name)
 
-			configmapBuilder, err := configmap.Pull(inittools.APIClient, nvidiagpu.BurnConfigmapName, nvidiagpu.BurnNamespace)
+			configmapBuilder, err := configmap.Pull(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
 			Expect(err).ToNot(HaveOccurred(), "Error pulling gpu-burn configmap '%s' from "+
-				"namespace '%s': %v", nvidiagpu.BurnConfigmapName, nvidiagpu.BurnNamespace, err)
+				"namespace '%s': %v", burn.ConfigMapName, burn.Namespace, err)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("The pulled gpuBurnConfigMap has name: %s",
 				configmapBuilder.Definition.Name)
@@ -868,33 +870,33 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Deploy gpu-burn pod in test-gpu-burn namespace")
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod image name is: '%s', in namespace '%s'",
-				gpuBurnImageName[clusterArchitecture], nvidiagpu.BurnNamespace)
+				gpuBurnImageName[clusterArchitecture], burn.Namespace)
 
-			gpuBurnPod, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace,
+			gpuBurnPod, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.Namespace, burn.Namespace,
 				gpuBurnImageName[(clusterArchitecture)], nvidiagpu.BurnPodCreationTimeout)
 			Expect(err).ToNot(HaveOccurred(), "Error creating gpu burn pod: %v", err)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("Creating gpu-burn pod '%s' in namespace '%s'",
-				nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace)
+				burn.Namespace, burn.Namespace)
 
 			_, err = inittools.APIClient.Pods(gpuBurnPod.Namespace).Create(context.TODO(), gpuBurnPod,
 				metav1.CreateOptions{})
 			Expect(err).ToNot(HaveOccurred(), "Error creating gpu-burn '%s' in "+
-				"namespace '%s': %v", nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace, err)
+				"namespace '%s': %v", burn.Namespace, burn.Namespace, err)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("The created gpuBurnPod has name: %s has status: %v ",
 				gpuBurnPod.Name, gpuBurnPod.Status)
 
 			By("Get the gpu-burn pod with label \"app=gpu-burn-app\"")
-			gpuPodName, err := get.GetFirstPodNameWithLabel(inittools.APIClient, nvidiagpu.BurnNamespace, nvidiagpu.BurnPodLabel)
+			gpuPodName, err := get.GetFirstPodNameWithLabel(inittools.APIClient, burn.Namespace, burn.PodLabel)
 			Expect(err).ToNot(HaveOccurred(), "error getting gpu-burn pod with label "+
-				"'app=gpu-burn-app' from namespace '%s' :  %v ", nvidiagpu.BurnNamespace, err)
+				"'app=gpu-burn-app' from namespace '%s' :  %v ", burn.Namespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpuPodName is %s ", gpuPodName)
 
 			By("Pull the gpu-burn pod object from the cluster")
-			gpuPodPulled, err := pod.Pull(inittools.APIClient, gpuPodName, nvidiagpu.BurnNamespace)
+			gpuPodPulled, err := pod.Pull(inittools.APIClient, gpuPodName, burn.Namespace)
 			Expect(err).ToNot(HaveOccurred(), "error pulling gpu-burn pod from "+
-				"namespace '%s' :  %v ", nvidiagpu.BurnNamespace, err)
+				"namespace '%s' :  %v ", burn.Namespace, err)
 
 			By("Cleanup gpu-burn pod only if cleanupAfterTest is true and gpuOperatorUpgradeToChannel is undefined")
 			defer func() {
@@ -907,14 +909,14 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			By(fmt.Sprintf("Wait for up to %s for gpu-burn pod to be in Running phase", nvidiagpu.BurnPodRunningTimeout))
 			err = gpuPodPulled.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
 			Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod in "+
-				"namespace '%s' to go to Running phase:  %v ", nvidiagpu.BurnNamespace, err)
+				"namespace '%s' to go to Running phase:  %v ", burn.Namespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Running phase")
 
 			By(fmt.Sprintf("Wait for up to %s for gpu-burn pod to run to completion and be in Succeeded phase/Completed status", nvidiagpu.BurnPodSuccessTimeout))
 			err = gpuPodPulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.BurnPodSuccessTimeout)
 
 			Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod '%s' in "+
-				"namespace '%s'to go Succeeded phase/Completed status:  %v ", nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace, err)
+				"namespace '%s'to go Succeeded phase/Completed status:  %v ", burn.Namespace, burn.Namespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Succeeded Phase/Completed status")
 
 			By("Get the gpu-burn pod logs")
@@ -923,7 +925,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			gpuBurnLogs, err := gpuPodPulled.GetLog(nvidiagpu.BurnLogCollectionPeriod, "gpu-burn-ctr")
 
 			Expect(err).ToNot(HaveOccurred(), "error getting gpu-burn pod '%s' logs "+
-				"from gpu burn namespace '%s' :  %v ", nvidiagpu.BurnNamespace, err)
+				"from gpu burn namespace '%s' :  %v ", burn.Namespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn pod '%s' logs:\n%s",
 				gpuPodPulled.Definition.Name, gpuBurnLogs)
 
@@ -1074,15 +1076,15 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				"in json: %v", string(cpReadyAgainJSON))
 
 			By("Pull the previously deployed gpu-burn pod object from the cluster")
-			currentGpuBurnPodPulled, err := pod.Pull(inittools.APIClient, nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace)
+			currentGpuBurnPodPulled, err := pod.Pull(inittools.APIClient, burn.Namespace, burn.Namespace)
 			Expect(err).ToNot(HaveOccurred(), "error pulling previously deployed and completed "+
-				"gpu-burn pod from namespace '%s' :  %v ", nvidiagpu.BurnNamespace, err)
+				"gpu-burn pod from namespace '%s' :  %v ", burn.Namespace, err)
 
 			By("Get the gpu-burn pod with label \"app=gpu-burn-app\"")
-			currentGpuBurnPodName, err := get.GetFirstPodNameWithLabel(inittools.APIClient, nvidiagpu.BurnNamespace,
-				nvidiagpu.BurnPodLabel)
+			currentGpuBurnPodName, err := get.GetFirstPodNameWithLabel(inittools.APIClient, burn.Namespace,
+				burn.PodLabel)
 			Expect(err).ToNot(HaveOccurred(), "error getting previously deployed gpu-burn pod "+
-				"with label 'app=gpu-burn-app' from namespace '%s' :  %v ", nvidiagpu.BurnNamespace, err)
+				"with label 'app=gpu-burn-app' from namespace '%s' :  %v ", burn.Namespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpuPodName is %s ", currentGpuBurnPodName)
 
 			By("Delete the previously deployed gpu-burn-pod")
@@ -1093,7 +1095,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Re-deploy gpu-burn pod in test-gpu-burn namespace")
 			glog.V(gpuparams.GpuLogLevel).Infof("Re-deployed gpu-burn pod image name is: '%s', in "+
-				"namespace '%s'", gpuBurnImageName[clusterArchitecture], nvidiagpu.BurnNamespace)
+				"namespace '%s'", gpuBurnImageName[clusterArchitecture], burn.Namespace)
 
 			By("Get Cluster Architecture from first GPU enabled worker node")
 			glog.V(gpuparams.GpuLogLevel).Infof("Getting cluster architecture from nodes with "+
@@ -1104,32 +1106,32 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("cluster architecture for GPU enabled worker node is: %s",
 				clusterArch)
 
-			gpuBurnPod2, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace,
+			gpuBurnPod2, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.Namespace, burn.Namespace,
 				gpuBurnImageName[(clusterArch)], nvidiagpu.BurnPodPostUpgradeCreationTimeout)
 			Expect(err).ToNot(HaveOccurred(), "Error re-building gpu burn pod object after "+
 				"upgrade: %v", err)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("Re-deploying gpu-burn pod '%s' in namespace '%s'",
-				nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace)
+				burn.Namespace, burn.Namespace)
 
-			_, err = inittools.APIClient.Pods(nvidiagpu.BurnNamespace).Create(context.TODO(), gpuBurnPod2,
+			_, err = inittools.APIClient.Pods(burn.Namespace).Create(context.TODO(), gpuBurnPod2,
 				metav1.CreateOptions{})
 			Expect(err).ToNot(HaveOccurred(), "Error re-deploying gpu-burn '%s' after operator"+
-				" upgrade in namespace '%s': %v", nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace, err)
+				" upgrade in namespace '%s': %v", burn.Namespace, burn.Namespace, err)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("The re-deployed post upgrade gpuBurnPod has name: %s has "+
 				"status: %v ", gpuBurnPod2.Name, gpuBurnPod2.Status)
 
 			By("Get the re-deployed gpu-burn pod with label \"app=gpu-burn-app\"")
-			gpuBurnPod2Name, err := get.GetFirstPodNameWithLabel(inittools.APIClient, nvidiagpu.BurnNamespace, nvidiagpu.BurnPodLabel)
+			gpuBurnPod2Name, err := get.GetFirstPodNameWithLabel(inittools.APIClient, burn.Namespace, burn.PodLabel)
 			Expect(err).ToNot(HaveOccurred(), "error getting re-deployed gpu-burn pod with label "+
-				"'app=gpu-burn-app' from namespace '%s' :  %v ", nvidiagpu.BurnNamespace, err)
+				"'app=gpu-burn-app' from namespace '%s' :  %v ", burn.Namespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpuPodName is %s ", gpuBurnPod2Name)
 
 			By("Pull the re-created gpu-burn pod object from the cluster")
-			gpuBurnPod2Pulled, err := pod.Pull(inittools.APIClient, gpuBurnPod2.Name, nvidiagpu.BurnNamespace)
+			gpuBurnPod2Pulled, err := pod.Pull(inittools.APIClient, gpuBurnPod2.Name, burn.Namespace)
 			Expect(err).ToNot(HaveOccurred(), "error pulling re-deployed gpu-burn pod from "+
-				"namespace '%s' :  %v ", nvidiagpu.BurnNamespace, err)
+				"namespace '%s' :  %v ", burn.Namespace, err)
 
 			defer func() {
 				if cleanupAfterTest {
@@ -1141,13 +1143,13 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			By(fmt.Sprintf("Wait for up to %s for re-deployed burn pod to be in Running phase", nvidiagpu.RedeployedBurnPodRunningTimeout))
 			err = gpuBurnPod2Pulled.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.RedeployedBurnPodRunningTimeout)
 			Expect(err).ToNot(HaveOccurred(), "timeout waiting for re-deployed gpu-burn pod in "+
-				"namespace '%s' to go to Running phase:  %v ", nvidiagpu.BurnNamespace, err)
+				"namespace '%s' to go to Running phase:  %v ", burn.Namespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Running phase")
 
 			By(fmt.Sprintf("Wait for up to %s for re-deployed burn pod to run to completion and be in Succeeded phase/Completed status", nvidiagpu.RedeployedBurnPodSuccessTimeout))
 			err = gpuBurnPod2Pulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.RedeployedBurnPodSuccessTimeout)
 			Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod '%s' in "+
-				"namespace '%s'to go Succeeded phase/Completed status:  %v ", nvidiagpu.BurnPodName, nvidiagpu.BurnNamespace, err)
+				"namespace '%s'to go Succeeded phase/Completed status:  %v ", burn.Namespace, burn.Namespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Succeeded Phase/Completed status")
 
 			By("Get the gpu-burn pod logs")
@@ -1156,7 +1158,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			gpuBurnPod2Logs, err := gpuBurnPod2Pulled.GetLog(nvidiagpu.RedeployedBurnLogCollectionPeriod, "gpu-burn-ctr")
 
 			Expect(err).ToNot(HaveOccurred(), "error getting gpu-burn pod '%s' logs "+
-				"from gpu burn namespace '%s' :  %v ", nvidiagpu.BurnNamespace, err)
+				"from gpu burn namespace '%s' :  %v ", burn.Namespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn pod '%s' logs:\n%s",
 				gpuBurnPod2Pulled.Definition.Name, gpuBurnPod2Logs)
 
