@@ -1,4 +1,4 @@
-package nfd
+package nfdcheck
 
 import (
 	"fmt"
