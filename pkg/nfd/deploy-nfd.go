@@ -1,9 +1,10 @@
-package deploy
+package nfd
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gopkg.in/k8snetworkplumbingwg/multus-cni.v4/pkg/logging"
 	"time"
 
 	"github.com/golang/glog"
@@ -15,7 +16,6 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -262,7 +262,7 @@ func DeployCRInstance(apiClient *clients.Settings) error {
 
 	glog.V(gpuparams.GpuLogLevel).Infof("Creating NodeFeatureDiscovery instance from CSV almExamples")
 
-	nodeFeatureDiscoveryBuilder := nfd.NewBuilderFromObjectString(apiClient, almExamples)
+	nodeFeatureDiscoveryBuilder := NewBuilderFromObjectString(apiClient, almExamples)
 
 	_, err = nodeFeatureDiscoveryBuilder.Create()
 
@@ -312,7 +312,7 @@ func GetNFDCRJson(apiClient *clients.Settings, nfdCRName string, nfdNamespace st
 	glog.V(gpuparams.GpuLogLevel).Infof("Pull the NodeFeatureDiscovery just created from cluster, " +
 		"with updated fields")
 
-	pulledNodeFeatureDiscovery, err := nfd.Pull(apiClient, nfdCRName, nfdNamespace)
+	pulledNodeFeatureDiscovery, err := Pull(apiClient, nfdCRName, nfdNamespace)
 
 	if err != nil {
 		glog.V(gpuparams.GpuLogLevel).Infof("error pulling NodeFeatureDiscovery %s from "+
@@ -342,7 +342,7 @@ func NFDCRDeleteAndWait(apiClient *clients.Settings, nfdCRName string, nfdCRName
 	// return wait.PollImmediate(pollInterval, timeout, func() (bool, error) {
 	return wait.PollUntilContextTimeout(
 		context.TODO(), pollInterval, timeout, false, func(ctx context.Context) (bool, error) {
-			nfdCR, err := nfd.Pull(apiClient, nfdCRName, nfdCRNamespace)
+			nfdCR, err := Pull(apiClient, nfdCRName, nfdCRNamespace)
 
 			if err != nil {
 				glog.V(gpuparams.GpuLogLevel).Infof("NodeFeatureDiscovery pull from cluster error: %s\n", err)
@@ -475,7 +475,7 @@ func DeleteAnyNFDCSV(apiClient *clients.Settings) error {
 	return nil
 }
 
-func CreateNFDDeployment(apiClient *clients.Settings, catalogSource, operatorDeploymentName, operatorNamespace string, checkInterval, timeout time.Duration, logLevel int) bool {
+func CreateNFDDeployment(apiClient *clients.Settings, catalogSource, operatorDeploymentName, operatorNamespace string, checkInterval, timeout time.Duration, logLevel logging.Level) bool {
 	glog.V(glog.Level(logLevel)).Info("Deploying NFD Subscription")
 	err := CreateNFDSubscription(apiClient, catalogSource)
 	Expect(err).ToNot(HaveOccurred(), "error creating NFD Subscription: %v", err)
