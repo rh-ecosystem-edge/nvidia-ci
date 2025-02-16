@@ -2,7 +2,6 @@ package nvidianetwork
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidianetworkconfig"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfdcheck"
@@ -212,127 +211,8 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				}
 			}
 
-			//
-			By("Check if NFD is installed")
-			nfdInstalled, err := check.NFDDeploymentsReady(inittools.APIClient)
+			nfd.EnsureNFDIsInstalled(inittools.APIClient, Nfd, ocpVersion, networkparams.LogLevel)
 
-			if nfdInstalled && err == nil {
-				glog.V(networkparams.LogLevel).Infof("The check for ready NFD deployments is: %v",
-					nfdInstalled)
-				glog.V(networkparams.LogLevel).Infof("NFD operators and operands are already " +
-					"installed on this cluster")
-			} else {
-				glog.V(networkparams.LogLevel).Infof("NFD is not currently installed on this cluster")
-				glog.V(networkparams.LogLevel).Infof("Deploying NFD Operator and CR instance on this cluster")
-
-				Nfd.CleanupAfterInstall = true
-
-				By("Check if 'nfd' packagemanifest exists in 'redhat-operators' default catalog")
-				nfdPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-					nfd.Package, nfd.CatalogSourceNamespace, nfd.CatalogSourceDefault)
-
-				if nfdPkgManifestBuilderByCatalog == nil {
-					glog.V(networkparams.LogLevel).Infof("NFD packagemanifest was not found in the "+
-						"default '%s' catalog.", nfd.CatalogSourceNamespace)
-
-					if Nfd.CreateCustomCatalogsource {
-						glog.V(networkparams.LogLevel).Infof("Creating custom catalogsource '%s' for NFD "+
-							"catalog.", Nfd.CustomCatalogSource)
-						glog.V(networkparams.LogLevel).Infof("Creating custom catalogsource '%s' for NFD "+
-							"Operator with index image '%s'", Nfd.CustomCatalogSource, Nfd.CustomCatalogSourceIndexImage)
-
-						nfdCustomCatalogSourceBuilder := olm.NewCatalogSourceBuilderWithIndexImage(inittools.APIClient,
-							Nfd.CustomCatalogSource, nfd.CatalogSourceNamespace, Nfd.CustomCatalogSourceIndexImage,
-							nfd.CustomCatalogSourceDisplayName, nfd.CustomNFDCatalogSourcePublisherName)
-
-						Expect(nfdCustomCatalogSourceBuilder).ToNot(BeNil(), "error creating custom "+
-							"NFD catalogsource %s:  %v", nfd.Package, Nfd.CustomCatalogSource, err)
-
-						createdNFDCustomCatalogSourceBuilder, err := nfdCustomCatalogSourceBuilder.Create()
-						Expect(err).ToNot(HaveOccurred(), "error creating custom NFD "+
-							"catalogsource '%s':  %v", nfd.Package, Nfd.CustomCatalogSource, err)
-
-						Expect(createdNFDCustomCatalogSourceBuilder).ToNot(BeNil(), "Failed to "+
-							" create custom NFD catalogsource '%s'", Nfd.CustomCatalogSource)
-
-						By("Sleep for 60 seconds to allow the NFD custom catalogsource to be created")
-						time.Sleep(60 * time.Second)
-
-						glog.V(networkparams.LogLevel).Infof("Wait up to 4 mins for custom NFD "+
-							"catalogsource '%s' to be ready", createdNFDCustomCatalogSourceBuilder.Definition.Name)
-
-						Expect(createdNFDCustomCatalogSourceBuilder.IsReady(4 * time.Minute)).NotTo(BeFalse())
-
-						nfdPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(
-							inittools.APIClient, nfd.Package, nfd.CatalogSourceNamespace, Nfd.CustomCatalogSource,
-							30*time.Second, 5*time.Minute)
-
-						Expect(err).ToNot(HaveOccurred(), "error getting NFD packagemanifest '%s' "+
-							"from custom catalog '%s':  %v", nfd.Package, Nfd.CustomCatalogSource, err)
-
-						Nfd.CatalogSource = Nfd.CustomCatalogSource
-						nfdChannel := nfdPkgManifestBuilderByCustomCatalog.Object.Status.DefaultChannel
-						glog.V(networkparams.LogLevel).Infof("NFD channel '%s' retrieved from "+
-							"packagemanifest of custom catalogsource '%s'", nfdChannel, Nfd.CustomCatalogSource)
-
-					} else {
-						glog.V(networkparams.LogLevel).Info("Skipping test due to missing NFD Packagemanifest " +
-							"in default 'redhat-operators' catalogsource, and flag to deploy custom catalogsource " +
-							"is false")
-						Skip("NFD packagemanifest not found in default 'redhat-operators' catalogsource, " +
-							"and flag to deploy custom catalogsource is false")
-					}
-
-				} else {
-					glog.V(networkparams.LogLevel).Infof("The nfd packagemanifest '%s' was found in the "+
-						"default catalog '%s'", nfdPkgManifestBuilderByCatalog.Object.Name, nfd.CatalogSourceDefault)
-
-					Nfd.CatalogSource = nfd.CatalogSourceDefault
-					nfdChannel := nfdPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
-					glog.V(networkparams.LogLevel).Infof("The NFD channel retrieved from "+
-						"packagemanifest is:  %v", nfdChannel)
-
-				}
-
-				By("Deploy NFD Operator in NFD namespace")
-				err = nfd.CreateNFDNamespace(inittools.APIClient)
-				Expect(err).ToNot(HaveOccurred(), "error creating  NFD Namespace: %v", err)
-
-				By("Deploy NFD OperatorGroup in NFD namespace")
-				err = nfd.CreateNFDOperatorGroup(inittools.APIClient)
-				Expect(err).ToNot(HaveOccurred(), "error creating NFD OperatorGroup:  %v", err)
-
-				nfdDeployed := nfd.CreateNFDDeployment(inittools.APIClient, Nfd.CatalogSource, nfd.OperatorDeploymentName,
-					nfd.OperatorNamespace, nfd.NFDOperatorCheckInterval,
-					nfd.NFDOperatorTimeout, networkparams.LogLevel)
-
-				if !nfdDeployed {
-					By(fmt.Sprintf("Applying workaround for NFD failing to deploy on OCP %s", ocpVersion))
-					err = nfd.DeleteNFDSubscription(inittools.APIClient)
-					Expect(err).ToNot(HaveOccurred(), "error deleting NFD subscription: %v", err)
-
-					err = nfd.DeleteAnyNFDCSV(inittools.APIClient)
-					Expect(err).ToNot(HaveOccurred(), "error deleting NFD CSV: %v", err)
-
-					err = nfd.DeleteOLMPods(inittools.APIClient, networkparams.LogLevel)
-					Expect(err).ToNot(HaveOccurred(), "error deleting OLM pods for operator cache "+
-						"workaround: %v", err)
-
-					glog.V(networkparams.LogLevel).Info("Re-trying NFD deployment")
-
-					nfdDeployed = nfd.CreateNFDDeployment(inittools.APIClient, Nfd.CatalogSource, nfd.OperatorDeploymentName,
-						nfd.OperatorNamespace, nfd.NFDOperatorCheckInterval,
-						nfd.NFDOperatorTimeout, networkparams.LogLevel)
-				}
-
-				Expect(nfdDeployed).ToNot(BeFalse(), "failed to deploy NFD operator")
-
-				By("Deploy NFD CR instance in NFD namespace")
-				err = nfd.DeployCRInstance(inittools.APIClient)
-				Expect(err).ToNot(HaveOccurred(), "error deploying NFD CR instance in"+
-					" NFD namespace:  %v", err)
-
-			}
 		})
 
 		BeforeEach(func() {
