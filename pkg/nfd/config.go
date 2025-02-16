@@ -14,6 +14,8 @@ type CustomConfig struct {
 	CleanupAfterInstall bool
 }
 
+// NewCustomConfig creates a new CustomConfig instance with default settings.
+// All string fields are initialized to UndefinedValue and boolean fields to false.
 func NewCustomConfig() *CustomConfig {
 	return &CustomConfig{
 		CustomCatalogSourceIndexImage: UndefinedValue,
