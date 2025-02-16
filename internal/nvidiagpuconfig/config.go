@@ -16,7 +16,7 @@ type NvidiaGPUConfig struct {
 	BundleImage                        string `envconfig:"NVIDIAGPU_BUNDLE_IMAGE"`
 	OperatorUpgradeToChannel           string `envconfig:"NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL"`
 	GPUFallbackCatalogsourceIndexImage string `envconfig:"NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"`
-	NFDFallbackCatalogsourceIndexImage string `envconfig:"NVIDIAGPU_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"`
+	NFDFallbackCatalogsourceIndexImage string `envconfig:"NVIDIAGPU_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"` // should this be here?
 }
 
 // NewNvidiaGPUConfig returns instance of NvidiaGPUConfig type.

@@ -15,7 +15,7 @@ type NvidiaNetworkConfig struct {
 	BundleImage                        string `envconfig:"NVIDIANETWORK_BUNDLE_IMAGE"`
 	OperatorUpgradeToChannel           string `envconfig:"NVIDIANETWORK_SUBSCRIPTION_UPGRADE_TO_CHANNEL"`
 	NNOFallbackCatalogsourceIndexImage string `envconfig:"NVIDIANETWORK_NNO_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"`
-	NFDFallbackCatalogsourceIndexImage string `envconfig:"NVIDIANETWORK_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"`
+	NFDFallbackCatalogsourceIndexImage string `envconfig:"NVIDIANETWORK_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"` // should this be here?
 }
 
 // NewNvidiaNetworkConfig returns instance of NvidiaNetworkConfig type.
