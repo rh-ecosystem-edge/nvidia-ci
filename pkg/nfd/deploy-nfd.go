@@ -64,7 +64,7 @@ func CreateNFDNamespace(apiClient *clients.Settings) error {
 	newLabeledNfdNsBuilder, err := labeledNfdNsBuilder.Update()
 
 	if err != nil {
-		glog.V(gpuparams.GpuLogLevel).Infof("error labeling NFD namespace %S :  %v ", newLabeledNfdNsBuilder.Definition.Name, err)
+		glog.V(gpuparams.GpuLogLevel).Infof("error labeling NFD namespace %s: %v", newLabeledNfdNsBuilder.Definition.Name, err)
 
 		return err
 	}
