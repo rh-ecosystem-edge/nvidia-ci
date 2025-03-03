@@ -58,7 +58,7 @@
       "commitMessageExtra": "to {{newDigest}}",
       "commitMessageTopic": "GPU Operator staging digest",
       "prBodyNotes": [
-        "/test 4.12-stable-nvidia-gpu-operator-e2e-master 4.14-stable-nvidia-gpu-operator-e2e-master 4.15-stable-nvidia-gpu-operator-e2e-master 4.16-stable-nvidia-gpu-operator-e2e-master 4.17-stable-nvidia-gpu-operator-e2e-master 4.18-stable-nvidia-gpu-operator-e2e-master"
+        "/test 4.18-stable-nvidia-gpu-operator-e2e-master"
       ]
     },
     {
