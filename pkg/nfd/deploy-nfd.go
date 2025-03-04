@@ -1,12 +1,14 @@
-package deploy
+package nfd
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gopkg.in/k8snetworkplumbingwg/multus-cni.v4/pkg/logging"
 	"time"
 
 	"github.com/golang/glog"
+	. "github.com/onsi/gomega"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
@@ -14,7 +16,6 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -44,8 +45,7 @@ func CreateNFDNamespace(apiClient *clients.Settings) error {
 	createdNfdNsBuilder, err := nfdNsBuilder.Create()
 
 	if err != nil {
-		glog.V(gpuparams.GpuLogLevel).Infof("error creating NFD namespace '%s' :  %v ",
-			createdNfdNsBuilder.Definition.Name, err)
+		glog.V(gpuparams.GpuLogLevel).Infof("error creating NFD namespace '%s' :  %v ", createdNfdNsBuilder.Definition.Name, err)
 
 		return err
 	}
@@ -64,8 +64,7 @@ func CreateNFDNamespace(apiClient *clients.Settings) error {
 	newLabeledNfdNsBuilder, err := labeledNfdNsBuilder.Update()
 
 	if err != nil {
-		glog.V(gpuparams.GpuLogLevel).Infof("error labeling NFD namespace %S :  %v ",
-			newLabeledNfdNsBuilder.Definition.Name, err)
+		glog.V(gpuparams.GpuLogLevel).Infof("error labeling NFD namespace %s: %v", newLabeledNfdNsBuilder.Definition.Name, err)
 
 		return err
 	}
@@ -263,7 +262,7 @@ func DeployCRInstance(apiClient *clients.Settings) error {
 
 	glog.V(gpuparams.GpuLogLevel).Infof("Creating NodeFeatureDiscovery instance from CSV almExamples")
 
-	nodeFeatureDiscoveryBuilder := nfd.NewBuilderFromObjectString(apiClient, almExamples)
+	nodeFeatureDiscoveryBuilder := NewBuilderFromObjectString(apiClient, almExamples)
 
 	_, err = nodeFeatureDiscoveryBuilder.Create()
 
@@ -313,7 +312,7 @@ func GetNFDCRJson(apiClient *clients.Settings, nfdCRName string, nfdNamespace st
 	glog.V(gpuparams.GpuLogLevel).Infof("Pull the NodeFeatureDiscovery just created from cluster, " +
 		"with updated fields")
 
-	pulledNodeFeatureDiscovery, err := nfd.Pull(apiClient, nfdCRName, nfdNamespace)
+	pulledNodeFeatureDiscovery, err := Pull(apiClient, nfdCRName, nfdNamespace)
 
 	if err != nil {
 		glog.V(gpuparams.GpuLogLevel).Infof("error pulling NodeFeatureDiscovery %s from "+
@@ -343,7 +342,7 @@ func NFDCRDeleteAndWait(apiClient *clients.Settings, nfdCRName string, nfdCRName
 	// return wait.PollImmediate(pollInterval, timeout, func() (bool, error) {
 	return wait.PollUntilContextTimeout(
 		context.TODO(), pollInterval, timeout, false, func(ctx context.Context) (bool, error) {
-			nfdCR, err := nfd.Pull(apiClient, nfdCRName, nfdCRNamespace)
+			nfdCR, err := Pull(apiClient, nfdCRName, nfdCRNamespace)
 
 			if err != nil {
 				glog.V(gpuparams.GpuLogLevel).Infof("NodeFeatureDiscovery pull from cluster error: %s\n", err)
@@ -472,6 +471,25 @@ func DeleteAnyNFDCSV(apiClient *clients.Settings) error {
 			return err
 		}
 	}
-	
+
 	return nil
+}
+
+func CreateNFDDeployment(apiClient *clients.Settings, catalogSource, operatorDeploymentName, operatorNamespace string, checkInterval, timeout time.Duration, logLevel logging.Level) bool {
+	glog.V(glog.Level(logLevel)).Info("Deploying NFD Subscription")
+	err := CreateNFDSubscription(apiClient, catalogSource)
+	Expect(err).ToNot(HaveOccurred(), "error creating NFD Subscription: %v", err)
+
+	glog.V(glog.Level(logLevel)).Info("Sleeping for 2 minutes to allow the NFD Operator deployment to stabilize")
+	time.Sleep(2 * time.Minute)
+
+	glog.V(glog.Level(logLevel)).Infof("Waiting up to %v for NFD Operator deployment to be fully created", timeout)
+	nfdDeploymentCreated := nvidiagpuwait.DeploymentCreated(apiClient, operatorDeploymentName, operatorNamespace, checkInterval, timeout)
+	Expect(nfdDeploymentCreated).ToNot(BeFalse(), "timed out waiting for NFD operator deployment")
+
+	glog.V(glog.Level(logLevel)).Info("Checking if NFD Operator deployment is active")
+	nfdDeployed, err := CheckNFDOperatorDeployed(apiClient, 4*time.Minute)
+	Expect(err).ToNot(HaveOccurred(), "error deploying NFD Operator in NFD namespace: %v", err)
+
+	return nfdDeployed
 }
