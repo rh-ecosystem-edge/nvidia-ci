@@ -51,10 +51,8 @@ jobs:
             ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
             ```
 
-            Updates version of the OCP version
-            
+            Update the NVIDIA GPU operator on OpenShift test matrix
             ---
-            
             /cc @empovit @TomerNewman
           delete-branch: true
           assignees: empovit,TomerNewman

@@ -3,33 +3,44 @@ import os
 import re
 
 import requests
+import semver
 
-from utils import get_logger, get_latest_versions_as_suffix
+from utils import get_logger
 
+gpu_operator_nvcr_auth_url = 'https://nvcr.io/proxy_auth?scope=repository:nvidia/gpu-operator:pull'
+gpu_operator_nvcr_tags_url = 'https://nvcr.io/v2/nvidia/gpu-operator/tags/list'
+
+gpu_operator_ghcr_auth_url = 'https://ghcr.io/token?scope=repository:nvidia/gpu-operator:pull'
+gpu_operator_ghcr_latest_url = 'https://ghcr.io/v2/nvidia/gpu-operator/gpu-operator-bundle/manifests/main-latest'
+
+version_not_found = '1.0.0'
 
 def get_operator_versions() -> dict:
     logger = get_logger()
     logger.info('Calling NVCR authentication API')
-    auth_req = requests.get('https://nvcr.io/proxy_auth?scope=repository:nvidia/gpu-operator:pull', allow_redirects=True,
-                            headers={'Content-Type': 'application/json'})
+    auth_req = requests.get(gpu_operator_nvcr_auth_url, allow_redirects=True, headers={'Content-Type': 'application/json'})
     auth_req.raise_for_status()
     token = auth_req.json()['token']
 
     logger.info('Listing tags of the operator image')
-    req = requests.get('https://nvcr.io/v2/nvidia/gpu-operator/tags/list', headers={
-        'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'})
+    req = requests.get(gpu_operator_nvcr_tags_url, headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'})
     req.raise_for_status()
 
     tags = req.json()['tags']
-    prog = re.compile(r'^v(2\d\.\d+)\.\d+$')
+    prog = re.compile(r'^v(?P<minor>2\d\.\d+)\.(?P<patch>\d+)$')
+
     versions = {}
     for t in tags:
         match = prog.match(t)
-        if match:
-            minor = match.group(1)
-            existing = versions.get(minor)
-            if not existing or existing < t:
-                versions[minor] = t
+        if not match:
+            continue
+
+        minor = match.group('minor')
+        patch = match.group('patch')
+        full_version = f'{minor}.{patch}'
+        existing = versions.get(minor, version_not_found)
+        versions[minor] = semver.max_ver(existing, full_version)
+
     return versions
 
 def get_sha() -> str:
@@ -40,19 +51,18 @@ def get_sha() -> str:
         logger.info('GH_AUTH_TOKEN env variable is available, using it for authentication')
     else:
         logger.info('GH_AUTH_TOKEN is not available, calling authentication API')
-        auth_req = requests.get('https://ghcr.io/token?scope=repository:nvidia/gpu-operator:pull', allow_redirects=True,
-                                headers={'Content-Type': 'application/json'})
+        auth_req = requests.get(gpu_operator_ghcr_auth_url, allow_redirects=True, headers={'Content-Type': 'application/json'})
         auth_req.raise_for_status()
         token = auth_req.json()['token']
 
-    req = requests.get('https://ghcr.io/v2/nvidia/gpu-operator/gpu-operator-bundle/manifests/main-latest', headers={
-        'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'})
+    req = requests.get(gpu_operator_ghcr_latest_url, headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'})
     req.raise_for_status()
     return req.json()['config']['digest']
 
 
 def latest_gpu_releases(gpu_versions: dict) -> list:
-    releases = sorted(gpu_versions.keys(), key=float, reverse=True)[:2]
-    releases = get_latest_versions_as_suffix(releases)
+    releases = sorted(gpu_versions.keys(), key=float, reverse=True)
+    if len(gpu_versions) > 2:
+        releases = releases[:2]
     releases.append("master")
     return releases

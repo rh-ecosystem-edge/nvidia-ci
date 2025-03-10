@@ -1,16 +1,21 @@
 import json
 import logging
 from logging import Logger
-
-import semver
-
+from settings import settings
 from typing import Tuple, Any
 
-from settings import settings
+test_command_template = "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}"
+
+logger = logging.getLogger('update_version')
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 
 def update_key(versions_file: str, version_key: str, version_value: Any):
-    logger = get_logger()
     with open(versions_file, "r+") as json_f:
         data = json.load(json_f)
         old_version = data.get(version_key)
@@ -27,13 +32,6 @@ def update_key(versions_file: str, version_key: str, version_value: Any):
 
 
 def get_logger() -> Logger:
-    logger = logging.getLogger('update_version')
-    logger.setLevel(logging.DEBUG)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
     return logger
 
 
@@ -56,44 +54,52 @@ def add_tests_commands(tests_commands: set):
         for command in sorted(tests_commands):
             f.write(command + "\n")
 
-
-def create_tests_commands(diffs: dict, ocp_releases: list, gpu_releases: list) -> set:
-    test_commands = set()
+def create_tests_matrix(diffs: dict, ocp_releases: list, gpu_releases: list) -> set:
+    tests = set()
     if "gpu-main-latest" in diffs:
         for ocp_version in ocp_releases:
-            test_commands.add(f"/test {ocp_version}-stable-nvidia-gpu-operator-e2e-master")
+            tests.add((ocp_version, "master"))
 
     if "ocp" in diffs:
         for ocp_version in diffs["ocp"]:
             for gpu_version in gpu_releases:
-                test_commands.add(f"/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}")
+                tests.add((ocp_version, gpu_version))
 
     if "gpu-operator" in diffs:
         for gpu_version in diffs["gpu-operator"]:
             if gpu_version not in gpu_releases:
+                # TODO: Why do we even care?
+                logger.warning(f'Changed "{gpu_version}" is not in the list of releases')
                 continue
             for ocp_version in ocp_releases:
-                test_commands.add(f"/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}")
-    return test_commands
+                tests.add((ocp_version, gpu_version))
+
+    return tests
+
+
+def create_tests_commands(diffs: dict, ocp_releases: list, gpu_releases: list) -> set:
+    tests_commands = set()
+    tests = create_tests_matrix(diffs, ocp_releases, gpu_releases)
+    for t in tests:
+        gpu_version_suffix = version2suffix(t[1])
+        tests_commands.add(test_command_template.format(ocp_version=t[0], gpu_version=gpu_version_suffix))
+    return tests_commands
 
 
 def calculate_diffs(old_versions: dict, new_versions: dict) -> dict:
     diffs = {}
-
     for key, value in new_versions.items():
-        if key not in old_versions or old_versions[key] != value:
-            diffs[key] = value
+        if isinstance(value, dict):
+            sub_diff = calculate_diffs(old_versions.get(key, {}), value)
+            if sub_diff:
+                diffs[key] = sub_diff
+        else:
+            if key not in old_versions or old_versions[key] != value:
+                logger.info(f'Key "{key}" has changed: {old_versions.get(key)} > {value}')
+                diffs[key] = value
 
     return diffs
 
 
 def version2suffix(v: str):
-    return f'{v.replace(".", "-")}-x'
-
-
-def get_latest_versions_as_suffix(versions: list) -> list:
-    return [version2suffix(v) for v in sorted(versions)[-2:]]
-
-
-def format_gpu_suffix(diffs: dict) -> dict:
-    return {version2suffix(k): v for k, v in diffs.items()}
+    return v if v == 'master' else f'{v.replace(".", "-")}-x'
