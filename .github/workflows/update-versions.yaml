@@ -14,11 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the Repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           ref: ${{ inputs.branch }}
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: 3.13
       - name: Update OCP Version
@@ -36,7 +36,6 @@ jobs:
 
         env:
           GH_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OCP_TAGS_URL: "https://quay.io/api/v1/repository/openshift-release-dev/ocp-release/tag/"
           OCP_IGNORED_VERSIONS: '["4.11","4.13"]'
           VERSION_FILE_PATH: "workflows/versions.json"
           TEST_TO_TRIGGER_FILE_PATH: "workflows/generatble-files/tests_to_trigger.txt"
