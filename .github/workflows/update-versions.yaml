@@ -52,5 +52,9 @@ jobs:
             ```
 
             Updates version of the OCP version
+            
+            ---
+            
+            /cc @empovit @TomerNewman
           delete-branch: true
           assignees: empovit,TomerNewman
