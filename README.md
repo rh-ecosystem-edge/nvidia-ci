@@ -1,6 +1,6 @@
 Ecosystem Edge NVIDIA-CI - Golang Automation CI
 =======
-# NVIDIA-CI
+# CI jobs for testing NVIDIA products on Red Hat platforms
 
 ## Overview
 This repository is an automation/CI framework to test NVIDIA operators, the GPU Operator and Network Operator.
@@ -137,7 +137,7 @@ scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,operator-upgrade" ./tests/nvidiagpu
 ```
 
-Example running the end-to-end test case and creating custom catalogsources for NFD and GPU Operator packagmanifests 
+Example running the end-to-end test case and creating custom catalogsources for NFD and GPU Operator packagmanifests
 when missing from their default catalogsources.
 ```
 $ export KUBECONFIG=/path/to/kubeconfig
