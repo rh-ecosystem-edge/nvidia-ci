@@ -22,7 +22,7 @@ def get_operator_versions() -> dict:
     auth_req.raise_for_status()
     token = auth_req.json()['token']
 
-    logger.info('Listing tags of the operator image')
+    logger.info('Listing tags of the GPU operator image')
     req = requests.get(gpu_operator_nvcr_tags_url, headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'})
     req.raise_for_status()
 
@@ -49,13 +49,14 @@ def get_sha() -> str:
 
     token = os.getenv('GH_AUTH_TOKEN') # In a GitHub workflow, set `GH_AUTH_TOKEN=$(echo ${{ secrets.GITHUB_TOKEN }} | base64)`
     if token:
-        logger.info('GH_AUTH_TOKEN env variable is available, using it for authentication')
+        logger.info('GH_AUTH_TOKEN env variable is available, using it to authenticate against GitHub')
     else:
-        logger.info('GH_AUTH_TOKEN is not available, calling authentication API')
+        logger.info('GH_AUTH_TOKEN is not available, calling GitHub authentication API')
         auth_req = requests.get(gpu_operator_ghcr_auth_url, allow_redirects=True, headers={'Content-Type': 'application/json'})
         auth_req.raise_for_status()
         token = auth_req.json()['token']
 
+    logger.info('Getting digest of the GPU operator OLM bundle')
     req = requests.get(gpu_operator_ghcr_latest_url, headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'})
     req.raise_for_status()
     config = req.json()['config']

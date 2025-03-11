@@ -19,6 +19,7 @@ def fetch_ocp_versions() -> dict:
     page: int = 1
 
     while has_more:
+        logger.info(f'Listing OpenShift images, page: {page}')
         response = requests.get(quay_url_api, params={
             'limit': str(page_size), 'page': page, 'filter_tag_name': tag_filter, 'onlyActiveTags': 'true'})
         response.raise_for_status()

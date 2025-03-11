@@ -80,6 +80,7 @@ def calculate_diffs(old_versions: dict, new_versions: dict) -> dict:
     diffs = {}
     for key, value in new_versions.items():
         if isinstance(value, dict):
+            logger.info(f'Comparing versions under "{key}"')
             sub_diff = calculate_diffs(old_versions.get(key, {}), value)
             if sub_diff:
                 diffs[key] = sub_diff
