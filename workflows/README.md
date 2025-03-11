@@ -2,7 +2,7 @@
 
 ## Fetching OpenShift release versions
 
-Registry URL: https://quay.io/repository/openshift-release-dev/ocp-release?tab=tags
+Registry URL: [https://quay.io/repository/openshift-release-dev/ocp-release?tab=tags](https://quay.io/repository/openshift-release-dev/ocp-release?tab=tags)
 
 The registry is public and doesn't require authentication. However, it must be used with pagination.
 
@@ -47,7 +47,7 @@ output:
 
 ## NVIDIA GPU operator releases
 
-Registry URL: https://catalog.ngc.nvidia.com/orgs/nvidia/containers/gpu-operator/tags
+Registry URL: [https://catalog.ngc.nvidia.com/orgs/nvidia/containers/gpu-operator/tags](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/gpu-operator/tags)
 
 The registry is public, but requires proxy authentication.
 
@@ -86,7 +86,7 @@ output:
 
 ## NVIDIA GPU operator OLM bundle from main branch
 
-Registry URL: https://github.com/NVIDIA/gpu-operator/pkgs/container/gpu-operator%2Fgpu-operator-bundle
+Registry URL: [https://github.com/NVIDIA/gpu-operator/pkgs/container/gpu-operator%2Fgpu-operator-bundle](https://github.com/NVIDIA/gpu-operator/pkgs/container/gpu-operator%2Fgpu-operator-bundle)
 
 The image is public, but ghrc.io requires authentication. When calling the API in the context of a GitHub action, `secret.GITHUB_TOKEN` can be used to authentication
 (see [How to check if a container image exists on GHCR?](https://github.com/orgs/community/discussions/26279) and [Automatic token authentication](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication)).

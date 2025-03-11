@@ -88,7 +88,7 @@ class TestCreateTestsMatrix(unittest.TestCase):
     def test_bundle_changed(self):
         diff = {'gpu-main-latest': 'B'}
         tests = create_tests_matrix(diff, ['4.11', '4.13'], ['21.3', '22.3'])
-        self.assertEqual(tests, {('4.11', 'master'), ('4.13', 'master')})
+        self.assertEqual(tests, {('4.13', 'master')})
 
     def test_gpu_version_changed(self):
         diff = {'gpu-operator': {'25.1': '25.1.1'}}

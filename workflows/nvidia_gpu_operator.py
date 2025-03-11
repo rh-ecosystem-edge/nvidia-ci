@@ -5,7 +5,7 @@ import re
 import requests
 import semver
 
-from utils import get_logger
+from utils import logger
 
 gpu_operator_nvcr_auth_url = 'https://nvcr.io/proxy_auth?scope=repository:nvidia/gpu-operator:pull'
 gpu_operator_nvcr_tags_url = 'https://nvcr.io/v2/nvidia/gpu-operator/tags/list'
@@ -16,7 +16,7 @@ gpu_operator_ghcr_latest_url = 'https://ghcr.io/v2/nvidia/gpu-operator/gpu-opera
 version_not_found = '1.0.0'
 
 def get_operator_versions() -> dict:
-    logger = get_logger()
+
     logger.info('Calling NVCR authentication API')
     auth_req = requests.get(gpu_operator_nvcr_auth_url, allow_redirects=True, headers={'Content-Type': 'application/json'})
     auth_req.raise_for_status()
@@ -27,6 +27,8 @@ def get_operator_versions() -> dict:
     req.raise_for_status()
 
     tags = req.json()['tags']
+    logger.debug(f'Received GPU operator image tags: {tags}')
+
     prog = re.compile(r'^v(?P<minor>2\d\.\d+)\.(?P<patch>\d+)$')
 
     versions = {}
@@ -45,7 +47,6 @@ def get_operator_versions() -> dict:
 
 def get_sha() -> str:
 
-    logger = get_logger()
     token = os.getenv('GH_AUTH_TOKEN') # In a GitHub workflow, set `GH_AUTH_TOKEN=$(echo ${{ secrets.GITHUB_TOKEN }} | base64)`
     if token:
         logger.info('GH_AUTH_TOKEN env variable is available, using it for authentication')
@@ -57,12 +58,6 @@ def get_sha() -> str:
 
     req = requests.get(gpu_operator_ghcr_latest_url, headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'})
     req.raise_for_status()
-    return req.json()['config']['digest']
-
-
-def latest_gpu_releases(gpu_versions: dict) -> list:
-    releases = sorted(gpu_versions.keys(), key=float, reverse=True)
-    if len(gpu_versions) > 2:
-        releases = releases[:2]
-    releases.append("master")
-    return releases
+    config = req.json()['config']
+    logger.debug(f'Received GPU operator bundle config: {config}')
+    return config['digest']

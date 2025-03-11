@@ -1,15 +1,13 @@
 import json
 import logging
-from logging import Logger
-from settings import settings
-from typing import Tuple, Any
+from typing import Any
 
 test_command_template = "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}"
 
 logger = logging.getLogger('update_version')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
@@ -31,45 +29,37 @@ def update_key(versions_file: str, version_key: str, version_value: Any):
         json_f.truncate()
 
 
-def get_logger() -> Logger:
-    return logger
+def get_latest_versions(versions: list, count: int) -> list:
+    sorted_versions = sorted(versions, key=lambda v: tuple(map(int, v.split('.'))))
+    return sorted_versions[-count:] if len(sorted_versions) > count else sorted_versions
 
 
-def get_two_highest_gpu_versions(gpu_versions: dict) -> list:
-    sorted_versions = sorted(gpu_versions.keys(), key=lambda v: tuple(map(int, v.split('.'))), reverse=True)
-    return sorted_versions[:2]
-
-
-def get_latest_versions_to_test(data: dict) -> Tuple[list[str], list[str]]:
-    all_ocp_versions = data.get("ocp", {})
-
-    all_gpu_operator_versions = data.get("gpu-operator", {})
-    latest_gpu_versions = get_two_highest_gpu_versions(all_gpu_operator_versions)
-    latest_gpu_versions.append("master")
-    return latest_gpu_versions, list(all_ocp_versions.keys())  # returning list of latest ocp + gpu versions
-
-
-def add_tests_commands(tests_commands: set):
-    with open(settings.tests_to_trigger_file_path, "w+") as f:
+def save_tests_commands(tests_commands: set, file_path: str):
+    with open(file_path, "w+") as f:
         for command in sorted(tests_commands):
             f.write(command + "\n")
+
 
 def create_tests_matrix(diffs: dict, ocp_releases: list, gpu_releases: list) -> set:
     tests = set()
     if "gpu-main-latest" in diffs:
-        for ocp_version in ocp_releases:
+        latest_ocp = get_latest_versions(ocp_releases, 1)
+        for ocp_version in latest_ocp:
             tests.add((ocp_version, "master"))
 
     if "ocp" in diffs:
         for ocp_version in diffs["ocp"]:
+            if ocp_version not in ocp_releases:
+                logger.warning(f'OpenShift version "{ocp_version}" is not in the list of releases: {ocp_releases}. '
+                               f'This should not normally happen. Check if there was an update to an old version.')
             for gpu_version in gpu_releases:
                 tests.add((ocp_version, gpu_version))
 
     if "gpu-operator" in diffs:
         for gpu_version in diffs["gpu-operator"]:
             if gpu_version not in gpu_releases:
-                # TODO: Why do we even care?
-                logger.warning(f'Changed "{gpu_version}" is not in the list of releases')
+                logger.warning(f'GPU operator version "{gpu_version}" is not in the list of releases: {gpu_releases}. '
+                               f'This should not normally happen. Check if there was an update to an old version.')
                 continue
             for ocp_version in ocp_releases:
                 tests.add((ocp_version, gpu_version))
