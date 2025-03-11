@@ -11,6 +11,7 @@ on:
         type: string
 jobs:
   ocp-version:
+    if: (github.event_name == 'schedule' && github.repository == 'rh-ecosystem-edge/nvidia-ci') || (github.event_name != 'schedule')
     runs-on: ubuntu-latest
     steps:
       - name: Check out the Repo
