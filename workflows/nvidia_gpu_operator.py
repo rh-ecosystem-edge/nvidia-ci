@@ -5,7 +5,9 @@ import re
 import requests
 import semver
 
-from utils import logger
+from utils import get_logger
+
+logger = get_logger(__name__)
 
 gpu_operator_nvcr_auth_url = 'https://nvcr.io/proxy_auth?scope=repository:nvidia/gpu-operator:pull'
 gpu_operator_nvcr_tags_url = 'https://nvcr.io/v2/nvidia/gpu-operator/tags/list'

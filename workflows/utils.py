@@ -1,17 +1,22 @@
 import json
 import logging
+from logging import Logger
 from typing import Any
 
 test_command_template = "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}"
 
-logger = logging.getLogger('update_version')
-logger.setLevel(logging.INFO)
-ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
 
+def get_logger(name: str) -> Logger:
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    return logger
+
+logger = get_logger(__name__)
 
 def update_key(versions_file: str, version_key: str, version_value: Any):
     with open(versions_file, "r+") as json_f:

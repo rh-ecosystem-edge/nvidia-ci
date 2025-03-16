@@ -6,7 +6,9 @@ import semver
 
 from settings import settings
 from typing import Pattern, AnyStr
-from utils import logger
+from utils import get_logger
+
+logger = get_logger(__name__)
 
 quay_url_api = 'https://quay.io/api/v1/repository/openshift-release-dev/ocp-release/tag/'
 
