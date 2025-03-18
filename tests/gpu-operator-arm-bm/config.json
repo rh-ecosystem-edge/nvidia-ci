@@ -1,6 +1,0 @@
-{
-    "channel": "stable",
-    "bundle": "quay.io/shivamerla/gpu-operator-bundle-redhat:v1.10.1",
-    "driver_image": "nvcr.io/ea-cnt/red_hat"
-}
-
