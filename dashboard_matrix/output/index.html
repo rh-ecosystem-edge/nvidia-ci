@@ -1,0 +1,288 @@
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #f1f1f1; /* Soft background */
+                margin: 0;
+                padding: 20px;
+                color: #333;
+            }
+            h2 {
+                text-align: center;
+                margin-bottom: 20px;
+                color: #007bff; /* Soft blue */
+                font-size: 28px;
+            }
+            .ocp-version-container {
+                margin-bottom: 40px;
+                padding: 20px;
+                background-color: #ffffff;
+                border-radius: 8px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            }
+            .ocp-version-header {
+                font-size: 26px;
+                margin-bottom: 15px;
+                color: #333;
+                background-color: #f7f9fc; /* Light grey background */
+                padding: 15px;
+                border-radius: 8px;
+                font-weight: bold;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+                background-color: #ffffff;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                border-radius: 8px;
+            }
+            th, td {
+                border: 1px solid #ddd;
+                padding: 12px;
+                text-align: left;
+                font-size: 14px;
+                transition: background-color 0.2s ease;
+            }
+            th {
+                background-color: #007BFF; /* Blue */
+                color: white;
+                cursor: pointer;
+                font-size: 16px;
+                position: relative;
+            }
+            th:hover {
+                background-color: #0056b3; /* Darker blue */
+            }
+            th:after {
+                content: ' ▼'; /* Default sorting direction */
+                position: absolute;
+                right: 10px;
+                font-size: 12px;
+                color: white;
+            }
+            th.asc:after {
+                content: ' ▲';
+            }
+            th.desc:after {
+                content: ' ▼';
+            }
+            td {
+                background-color: #f9f9f9;
+            }
+            td:hover {
+                background-color: #f1f1f1;
+                cursor: pointer;
+            }
+
+            /* History bar styles */
+            .history-bar {
+                display: flex;
+                align-items: center;
+                gap: 20px;
+                margin: 20px 0;
+                padding: 12px 18px;
+                border: 2px solid #007BFF;
+                border-radius: 8px;
+                background-color: #ffffff;
+                color: #333;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                transition: background-color 0.2s ease;
+                flex-wrap: wrap;
+            }
+
+            .history-square {
+                width: 55px;
+                height: 55px;
+                border-radius: 8px;
+                cursor: pointer;
+                transition: transform 0.1s ease;
+                border: 2px solid #ddd;
+                position: relative;
+                overflow: hidden;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            }
+
+            .history-square:hover {
+                transform: scale(1.2);
+                box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+            }
+
+            /* Status coloring */
+            .history-success {
+                background-color: #64dd17; /* Bright green */
+            }
+
+            .history-failure {
+                background-color: #ff3d00; /* Bright red */
+            }
+
+            .history-aborted {
+                background-color: #ffd600; /* Yellow */
+            }
+
+            /* Tooltip on hover */
+            .history-square:hover::after {
+                content: attr(title);  /* Display status and timestamp as tooltip */
+                position: absolute;
+                background-color: #333;
+                color: white;
+                padding: 8px 12px;
+                border-radius: 5px;
+                font-size: 12px;
+                top: 60px;
+                z-index: 10;
+                width: 200px;
+                text-align: center;
+            }
+
+            /* Responsive design for smaller screens */
+            @media screen and (max-width: 768px) {
+                table {
+                    font-size: 14px;
+                }
+                .history-bar {
+                    flex-wrap: wrap;
+                    justify-content: center;
+                }
+                .history-square {
+                    width: 45px;
+                    height: 45px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+
+    <h2>Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift</h2>
+    <script>
+        // Function to sort the table
+        function sortTable(column, tableId) {
+            var table = document.getElementById(tableId);
+            var rows = Array.from(table.rows);
+            var isAscending = table.rows[0].cells[column].classList.contains('asc');
+            rows = rows.slice(1);  // Exclude the header row
+
+            rows.sort(function(rowA, rowB) {
+                var cellA = rowA.cells[column].innerText;
+                var cellB = rowB.cells[column].innerText;
+
+                // Handle numeric and string sorting
+                if (!isNaN(cellA) && !isNaN(cellB)) {
+                    return isAscending ? cellA - cellB : cellB - cellA;
+                } else {
+                    return isAscending
+                        ? cellA.localeCompare(cellB)
+                        : cellB.localeCompare(cellA);
+                }
+            });
+
+            // Rebuild table rows
+            rows.forEach(function(row) {
+                table.appendChild(row);
+            });
+
+            // Toggle the sorting direction
+            var header = table.rows[0].cells[column];
+            header.classList.toggle('asc', !isAscending);
+            header.classList.toggle('desc', isAscending);
+        }
+    </script>
+    
+    <div class="ocp-version-container">
+        <div class="ocp-version-header">OpenShift 4.18</div>
+        <div><strong>Operator Catalog</strong></div>
+        <table id="table-4.18-regular">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0, 'table-4.18-regular')">Full OCP Version</th>
+                    <th onclick="sortTable(1, 'table-4.18-regular')">GPU Version</th>
+                    <th>Prow Job</th>
+                </tr>
+            </thead>
+            <tbody>
+    
+        <tr>
+            <td>4.18.6</td>
+            <td>24.6.2</td>
+            <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/107/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-24-6-x/1903023446166605824" target="_blank">Job Link</a></td>
+        </tr>
+        
+            </tbody>
+        </table>
+    
+        <div><strong>Bundles Associated with this Regular Results</strong></div>
+        <div style="padding-left: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
+        
+            <div class='history-square history-success' 
+                onclick='window.open("https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/108/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1903375956551143424", "_blank")' 
+                title='Status: SUCCESS | Timestamp: 2025-03-22 11:49:03 UTC'>
+            </div>
+            </div>
+        <div><strong>Last Bundle Job Date: </strong>2025-03-22 11:49:03 UTC</div>
+        </div>
+    <div class="ocp-version-container">
+        <div class="ocp-version-header">OpenShift 4.17</div>
+        <div><strong>Operator Catalog</strong></div>
+        <table id="table-4.17-regular">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0, 'table-4.17-regular')">Full OCP Version</th>
+                    <th onclick="sortTable(1, 'table-4.17-regular')">GPU Version</th>
+                    <th>Prow Job</th>
+                </tr>
+            </thead>
+            <tbody>
+    
+        <tr>
+            <td>4.17.22</td>
+            <td>24.6.2</td>
+            <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/107/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-24-6-x/1903023446091108352" target="_blank">Job Link</a></td>
+        </tr>
+        
+        <tr>
+            <td>4.17.22</td>
+            <td>24.9.2</td>
+            <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/107/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-24-9-x/1903023446128857088" target="_blank">Job Link</a></td>
+        </tr>
+        
+            </tbody>
+        </table>
+    </div>
+    <div class="ocp-version-container">
+        <div class="ocp-version-header">OpenShift 4.15</div>
+        <div><strong>Operator Catalog</strong></div>
+        <table id="table-4.15-regular">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0, 'table-4.15-regular')">Full OCP Version</th>
+                    <th onclick="sortTable(1, 'table-4.15-regular')">GPU Version</th>
+                    <th>Prow Job</th>
+                </tr>
+            </thead>
+            <tbody>
+    
+        <tr>
+            <td>4.15.48</td>
+            <td>24.6.2</td>
+            <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/107/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.15-stable-nvidia-gpu-operator-e2e-24-6-x/1903023445998833664" target="_blank">Job Link</a></td>
+        </tr>
+        
+        <tr>
+            <td>4.15.48</td>
+            <td>24.9.2</td>
+            <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/107/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.15-stable-nvidia-gpu-operator-e2e-24-9-x/1903023446040776704" target="_blank">Job Link</a></td>
+        </tr>
+        
+            </tbody>
+        </table>
+    </div>
+    </body>
+    </html>
+    

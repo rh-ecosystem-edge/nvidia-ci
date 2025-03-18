@@ -1,0 +1,149 @@
+name: Generate test matrices pages
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+jobs:
+  generate-matrix:
+    runs-on: ubuntu-latest
+
+    steps:
+      ###################################################################
+      # 1. ENVIRONMENT DEBUG
+      ###################################################################
+      - name: Print environment info
+        run: |
+          echo "==== Debug: Environment Variables ===="
+          env
+          echo "==== Debug: Current Working Directory ===="
+          pwd
+          echo "==== Debug: Directory Contents ===="
+          ls -alh
+
+      ###################################################################
+      # 2. CHECK OUT THE PR BRANCH
+      ###################################################################
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Print environment info after checkout
+        run: |
+          echo "==== Debug: After Checkout ===="
+          pwd
+          ls -alh
+          echo "==== .gitignore check ===="
+          if [ -f .gitignore ]; then cat .gitignore; else echo "No .gitignore found."; fi
+
+      ###################################################################
+      # 3. SET UP PYTHON & INSTALL DEPENDENCIES
+      ###################################################################
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python --version
+          pip --version
+          echo "==== Installing dependencies ===="
+          pip install --upgrade pip
+          pip install -r dashboard_matrix/requirements.txt
+
+      ###################################################################
+      # 4. RUN EXTRACTION SCRIPT (UPDATES dashboard_matrix/ocp_data.json)
+      ###################################################################
+      - name: Run extraction script
+        run: |
+          echo "==== Running generate_test_matrix_data.py with unbuffered mode ===="
+          python -u dashboard_matrix/generate_test_matrix_data.py
+
+      ###################################################################
+      # 5. PRE-SWITCH INSPECTION (DEBUG)
+      ###################################################################
+      - name: Show updated JSON
+        run: |
+          echo "===== ocp_data.json AFTER SCRIPT (on PR branch) ====="
+          cat dashboard_matrix/ocp_data.json || echo "File not found"
+
+      - name: Show git diff
+        run: |
+          echo "==== Debug: git status and diff ===="
+          git status
+          git diff
+          ls -alh dashboard_matrix || true
+          ls -alh dashboard_matrix/ocp_data.json || true
+
+      ###################################################################
+      # 6. COPY THE UPDATED FILE BEFORE SWITCHING BRANCHES
+      ###################################################################
+      - name: Copy updated JSON to a temp location
+        run: |
+          echo "==== Copying ocp_data.json to /tmp/ ===="
+          cp dashboard_matrix/ocp_data.json /tmp/updated_ocp_data.json
+
+      ###################################################################
+      # 7. CHECK OUT MAIN AND PULL LATEST
+      ###################################################################
+      - name: Checkout main
+        run: |
+          echo "==== Switching to main branch ===="
+          git fetch origin main
+          git checkout main
+          git pull origin main
+
+      ###################################################################
+      # 8. COPY UPDATED FILE ONTO MAIN & PUSH
+      ###################################################################
+      - name: Overwrite ocp_data.json on main
+        run: |
+          echo "==== Overwriting ocp_data.json on main ===="
+          cp /tmp/updated_ocp_data.json dashboard_matrix/ocp_data.json
+          ls -alh dashboard_matrix || true
+          cat dashboard_matrix/ocp_data.json || true
+
+      - name: Commit changes to main
+        run: |
+          echo "==== Committing changes to main ===="
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+          git add dashboard_matrix/ocp_data.json
+          git commit -m "Update test matrix data from PR #${{ github.event.pull_request.number }}" || echo "No changes to commit"
+          git push origin main
+
+      ###################################################################
+      # 9. RE-PULL MAIN TO ENSURE LOCAL JSON IS UP TO DATE
+      ###################################################################
+      - name: Pull latest main after push
+        run: |
+          git pull origin main
+          echo "==== Confirming final local ocp_data.json matches main ===="
+          cat dashboard_matrix/ocp_data.json
+
+      ###################################################################
+      # 10. GENERATE HTML (NOW WE HAVE THE UPDATED MAIN)
+      ###################################################################
+      - name: Generate HTML
+        run: |
+          python dashboard_matrix/generate_test_matrix_ui.py
+
+      ###################################################################
+      # 11. DEPLOY
+      ###################################################################
+      - name: Inspect output folder before deploy
+        run: |
+          echo "==== Checking output folder before deploy ===="
+          ls -alh dashboard_matrix/output || true
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: dashboard_matrix/output
+          token: ${{ secrets.GITHUB_TOKEN }}
