@@ -1,6 +1,7 @@
 import json
 import logging
 from logging import Logger
+from semver import Version
 from typing import Any
 
 test_command_template = "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}"
@@ -99,3 +100,10 @@ def calculate_diffs(old_versions: dict, new_versions: dict) -> dict:
 
 def version2suffix(v: str):
     return v if v == 'master' else f'{v.replace(".", "-")}-x'
+
+def max_version(a: str, b: str) -> str:
+    """
+    Parse and compare two semver versions.
+    Return the higher of them.
+    """
+    return str(max(map(Version.parse, (a, b))))

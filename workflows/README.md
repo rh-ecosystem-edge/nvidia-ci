@@ -2,46 +2,20 @@
 
 ## Fetching OpenShift release versions
 
-Registry URL: [https://quay.io/repository/openshift-release-dev/ocp-release?tab=tags](https://quay.io/repository/openshift-release-dev/ocp-release?tab=tags)
-
-The registry is public and doesn't require authentication. However, it must be used with pagination.
-
-Example using [Red Hat Quay API](https://docs.redhat.com/en/documentation/red_hat_quay/latest/html-single/red_hat_quay_api_guide/index):
+Release URL: [https://amd64.ocp.releases.ci.openshift.org/api/v1/releasestreams/accepted](https://amd64.ocp.releases.ci.openshift.org/api/v1/releasestreams/accepted)
 
 ```console
-curl -SsL "https://quay.io/api/v1/repository/openshift-release-dev/ocp-release/tag/?limit=100&page=1&onlyActiveTags=true&filter_tag_name=like:4.1%.%-multi-x86_64" -H "Content-Type: application/json" | jq
+curl -SsL "https://amd64.ocp.releases.ci.openshift.org/api/v1/releasestreams/accepted" -H "Content-Type: application/json" | jq -r '."4-stable"'
 ```
 
 output:
 
 ```json
 {
-  "tags": [
-    {
-      "name": "4.15.47-multi-x86_64",
-      "reversion": false,
-      "start_ts": 1741359805,
-      "manifest_digest": "sha256:12192f1c49ad70603b19f9ce8f886be14fdd4cf275dfdc2c9c867edf7f2f792d",
-      "is_manifest_list": false,
-      "size": 168953417,
-      "last_modified": "Fri, 07 Mar 2025 15:03:25 -0000"
-    },
-    {
-      ...
-    }
-    },
-    {
-      "name": "4.18.3-multi-x86_64",
-      "reversion": false,
-      "start_ts": 1741102000,
-      "manifest_digest": "sha256:cda3ea1ebc84b5586cb45c61ff7c3dc6ac80a734adee9fb0c0a7d170029058da",
-      "is_manifest_list": false,
-      "size": 182092611,
-      "last_modified": "Tue, 04 Mar 2025 15:26:40 -0000"
-    }
-  ],
-  "page": 1,
-  "has_additional": true
+  "4.18.2",
+  "4.18.1",
+  "4.18.0-rc.10",
+  ...
 }
 ```
 
@@ -102,6 +76,12 @@ output:
 
 ```console
 sha256:e8576f598bfa189085921ea6bf6d8335d78cb5302de51bcd117cfac0428e7665
+```
+
+## How to run unit tests
+
+```console
+for f in workflows/*_test.py; do echo "File: $f"; python "$f"; done
 ```
 
 ## Useful links
