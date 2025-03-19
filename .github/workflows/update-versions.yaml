@@ -1,7 +1,7 @@
 name: Check for new versions
 on:
   schedule:
-    - cron: '0 */12 * * *'
+    - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       branch:
@@ -40,10 +40,11 @@ jobs:
           OCP_IGNORED_VERSIONS: '["4.11","4.13"]'
           VERSION_FILE_PATH: "workflows/versions.json"
           TEST_TO_TRIGGER_FILE_PATH: "workflows/generatble-files/tests_to_trigger.txt"
+
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
         with:
-          title: "[Automatic] Update versions"
+          title: "[Automated] Update versions ${{ github.event.created_at }}"
           commit-message: Update versions
           body: |
             :warning: Before approving the PR, run the following tests:
@@ -57,3 +58,4 @@ jobs:
             ${{ vars.VERSION_UPDATE_FLOW_NOTIFY_USERS }}
           delete-branch: true
           assignees: ${{ vars.VERSION_UPDATE_FLOW_ASSIGNEES }}
+          branch: "${{ github.event.created_at }}"
