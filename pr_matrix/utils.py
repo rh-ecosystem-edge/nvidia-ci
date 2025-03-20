@@ -11,6 +11,7 @@ class TestResults:
     gpu_version: str
     status: str
     link: str
+    timestamp: str
 
     def to_dict(self):
         """Convert TestResults object to a dictionary for easy JSON serialization."""
@@ -18,10 +19,11 @@ class TestResults:
             "ocp": self.ocp_version,
             "gpu": self.gpu_version,
             "status": self.status,
-            "link": self.link
+            "link": self.link,
+            "timestamp": self.timestamp
         }
 
-def store_ocp_data(original_ocp_version, full_ocp_version, gpu, status, link):
+def store_ocp_data(original_ocp_version, full_ocp_version, gpu, status, link,timestamp):
     """Store OCP test results with both original and full versions."""
     
     logger.info(f"Received OCP versions: Original={original_ocp_version}, Full={full_ocp_version}")
@@ -31,14 +33,14 @@ def store_ocp_data(original_ocp_version, full_ocp_version, gpu, status, link):
         ocp_data[original_ocp_version] = []
 
     # Create a TestResults object and append it to the full_ocp_version key
-    test_result = TestResults(ocp_version=full_ocp_version, gpu_version=gpu, status=status, link=link)
+    test_result = TestResults(ocp_version=full_ocp_version, gpu_version=gpu, status=status, link=link, timestamp=timestamp)
     ocp_data[original_ocp_version].append(test_result.to_dict())
 
     # Log what was stored
     logger.info(f"Stored OCP version: {full_ocp_version} - GPU: {gpu}, Status: {status}, Link: {link}")
 
 
-def save_to_json(file_path='ocp_data.json'):
+def save_to_json(file_path='output/ocp_data.json'):
     """Save the collected data to a JSON file, preserving old data."""
     try:
         # Load existing data if the file exists

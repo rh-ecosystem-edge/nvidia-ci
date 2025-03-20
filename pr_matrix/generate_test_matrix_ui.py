@@ -1,7 +1,7 @@
 import json
 
 # Load the JSON data
-with open("ocp_data.json", "r") as f:
+with open("output/ocp_data.json", "r") as f:
     ocp_data = json.load(f)
 
 # Sort OCP versions in descending order (newest to oldest)
@@ -75,33 +75,26 @@ html_content = """
         }
         .success { background-color: #d4edda; color: #155724; }
         .failure { background-color: #f8d7da; color: #721c24; }
-        .unknown { background-color: #fff3cd; color: #856404; }
+        .aborted { background-color: #fff3cd; color: #856404; }
         .history-bar {
             display: flex;
-            justify-content: space-between;
-            width: 160px;
+            gap: 5px;
+            align-items: center;
         }
         .history-dot {
-            width: 12px;
-            height: 12px;
+            width: 20px;
+            height: 20px;
             border-radius: 50%;
+            cursor: pointer;
         }
-        .history-success { background-color: #28a745; }
-        .history-failure { background-color: #dc3545; }
-        .history-unknown { background-color: #ffc107; }
-        .search-bar {
-            margin-bottom: 20px;
-            padding: 10px;
-            width: 100%;
-            max-width: 300px;
-            margin-left: auto;
-            margin-right: auto;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
+        .history-success {
+            background-color: green;
         }
-        .search-bar:focus {
-            border-color: #007BFF;
+        .history-failure {
+            background-color: red;
+        }
+        .history-aborted {
+            background-color: yellow;
         }
     </style>
     <script>
@@ -143,81 +136,102 @@ html_content = """
                 }
             }
         }
-
-        // Function to filter results based on search
-        function filterTable() {
-            let input = document.getElementById("searchInput");
-            let filter = input.value.toLowerCase();
-            let tables = document.getElementsByTagName("table");
-
-            for (let table of tables) {
-                let rows = table.getElementsByTagName("tr");
-                for (let i = 1; i < rows.length; i++) {
-                    let cells = rows[i].getElementsByTagName("td");
-                    let match = false;
-                    for (let cell of cells) {
-                        if (cell.innerHTML.toLowerCase().includes(filter)) {
-                            match = true;
-                            break;
-                        }
-                    }
-                    rows[i].style.display = match ? "" : "none";
-                }
-            }
-        }
     </script>
 </head>
 <body>
 
-    <h2>OCP Test Results Matrix</h2>
-    <input type="text" id="searchInput" class="search-bar" onkeyup="filterTable()" placeholder="Search for results...">
+<h2>OCP Test Results Matrix</h2>
 
 """
 
 # Generate matrix for each OCP version
 for ocp_version in sorted_ocp_versions:
     results = ocp_data[ocp_version]
+    
+    # Separate bundle and regular results
+    bundle_results = [
+        result for result in results 
+        if "bundle" in result["gpu"].lower() or "master" in result["gpu"].lower()
+    ]
+
+    # Regular results will be everything that is not in bundle_results
+    regular_results = [
+        result for result in results 
+        if "bundle" not in result["gpu"].lower() and "master" not in result["gpu"].lower()
+    ]
+
+    # Regular Results Table
     html_content += f"""
     <div class="ocp-version-container">
-        <div class="ocp-version-header">OCP Version {ocp_version}</div>
-        <table id="table-{ocp_version}">
+        <div class="ocp-version-header">OCP Version {ocp_version} (Regular)</div>
+        <table id="table-{ocp_version}-regular">
             <thead>
                 <tr>
-                    <th onclick="sortTable(0, 'table-{ocp_version}')">Full OCP Version</th>
-                    <th onclick="sortTable(1, 'table-{ocp_version}')">GPU Version</th>
-                    <th onclick="sortTable(2, 'table-{ocp_version}')">Status</th>
+                    <th onclick="sortTable(0, 'table-{ocp_version}-regular')">Full OCP Version</th>
+                    <th onclick="sortTable(1, 'table-{ocp_version}-regular')">GPU Version</th>
+                    <th>Link to Job</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    
+    # Populate rows for regular test results
+    for result in regular_results:
+        full_ocp = result["ocp"]
+        gpu_version = result["gpu"]
+        link = result["link"]
+        
+        html_content += f"""
+        <tr>
+            <td>{full_ocp}</td>
+            <td>{gpu_version}</td>
+            <td><a href="{link}" target="_blank">Job Link</a></td>
+        </tr>
+        """
+    
+    html_content += """
+            </tbody>
+        </table>
+    </div>
+    """
+
+    # Bundle Results Table
+    html_content += f"""
+    <div class="ocp-version-container">
+        <div class="ocp-version-header">OCP Version {ocp_version} (Bundle)</div>
+        <table id="table-{ocp_version}-bundle">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0, 'table-{ocp_version}-bundle')">GPU Version</th>
+                    <th>Last Finished</th>
                     <th>History of the Last 15 Tests</th>
                 </tr>
             </thead>
             <tbody>
     """
     
-    # Populate rows for each test result
-    for result in results:
-        full_ocp = result["ocp"]
+    # Populate rows for bundle test results
+    for result in bundle_results:
         gpu_version = result["gpu"]
-        status = result["status"]
-        link = result["link"]
-        
-        # Determine row color
-        status_class = "success" if status == "SUCCESS" else "failure" if status == "FAILURE" else "unknown"
-        
-        # Create history dots
+        timestamp = result["timestamp"]
+        # Format the timestamp into a readable date (optional)
+        from datetime import datetime
+        formatted_time = datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+
         history = result.get("history", [])
         history_dots = "".join([
-            f"<div class='history-dot { 'history-success' if h == 'SUCCESS' else 'history-failure' if h == 'FAILURE' else 'history-unknown' }'></div>"
+            f"<div class='history-dot { 'history-success' if h == 'SUCCESS' else 'history-failure' if h == 'FAILURE' else 'history-aborted' }' onclick='window.open(\"{result['link']}\", \"_blank\")'></div>"
             for h in history
         ])
         
-        # Add row
         html_content += f"""
         <tr>
-            <td>{full_ocp}</td>
             <td>{gpu_version}</td>
-            <td><button class="status-btn {status_class}" onclick="window.open('{link}', '_blank')">{status}</button></td>
+            <td>{formatted_time}</td>
             <td><div class='history-bar'>{history_dots}</div></td>
         </tr>
         """
+
     
     html_content += """
             </tbody>
@@ -232,7 +246,7 @@ html_content += """
 """
 
 # Save the HTML file
-with open("v5_report.html", "w") as f:
+with open("output/index.html", "w") as f:
     f.write(html_content)
 
-print("Matrix report generated: ocp_report_matrix.html")
+print("Matrix report generated: output/index.html")

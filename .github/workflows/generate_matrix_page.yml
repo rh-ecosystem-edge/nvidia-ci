@@ -32,12 +32,12 @@ jobs:
       # Step 4: Run your extraction code (pr_matrix/pr_matrix.py)
       - name: Extract data
         run: |
-          python pr_matrix/pr_matrix.py
+          python pr_matrix/pr_matrix/generate_test_matrix_data.py
 
       # Step 5: Run your HTML generation code (pr_matrix/v7_ui.py)
       - name: Generate HTML page
         run: |
-          python pr_matrix/v7_ui.py
+          python pr_matrix/generate_test_matrix_ui.py
 
       # Step 6: Deploy the generated HTML page
       - name: Deploy 🚀

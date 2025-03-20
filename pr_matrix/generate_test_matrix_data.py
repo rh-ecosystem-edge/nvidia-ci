@@ -19,7 +19,7 @@ def generate_history():
     try:
         logger.info("Generating history...")
         r = requests.get(url="https://api.github.com/repos/rh-ecosystem-edge/nvidia-ci/pulls",
-                         params={"state": "closed", "base": "main", "per_page": "100", "page": "1", "head": "rh-ecosystem-edge:create-pull-request/patch"},
+                         params={"state": "closed", "base": "main", "per_page": "100", "page": "1"}, #"head": "rh-ecosystem-edge:create-pull-request/patch"},
                          headers={"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
         r.raise_for_status()
         for pr in r.json():
@@ -74,7 +74,7 @@ def get_job_results(pr_id, prefix, ocp_version, gpu_version_suffix):
         r.raise_for_status()
         latest_build = fetch_file_content(r.json()["items"][0]["name"])
         logger.info(f"Job: {prefix}, latest build: {latest_build}")
-        status = get_status(prefix, latest_build)
+        status,timestamp = get_status(prefix, latest_build)
         # TODO: We can't get the exact versions if not success.
         # Probably we should include only successful results in the matrix, may have a separate section for warnings.
         url = get_job_url(pr_id, ocp_version, gpu_version_suffix, latest_build)
@@ -83,10 +83,10 @@ def get_job_results(pr_id, prefix, ocp_version, gpu_version_suffix):
             # exact_versions == (ocp_version, gpu_version)
             exact_versions = get_versions(prefix, latest_build, gpu_version_suffix)
             logger.info(f"Job {prefix} succeeded, exact versions: {exact_versions}")
-            store_ocp_data(ocp_version,exact_versions[0], exact_versions[1], status, url)
+            store_ocp_data(ocp_version,exact_versions[0], exact_versions[1], status, url,timestamp)
         else:
             logger.info(f"Job {prefix} didn't succeed with status {status}")
-            store_ocp_data(ocp_version, ocp_version, gpu_suffix_to_version(gpu_version_suffix), status, url)
+            store_ocp_data(ocp_version, ocp_version, gpu_suffix_to_version(gpu_version_suffix), status, url, timestamp)
         
     except requests.exceptions.RequestException as e:
         raise_error(f"Request failed in get_job_results: {e}")
@@ -138,7 +138,10 @@ def get_status(prefix, latest_build_id):
         r = requests.get(url=f"https://storage.googleapis.com/storage/v1/b/test-platform-results/o/{urllib.parse.quote_plus(finished_file)}",
                          params={"alt": "media"})
         r.raise_for_status()
-        return r.json()['result']
+        data = r.json()
+        status = data.get('result', 'UNKNOWN')
+        timestamp = data.get('timestamp', None)  # Extract timestamp if available
+        return status, timestamp
     except requests.exceptions.RequestException as e:
         raise_error(f"Request failed in get_status: {e}")
     except KeyError as e:
