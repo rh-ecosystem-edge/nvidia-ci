@@ -32,7 +32,7 @@ jobs:
       # Step 4: Run your extraction code (pr_matrix/pr_matrix.py)
       - name: Extract data
         run: |
-          python pr_matrix/pr_matrix/generate_test_matrix_data.py
+          python pr_matrix/generate_test_matrix_data.py
 
       # Step 5: Commit and push updated JSON to main branch
       - name: Commit and push updated JSON data to main
