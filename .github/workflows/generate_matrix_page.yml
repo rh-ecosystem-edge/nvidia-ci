@@ -34,12 +34,25 @@ jobs:
         run: |
           python pr_matrix/pr_matrix/generate_test_matrix_data.py
 
-      # Step 5: Run your HTML generation code (pr_matrix/v7_ui.py)
+      # Step 5: Commit and push updated JSON to main branch
+      - name: Commit and push updated JSON data to main
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          
+          # Check if there are changes to the JSON file
+          git add pr_matrix/output/data.json
+          git diff-index --quiet HEAD || git commit -m "Update test matrix data"
+          
+          # Push the changes to the main branch
+          git push origin main
+
+      # Step 6: Run your HTML generation code
       - name: Generate HTML page
         run: |
           python pr_matrix/generate_test_matrix_ui.py
 
-      # Step 6: Deploy the generated HTML page
+      # Step 7: Deploy the generated HTML page
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4
         with:

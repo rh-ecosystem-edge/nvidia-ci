@@ -216,7 +216,10 @@ for ocp_version in sorted_ocp_versions:
         timestamp = result["timestamp"]
         # Format the timestamp into a readable date (optional)
         from datetime import datetime
-        formatted_time = datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        from datetime import timezone
+
+        formatted_time = datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
 
         history = result.get("history", [])
         history_dots = "".join([
