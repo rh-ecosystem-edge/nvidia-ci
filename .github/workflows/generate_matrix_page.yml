@@ -41,7 +41,7 @@ jobs:
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
           
           # Check if there are changes to the JSON file
-          git add pr_matrix/output/data.json
+          git add pr_matrix/output/ocp_data.json
           git diff-index --quiet HEAD || git commit -m "Update test matrix data"
           
           # Push the changes to the main branch
