@@ -1,3 +1,4 @@
+import os
 import json
 from dataclasses import dataclass
 from logger import logger
@@ -43,6 +44,12 @@ def store_ocp_data(original_ocp_version, full_ocp_version, gpu, status, link,tim
 def save_to_json(file_path='output/ocp_data.json'):
     """Save the collected data to a JSON file, preserving old data."""
     try:
+        # Ensure the output directory exists
+        output_dir = os.path.dirname(file_path)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            logger.info(f"Created output directory: {output_dir}")
+
         # Load existing data if the file exists
         try:
             with open(file_path, 'r') as f:
@@ -62,13 +69,3 @@ def save_to_json(file_path='output/ocp_data.json'):
         logger.error(f"Error saving data to {file_path}: {e}")
 
 
-# # Example to test the code
-# if __name__ == "__main__":
-#     # Storing some example data
-#     store_ocp_data("4.15.1", "24.6.0", "ABORTED", "https://....../prow/job")
-#     store_ocp_data("4.15.2", "24.6.1", "SUCCESS", "https://....../prow/job")
-#     store_ocp_data("4.16.1", "24.7.0", "ABORTED", "https://....../prow/job")
-#     store_ocp_data("4.16.2", "24.7.1", "SUCCESS", "https://....../prow/job")
-
-#     # Saving the data to a JSON file
-#     save_to_json()
