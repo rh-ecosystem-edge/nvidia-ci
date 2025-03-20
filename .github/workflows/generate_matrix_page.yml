@@ -1,0 +1,47 @@
+name: Generate test matrices pages
+
+# Controls when the action will run.
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 */12 * * *'  # This will run every 12 hours
+  workflow_dispatch:  # This allows you to manually trigger the workflow
+
+jobs:
+  generate-matrix:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Python
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          pip install -r pr_matrix/requirements.txt  # Install any necessary dependencies
+
+      # Step 4: Run your extraction code (pr_matrix/pr_matrix.py)
+      - name: Extract data
+        run: |
+          python pr_matrix/pr_matrix.py
+
+      # Step 5: Run your HTML generation code (pr_matrix/v7_ui.py)
+      - name: Generate HTML page
+        run: |
+          python pr_matrix/v7_ui.py
+
+      # Step 6: Deploy the generated HTML page
+      - name: Deploy 🚀
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages         # The branch the action should deploy to.
+          folder: pr_matrix/output  # The folder the action should deploy.

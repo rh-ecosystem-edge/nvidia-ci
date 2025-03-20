@@ -1,0 +1,97 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCP Test Results</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; padding: 20px; background-color: #f9f9f9; }
+        h2 { text-align: center; color: #333; }
+        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #007BFF; color: white; }
+        .success { background-color: #d4edda; color: #155724; }
+        .failure { background-color: #f8d7da; color: #721c24; }
+        .unknown { background-color: #fff3cd; color: #856404; }
+        a { text-decoration: none; color: #007BFF; font-weight: bold; }
+        a:hover { text-decoration: underline; }
+        a:focus, a:active { outline: none; box-shadow: 0 0 5px rgba(0, 123, 255, 0.5); }
+    </style>
+</head>
+<body>
+    <h2>OCP Test Results</h2>
+    <table>
+        <tr>
+            <th>OCP Version</th>
+            <th>Full OCP Version</th>
+            <th>GPU Version</th>
+            <th>Status</th>
+        </tr>
+
+        <tr class='success'>
+            <td>4.18</td>
+            <td>4.18.5</td>
+            <td>24.9.2(bundle)</td>
+            <td><a href='https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/96/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900799120092696576' target='_blank' rel='noopener noreferrer'>SUCCESS</a></td>
+        </tr>
+        
+        <tr class='success'>
+            <td>4.18</td>
+            <td>4.18.4</td>
+            <td>24.6.2</td>
+            <td><a href='https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-24-6-x/1900165203165712384' target='_blank' rel='noopener noreferrer'>SUCCESS</a></td>
+        </tr>
+        
+        <tr class='failure'>
+            <td>4.18</td>
+            <td>4.18</td>
+            <td>24.9</td>
+            <td><a href='https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-24-9-x/1900165203190878208' target='_blank' rel='noopener noreferrer'>FAILURE</a></td>
+        </tr>
+        
+        <tr class='success'>
+            <td>4.18</td>
+            <td>4.18.4</td>
+            <td>24.9.2(bundle)</td>
+            <td><a href='https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900165203119575040' target='_blank' rel='noopener noreferrer'>SUCCESS</a></td>
+        </tr>
+        
+        <tr class='success'>
+            <td>4.18</td>
+            <td>4.18.4</td>
+            <td>24.9.2(bundle)</td>
+            <td><a href='https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/93/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900095474199695360' target='_blank' rel='noopener noreferrer'>SUCCESS</a></td>
+        </tr>
+        
+        <tr class='success'>
+            <td>4.14</td>
+            <td>4.14.48</td>
+            <td>24.6.2</td>
+            <td><a href='https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-24-6-x/1900165202528178176' target='_blank' rel='noopener noreferrer'>SUCCESS</a></td>
+        </tr>
+        
+        <tr class='success'>
+            <td>4.14</td>
+            <td>4.14.48</td>
+            <td>24.9.2</td>
+            <td><a href='https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-24-9-x/1900165202712727552' target='_blank' rel='noopener noreferrer'>SUCCESS</a></td>
+        </tr>
+        
+        <tr class='success'>
+            <td>4.17</td>
+            <td>4.17.20</td>
+            <td>24.6.2</td>
+            <td><a href='https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-24-6-x/1900165202884694016' target='_blank' rel='noopener noreferrer'>SUCCESS</a></td>
+        </tr>
+        
+        <tr class='success'>
+            <td>4.17</td>
+            <td>4.17.20</td>
+            <td>24.9.2</td>
+            <td><a href='https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-24-9-x/1900165202855333888' target='_blank' rel='noopener noreferrer'>SUCCESS</a></td>
+        </tr>
+        
+    </table>
+</body>
+</html>

@@ -39,10 +39,22 @@ def store_ocp_data(original_ocp_version, full_ocp_version, gpu, status, link):
 
 
 def save_to_json(file_path='ocp_data.json'):
-    """Save the collected data to a JSON file."""
+    """Save the collected data to a JSON file, preserving old data."""
     try:
+        # Load existing data if the file exists
+        try:
+            with open(file_path, 'r') as f:
+                existing_data = json.load(f)
+        except FileNotFoundError:
+            existing_data = {}
+
+        # Update the existing data with the new ocp_data
+        existing_data.update(ocp_data)
+
+        # Save the combined data to the file
         with open(file_path, 'w') as f:
-            json.dump(ocp_data, f, indent=4)
+            json.dump(existing_data, f, indent=4)
+
         logger.info(f"Data successfully saved to {file_path}")
     except Exception as e:
         logger.error(f"Error saving data to {file_path}: {e}")

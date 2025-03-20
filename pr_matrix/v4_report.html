@@ -1,0 +1,135 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCP Test Results</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; padding: 20px; background-color: #f9f9f9; }
+        h2 { text-align: center; color: #333; }
+        .ocp-version-container { margin-bottom: 40px; }
+        .ocp-version-header { font-size: 24px; margin-bottom: 10px; color: #333; }
+        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #007BFF; color: white; }
+        .status-btn { cursor: pointer; padding: 5px 10px; border-radius: 5px; font-weight: bold; }
+        .success { background-color: #d4edda; color: #155724; }
+        .failure { background-color: #f8d7da; color: #721c24; }
+        .unknown { background-color: #fff3cd; color: #856404; }
+        a { text-decoration: none; color: #007BFF; font-weight: bold; }
+        a:hover { text-decoration: underline; }
+        .history-bar { display: flex; justify-content: space-between; width: 160px; }
+        .history-dot { width: 12px; height: 12px; border-radius: 50%; }
+        .history-success { background-color: #28a745; }
+        .history-failure { background-color: #dc3545; }
+        .history-unknown { background-color: #ffc107; }
+    </style>
+</head>
+<body>
+    <h2>OCP Test Results Matrix</h2>
+
+    <div class="ocp-version-container">
+        <div class="ocp-version-header">OCP Version 4.18</div>
+        <table>
+            <tr>
+                <th>Full OCP Version</th>
+                <th>GPU Version</th>
+                <th>Status</th>
+                <th>History of the Last 15 Tests</th>
+            </tr>
+    
+        <tr>
+            <td>4.18.5</td>
+            <td>24.9.2(bundle)</td>
+            <td><button class="status-btn success" onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/96/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900799120092696576', '_blank')">SUCCESS</button></td>
+            <td><div class='history-bar'></div></td>
+        </tr>
+        
+        <tr>
+            <td>4.18.4</td>
+            <td>24.6.2</td>
+            <td><button class="status-btn success" onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-24-6-x/1900165203165712384', '_blank')">SUCCESS</button></td>
+            <td><div class='history-bar'></div></td>
+        </tr>
+        
+        <tr>
+            <td>4.18</td>
+            <td>24.9</td>
+            <td><button class="status-btn failure" onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-24-9-x/1900165203190878208', '_blank')">FAILURE</button></td>
+            <td><div class='history-bar'></div></td>
+        </tr>
+        
+        <tr>
+            <td>4.18.4</td>
+            <td>24.9.2(bundle)</td>
+            <td><button class="status-btn success" onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900165203119575040', '_blank')">SUCCESS</button></td>
+            <td><div class='history-bar'></div></td>
+        </tr>
+        
+        <tr>
+            <td>4.18.4</td>
+            <td>24.9.2(bundle)</td>
+            <td><button class="status-btn success" onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/93/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900095474199695360', '_blank')">SUCCESS</button></td>
+            <td><div class='history-bar'></div></td>
+        </tr>
+        
+        </table>
+    </div>
+    
+    <div class="ocp-version-container">
+        <div class="ocp-version-header">OCP Version 4.14</div>
+        <table>
+            <tr>
+                <th>Full OCP Version</th>
+                <th>GPU Version</th>
+                <th>Status</th>
+                <th>History of the Last 15 Tests</th>
+            </tr>
+    
+        <tr>
+            <td>4.14.48</td>
+            <td>24.6.2</td>
+            <td><button class="status-btn success" onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-24-6-x/1900165202528178176', '_blank')">SUCCESS</button></td>
+            <td><div class='history-bar'></div></td>
+        </tr>
+        
+        <tr>
+            <td>4.14.48</td>
+            <td>24.9.2</td>
+            <td><button class="status-btn success" onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-24-9-x/1900165202712727552', '_blank')">SUCCESS</button></td>
+            <td><div class='history-bar'></div></td>
+        </tr>
+        
+        </table>
+    </div>
+    
+    <div class="ocp-version-container">
+        <div class="ocp-version-header">OCP Version 4.17</div>
+        <table>
+            <tr>
+                <th>Full OCP Version</th>
+                <th>GPU Version</th>
+                <th>Status</th>
+                <th>History of the Last 15 Tests</th>
+            </tr>
+    
+        <tr>
+            <td>4.17.20</td>
+            <td>24.6.2</td>
+            <td><button class="status-btn success" onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-24-6-x/1900165202884694016', '_blank')">SUCCESS</button></td>
+            <td><div class='history-bar'></div></td>
+        </tr>
+        
+        <tr>
+            <td>4.17.20</td>
+            <td>24.9.2</td>
+            <td><button class="status-btn success" onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-24-9-x/1900165202855333888', '_blank')">SUCCESS</button></td>
+            <td><div class='history-bar'></div></td>
+        </tr>
+        
+        </table>
+    </div>
+    
+</body>
+</html>

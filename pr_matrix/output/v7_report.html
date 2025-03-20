@@ -1,0 +1,217 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCP Test Results Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7fc;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #007bff;
+        }
+        .dashboard {
+            margin-bottom: 50px;
+            padding: 20px;
+            background: #ffffff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #007BFF;
+            color: white;
+            cursor: pointer;
+        }
+        th:hover {
+            background-color: #0056b3;
+        }
+        td:hover {
+            background-color: #f1f1f1;
+        }
+        .status-btn {
+            padding: 6px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            border: none;
+            display: inline-block;
+            text-align: center;
+            text-decoration: none;
+        }
+        .success { background-color: #28a745; color: white; }
+        .failure { background-color: #dc3545; color: white; }
+        .aborted { background-color: #ffc107; color: black; }
+        .unknown { background-color: #6c757d; color: white; }
+        .status-btn:hover {
+            opacity: 0.9;
+        }
+        .status-btn:active {
+            transform: scale(0.98);
+        }
+        .filter-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .filter-container input {
+            padding: 8px 12px;
+            margin: 5px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        @media (max-width: 768px) {
+            table, th, td {
+                font-size: 14px;
+            }
+            .status-btn {
+                font-size: 12px;
+                padding: 4px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h2>OCP Test Results Dashboard</h2>
+
+    <!-- Filter Section -->
+    <div class="filter-container">
+        <input type="text" id="searchOcp" placeholder="Search by OCP Version" onkeyup="filterTable()">
+        <input type="text" id="searchGpu" placeholder="Search by GPU Version" onkeyup="filterTable()">
+        <input type="text" id="searchStatus" placeholder="Search by Status" onkeyup="filterTable()">
+    </div>
+
+    <!-- Dashboard 1: Passed Tests -->
+    <div class="dashboard">
+        <h3>✅ Passed Tests</h3>
+        <table id="passedTestsTable">
+            <thead>
+                <tr>
+                    <th>OCP Version</th>
+                    <th>GPU Version</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+
+            <tr onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/96/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900799120092696576', '_blank')">
+                <td>4.18.5</td>
+                <td>24.9.2(bundle)</td>
+                <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/96/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900799120092696576" target="_blank" class='status-btn success'>Test Passed</a></td>
+            </tr>
+            
+            <tr onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-24-6-x/1900165203165712384', '_blank')">
+                <td>4.18.4</td>
+                <td>24.6.2</td>
+                <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-24-6-x/1900165203165712384" target="_blank" class='status-btn success'>Test Passed</a></td>
+            </tr>
+            
+            <tr onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900165203119575040', '_blank')">
+                <td>4.18.4</td>
+                <td>24.9.2(bundle)</td>
+                <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900165203119575040" target="_blank" class='status-btn success'>Test Passed</a></td>
+            </tr>
+            
+            <tr onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/93/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900095474199695360', '_blank')">
+                <td>4.18.4</td>
+                <td>24.9.2(bundle)</td>
+                <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/93/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/1900095474199695360" target="_blank" class='status-btn success'>Test Passed</a></td>
+            </tr>
+            
+            <tr onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-24-6-x/1900165202884694016', '_blank')">
+                <td>4.17.20</td>
+                <td>24.6.2</td>
+                <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-24-6-x/1900165202884694016" target="_blank" class='status-btn success'>Test Passed</a></td>
+            </tr>
+            
+            <tr onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-24-9-x/1900165202855333888', '_blank')">
+                <td>4.17.20</td>
+                <td>24.9.2</td>
+                <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-24-9-x/1900165202855333888" target="_blank" class='status-btn success'>Test Passed</a></td>
+            </tr>
+            
+            <tr onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-24-6-x/1900165202528178176', '_blank')">
+                <td>4.14.48</td>
+                <td>24.6.2</td>
+                <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-24-6-x/1900165202528178176" target="_blank" class='status-btn success'>Test Passed</a></td>
+            </tr>
+            
+            <tr onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-24-9-x/1900165202712727552', '_blank')">
+                <td>4.14.48</td>
+                <td>24.9.2</td>
+                <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-24-9-x/1900165202712727552" target="_blank" class='status-btn success'>Test Passed</a></td>
+            </tr>
+            
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Dashboard 2: Failed & Aborted Tests -->
+    <div class="dashboard">
+        <h3>❌ Failed & Aborted Tests</h3>
+        <table id="failedTestsTable">
+            <thead>
+                <tr>
+                    <th>OCP Version</th>
+                    <th>GPU Version</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+
+            <tr onclick="window.open('https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-24-9-x/1900165203190878208', '_blank')">
+                <td>4.18</td>
+                <td>24.9</td>
+                <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/95/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-24-9-x/1900165203190878208" target="_blank" class='status-btn failure'>FAILURE</a></td>
+            </tr>
+            
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Filter function to search by OCP, GPU, or Status
+        function filterTable() {
+            const searchOcp = document.getElementById("searchOcp").value.toLowerCase();
+            const searchGpu = document.getElementById("searchGpu").value.toLowerCase();
+            const searchStatus = document.getElementById("searchStatus").value.toLowerCase();
+            
+            const tables = [document.getElementById("passedTestsTable"), document.getElementById("failedTestsTable")];
+            tables.forEach(table => {
+                const rows = table.getElementsByTagName("tr");
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    const ocp = row.getElementsByTagName("td")[0].textContent.toLowerCase();
+                    const gpu = row.getElementsByTagName("td")[1].textContent.toLowerCase();
+                    const status = row.getElementsByTagName("td")[2].textContent.toLowerCase();
+                    if (
+                        ocp.includes(searchOcp) &&
+                        gpu.includes(searchGpu) &&
+                        status.includes(searchStatus)
+                    ) {
+                        row.style.display = "";
+                    } else {
+                        row.style.display = "none";
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
