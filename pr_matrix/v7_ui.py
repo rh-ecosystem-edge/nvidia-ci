@@ -202,6 +202,7 @@ html_content += """
 </html>
 """
 
+os.makedirs("output", exist_ok=True)
 # Save the HTML file
 with open("output/v7_report.html", "w") as f:
     f.write(html_content)
