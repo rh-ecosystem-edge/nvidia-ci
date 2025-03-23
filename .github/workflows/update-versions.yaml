@@ -50,8 +50,9 @@ jobs:
             :warning: Before approving the PR, run the following tests:
 
             ```
-            /ok-to-test
             ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
+            /ok-to-test
+            /approve
             ```
 
             Update the NVIDIA GPU operator on OpenShift test matrix

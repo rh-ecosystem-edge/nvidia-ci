@@ -36,9 +36,15 @@ def update_key(versions_file: str, version_key: str, version_value: Any):
 
 
 def get_latest_versions(versions: list, count: int) -> list:
-    sorted_versions = sorted(versions, key=lambda v: tuple(map(int, v.split('.'))))
+    sorted_versions = get_sorted_versions(versions)
     return sorted_versions[-count:] if len(sorted_versions) > count else sorted_versions
 
+def get_earliest_versions(versions: list, count: int) -> list:
+    sorted_versions = get_sorted_versions(versions)
+    return sorted_versions[:count] if len(sorted_versions) > count else sorted_versions
+
+def get_sorted_versions(versions: list) -> list:
+    return sorted(versions, key=lambda v: tuple(map(int, v.split('.'))))
 
 def save_tests_commands(tests_commands: set, file_path: str):
     with open(file_path, "w+") as f:
@@ -51,6 +57,9 @@ def create_tests_matrix(diffs: dict, ocp_releases: list, gpu_releases: list) -> 
     if "gpu-main-latest" in diffs:
         latest_ocp = get_latest_versions(ocp_releases, 1)
         for ocp_version in latest_ocp:
+            tests.add((ocp_version, "master"))
+        earliest_ocp = get_earliest_versions(ocp_releases, 1)
+        for ocp_version in earliest_ocp:
             tests.add((ocp_version, "master"))
 
     if "ocp" in diffs:
