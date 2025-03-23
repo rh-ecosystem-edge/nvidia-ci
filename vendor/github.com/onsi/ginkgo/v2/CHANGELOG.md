@@ -1,3 +1,125 @@
+## 2.22.2
+
+### Maintenance
+- Bump github.com/onsi/gomega from 1.36.1 to 1.36.2 (#1499) [cc553ce]
+- Bump golang.org/x/crypto (#1498) [2170370]
+- Bump golang.org/x/net from 0.32.0 to 0.33.0 (#1496) [a96c44f]
+
+## 2.22.1
+
+### Fixes
+Fix CSV encoding
+- Update tests [aab3da6]
+- Properly encode CSV rows [c09df39]
+- Add test case for proper csv escaping [96a80fc]
+- Add meta-test [43dad69]
+
+### Maintenance
+- ensure *.test files are gitignored so we don't accidentally commit compiled tests again [c88c634]
+- remove golang.org/x/net/context in favour of stdlib context [4df44bf]
+
+## 2.22.0
+
+### Features
+- Add label to serial nodes [0fcaa08]
+
+This allows serial tests to be filtered using the `label-filter`
+
+### Maintenance
+Various doc fixes
+
+## 2.21.0
+
+
+  ### Features
+  - add support for GINKGO_TIME_FORMAT [a69eb39]
+  - add GINKGO_NO_COLOR to disable colors via environment variables [bcab9c8]
+
+  ### Fixes
+  - increase threshold in timeline matcher [e548367]
+  - Fix the document by replacing `SpecsThatWillBeRun` with `SpecsThatWillRun`
+  [c2c4d3c]
+
+  ### Maintenance
+  - bump various dependencies [7e65a00]
+
+## 2.20.2
+
+Require Go 1.22+
+
+### Maintenance
+- bump go to v1.22 [a671816]
+
+## 2.20.1
+
+### Fixes
+- make BeSpecEvent duration matcher more forgiving [d6f9640]
+
+## 2.20.0
+
+### Features
+- Add buildvcs flag [be5ab95]
+
+### Maintenance
+- Add update-deps to makefile [d303d14]
+- bump all dependencies [7a50221]
+
+## 2.19.1
+
+### Fixes
+- update supported platforms for race conditions [63c8c30]
+- [build] Allow custom name for binaries. [ff41e27]
+
+### Maintenance
+- bump gomega [76f4e0c]
+- Bump rexml from 3.2.6 to 3.2.8 in /docs (#1417) [b69c00d]
+- Bump golang.org/x/sys from 0.20.0 to 0.21.0 (#1425) [f097741]
+
+## 2.19.0
+
+### Features
+
+[Label Sets](https://onsi.github.io/ginkgo/#label-sets) allow for more expressive and flexible label filtering.
+
+## 2.18.0
+
+### Features
+- Add --slience-skips and --force-newlines [f010b65]
+- fail when no tests were run and --fail-on-empty was set [d80eebe]
+
+### Fixes
+- Fix table entry context edge case [42013d6]
+
+### Maintenance
+- Bump golang.org/x/tools from 0.20.0 to 0.21.0 (#1406) [fcf1fd7]
+- Bump github.com/onsi/gomega from 1.33.0 to 1.33.1 (#1399) [8bb14fd]
+- Bump golang.org/x/net from 0.24.0 to 0.25.0 (#1407) [04bfad7]
+
+## 2.17.3
+
+### Fixes
+`ginkgo watch` now ignores hidden files [bde6e00]
+
+## 2.17.2
+
+### Fixes
+- fix: close files [32259c8]
+- fix github output log level for skipped specs [780e7a3]
+
+### Maintenance
+- Bump github.com/google/pprof [d91fe4e]
+- Bump github.com/go-task/slim-sprig to v3 [8cb662e]
+- Bump golang.org/x/net in /integration/_fixtures/version_mismatch_fixture (#1391) [3134422]
+- Bump github-pages from 230 to 231 in /docs (#1384) [eca81b4]
+- Bump golang.org/x/tools from 0.19.0 to 0.20.0 (#1383) [760def8]
+- Bump golang.org/x/net from 0.23.0 to 0.24.0 (#1381) [4ce33f4]
+- Fix test for gomega version bump [f2fcd97]
+- Bump github.com/onsi/gomega from 1.30.0 to 1.33.0 (#1390) [fd622d2]
+- Bump golang.org/x/tools from 0.17.0 to 0.19.0 (#1368) [5474a26]
+- Bump github-pages from 229 to 230 in /docs (#1359) [e6d1170]
+- Bump google.golang.org/protobuf from 1.28.0 to 1.33.0 (#1374) [7f447b2]
+- Bump golang.org/x/net from 0.20.0 to 0.23.0 (#1380) [f15239a]
+
 ## 2.17.1
 
 ### Fixes
@@ -920,7 +1042,7 @@ New Features:
 - `ginkgo -tags=TAG_LIST` passes a list of tags down to the `go build` command.
 - `ginkgo --failFast` aborts the test suite after the first failure.
 - `ginkgo generate file_1 file_2` can take multiple file arguments.
-- Ginkgo now summarizes any spec failures that occurred at the end of the test run. 
+- Ginkgo now summarizes any spec failures that occurred at the end of the test run.
 - `ginkgo --randomizeSuites` will run tests *suites* in random order using the generated/passed-in seed.
 
 Improvements:
@@ -954,7 +1076,7 @@ Bug Fixes:
 Breaking changes:
 
 - `thirdparty/gomocktestreporter` is gone.  Use `GinkgoT()` instead
-- Modified the Reporter interface 
+- Modified the Reporter interface
 - `watch` is now a subcommand, not a flag.
 
 DSL changes:

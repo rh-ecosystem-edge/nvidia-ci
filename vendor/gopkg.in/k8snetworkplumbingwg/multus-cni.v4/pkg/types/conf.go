@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/skel"
@@ -29,6 +30,7 @@ import (
 	"github.com/containernetworking/cni/pkg/version"
 	nadutils "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/utils"
 	"gopkg.in/k8snetworkplumbingwg/multus-cni.v4/pkg/logging"
+	utilwait "k8s.io/apimachinery/pkg/util/wait"
 )
 
 const (
@@ -39,9 +41,6 @@ const (
 	defaultMultusNamespace        = "kube-system"
 	defaultNonIsolatedNamespace   = "default"
 )
-
-// ChrootMutex provides lock to access host filesystem
-var ChrootMutex *sync.Mutex
 
 // LoadDelegateNetConfList reads DelegateNetConf from bytes
 func LoadDelegateNetConfList(bytes []byte, delegateConf *DelegateNetConf) error {
@@ -608,4 +607,38 @@ func CheckSystemNamespaces(namespace string, systemNamespaces []string) bool {
 		}
 	}
 	return false
+}
+
+// GetReadinessIndicatorFile waits for readinessIndicatorFile
+func GetReadinessIndicatorFile(readinessIndicatorFileRaw string) error {
+	cleanpath := filepath.Clean(readinessIndicatorFileRaw)
+	readinessIndicatorFile, err := filepath.Abs(cleanpath)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path of readinessIndicatorFile: %v", err)
+	}
+
+	pollDuration := 1000 * time.Millisecond
+	pollTimeout := 45 * time.Second
+	return utilwait.PollImmediate(pollDuration, pollTimeout, func() (bool, error) {
+		_, err := os.Stat(readinessIndicatorFile)
+		return err == nil, nil
+	})
+}
+
+// ReadinessIndicatorExistsNow reports if the readiness indicator exists immediately.
+func ReadinessIndicatorExistsNow(readinessIndicatorFileRaw string) (bool, error) {
+	cleanpath := filepath.Clean(readinessIndicatorFileRaw)
+	readinessIndicatorFile, err := filepath.Abs(cleanpath)
+	if err != nil {
+		return false, fmt.Errorf("failed to get absolute path of readinessIndicatorFile: %v", err)
+	}
+
+	_, err = os.Stat(readinessIndicatorFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }

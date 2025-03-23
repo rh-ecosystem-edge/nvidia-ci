@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/v1"
+	"strings"
+	"time"
+
+	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
 	nvidiagpuv1alpha1 "github.com/NVIDIA/k8s-operator-libs/api/upgrade/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/networkparams"
@@ -15,8 +18,6 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfdcheck"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
-	"strings"
-	"time"
 
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"

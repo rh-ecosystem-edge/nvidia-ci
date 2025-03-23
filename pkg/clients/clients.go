@@ -31,8 +31,8 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	coreV1Client "k8s.io/client-go/kubernetes/typed/core/v1"
 
-	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/v1"
-	nvidiagpuv1alpha1 "github.com/NVIDIA/gpu-operator/api/v1alpha1"
+	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
+	nvidiagpuv1alpha1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1alpha1"
 
 	nvidianetworkv1alpha1 "github.com/Mellanox/network-operator/api/v1alpha1"
 

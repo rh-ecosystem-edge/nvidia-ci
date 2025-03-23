@@ -1,5 +1,5 @@
 FROM quay.io/openshift/origin-cli:4.20 as oc-cli
-FROM registry.access.redhat.com/ubi9/go-toolset:1.21
+FROM registry.access.redhat.com/ubi9/go-toolset:1.22.9
 
 LABEL org.opencontainers.image.authors="Red Hat Ecosystem Engineering"
 

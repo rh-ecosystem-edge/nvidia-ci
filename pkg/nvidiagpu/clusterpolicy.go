@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/v1"
+	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/msg"
