@@ -1,31 +1,39 @@
 package nvidianetwork
 
 import (
+	"context"
 	"encoding/json"
+
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidianetworkconfig"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfdcheck"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nodes"
+	k8sWait "k8s.io/apimachinery/pkg/util/wait"
+
+	"os"
+	"time"
 
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
-	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
-	"os"
-	"time"
-
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/deploy"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
+	nnoworker "github.com/rh-ecosystem-edge/nvidia-ci/internal/nno-worker"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/pod"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/networkparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidianetwork"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -62,18 +70,22 @@ const (
 	nvidiaNetworkLabel                      = "feature.node.kubernetes.io/pci-15b3.present"
 	networkOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/network-operator/staging/network-operator-bundle:main-latest"
 
-	nnoNamespace              = "nvidia-network-operator"
-	nnoOperatorGroupName      = "nno-og"
-	nnoDeployment             = "nvidia-network-operator-controller-manager"
-	nnoSubscriptionName       = "nno-subscription"
-	nnoSubscriptionNamespace  = "nvidia-network-operator"
-	nnoCatalogSourceDefault   = "certified-operators"
-	nnoCatalogSourceNamespace = nfd.CatalogSourceNamespace
-	nnoPackage                = "nvidia-network-operator"
-	nnoNicClusterPolicyName   = "nic-cluster-policy"
-
+	nnoNamespace                        = "nvidia-network-operator"
+	nnoOperatorGroupName                = "nno-og"
+	nnoDeployment                       = "nvidia-network-operator-controller-manager"
+	nnoSubscriptionName                 = "nno-subscription"
+	nnoSubscriptionNamespace            = "nvidia-network-operator"
+	nnoCatalogSourceDefault             = "certified-operators"
+	nnoCatalogSourceNamespace           = nfd.CatalogSourceNamespace
+	nnoPackage                          = "nvidia-network-operator"
+	nnoNicClusterPolicyName             = "nic-cluster-policy"
+	TestNamespace                       = "default"
 	nnoCustomCatalogSourcePublisherName = "Red Hat"
 	nnoCustomCatalogSourceDisplayName   = "Certified Operators Custom"
+	PollInterval                        = 10 * time.Second
+	Timeout                             = 10 * time.Minute
+	Worker1Name                         = "Workload1"
+	Worker2Name                         = "Workload2"
 )
 
 var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
@@ -627,6 +639,102 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					"json:  %v", err)
 			}
 		})
+		It("Check Network Operator pod's state", Label("nno"), func() {
 
+			err := k8sWait.PollUntilContextTimeout(context.TODO(), PollInterval, Timeout, true, func(ctx context.Context) (bool, error) {
+				pods, err := pod.List(inittools.APIClient, nnoNamespace, v1.ListOptions{})
+				if err != nil {
+					return false, nil
+				}
+
+				if len(pods) == 0 {
+					return false, nil
+				}
+
+				for _, pod := range pods {
+					if pod.Object.Status.Phase != corev1.PodRunning {
+						glog.Errorf("pod:%s is in %v state", pod.Object.Name, pod.Object.Status.Phase)
+						return false, nil
+					}
+				}
+				return true, nil
+			})
+
+			Expect(err).NotTo(HaveOccurred(), "nno driver pods not ready")
+
+		})
+
+		It("Check if OFED drivers are installed successfully", Label("nno"), func() {
+
+			allnodes, err := nodes.List(inittools.APIClient)
+			for _, node := range allnodes {
+				if _, isWorker := node.Object.Labels["node-role.kubernetes.io/worker"]; isWorker {
+					checkPod := &corev1.Pod{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "ofed-check",
+							Namespace: TestNamespace,
+						},
+						Spec: corev1.PodSpec{
+							NodeSelector: map[string]string{
+								"kubernetes.io/hostname": node.Object.Name,
+							},
+							Containers: []corev1.Container{
+								{
+									Name:    "check",
+									Image:   "registry.access.redhat.com/ubi8/ubi-minimal:latest",
+									Command: []string{"/bin/sh", "-c", "lsmod | grep -E 'mlx5_core|mlx4_core'"},
+								},
+							},
+							RestartPolicy: corev1.RestartPolicyNever,
+						},
+					}
+
+					_, err = inittools.APIClient.Pods(TestNamespace).Create(context.TODO(), checkPod, v1.CreateOptions{})
+					Expect(err).NotTo(HaveOccurred(), "Failed to create OFED check pod")
+
+					err = k8sWait.PollUntilContextTimeout(context.TODO(), PollInterval, Timeout, true, func(ctx context.Context) (bool, error) {
+						pod, err := inittools.APIClient.Pods(TestNamespace).Get(context.TODO(), "ofed-check", v1.GetOptions{})
+						if err != nil {
+							return false, nil
+						}
+						return pod.Status.Phase == corev1.PodSucceeded, nil
+					})
+					Expect(err).NotTo(HaveOccurred(), "OFED driver check pod didn't complete successfully")
+
+				}
+			}
+
+		})
+
+		It("check rdma between workloads", Label("nno"), func() {
+			server, err := nnoworker.CreateDocaWorkerPod(inittools.APIClient, Worker1Name, "hostname", "server", "")
+
+			if err != nil {
+				glog.Errorf("Failed to create server pod: %v", err)
+			}
+			glog.Infof("Server Pod %s created.\n", server.Name)
+
+			// Step 2: Wait for server pod to get IP
+			serverIP, err := nnoworker.GetServerIP(inittools.APIClient)
+			if err != nil {
+				glog.Errorf("Failed to get server pod IP: %v", err)
+			}
+			glog.Infof("Server Pod IP: %s\n", serverIP)
+			client, err := nnoworker.CreateDocaWorkerPod(inittools.APIClient, Worker2Name, "hostname", "client", serverIP)
+			err = k8sWait.PollUntilContextTimeout(context.TODO(), PollInterval, Timeout, true, func(ctx context.Context) (bool, error) {
+				clientsLogs, err := nnoworker.GetPodLogs(inittools.APIClient, client.Name)
+				if err != nil {
+					return false, err
+				}
+				serverLogs, err := nnoworker.GetPodLogs(inittools.APIClient, server.Name)
+				if err != nil {
+					return false, err
+				}
+
+				return nnoworker.ValidateRDMA(serverLogs, clientsLogs), nil
+			})
+			Expect(err).NotTo(HaveOccurred(), "OFED driver check pod didn't complete successfully")
+
+		})
 	})
 })
