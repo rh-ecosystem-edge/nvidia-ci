@@ -32,15 +32,10 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
               echo "Processing all PR history for merged pull request."
-              echo "PR_NUMBER=all" >> "$GITHUB_OUTPUT"
+              echo "PR_NUMBER=${{github.event.pull_request.number}}" >> "$GITHUB_OUTPUT"
           else
-              if [ -z "${{ github.event.inputs.pr_number }}" ]; then
-                  echo "Error: The pr_number input is required. Please specify a PR number or 'all'."
-                  exit 1
-              else
               echo "Using manually specified PR: ${{ github.event.inputs.pr_number }}"
               echo "PR_NUMBER=${{ github.event.inputs.pr_number }}" >> "$GITHUB_OUTPUT"
-            fi
           fi
 
       - name: Checkout Code
@@ -56,10 +51,9 @@ jobs:
           sparse-checkout: |
             ${{ env.OCP_FILE }} 
 
-      - name: Rename and move ${{ env.OCP_FILE }} to ${{ env.OLD_OCP_FILE }}
+      - name: Rename and move ${{ env.OCP_FILE }} to ${{ env.OUTPUT_DIR }}/${{ env.OLD_OCP_FILE }}
         run: |
-          echo "Renaming and moving ${GITHUB_WORKSPACE}/baseline/${{ env.OCP_FILE }} to ${GITHUB_WORKSPACE}/${{ env.OLD_OCP_FILE }}"
-          cp ${GITHUB_WORKSPACE}/baseline/${{ env.OCP_FILE }} ${GITHUB_WORKSPACE}/${{ env.OLD_OCP_FILE }}
+          cp ${{ env.OCP_FILE }} ${{ env.OUTPUT_DIR }}/${{ env.OLD_OCP_FILE }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -78,14 +72,8 @@ jobs:
             --output_dir "${{ env.OUTPUT_DIR }}" \
             --old_data_file ${{ env.OLD_OCP_FILE }}
         
-      - name: Archive ${{ env.OLD_OCP_FILE }} 
-        run: |
-          echo "Archiving ${{ env.OLD_OCP_FILE }} into output directory..."
-          cp ${{ env.OLD_OCP_FILE }} ${{ env.OUTPUT_DIR }}/${{ env.OLD_OCP_FILE }}
-
       - name: Generate UI
         run: |
-          echo "Generating UI using output from ${{ env.OUTPUT_DIR }}"
           python workflows/test_matrix_dashboard/generate_test_matrix_ui.py --output_dir "${{ env.OUTPUT_DIR }}"
 
       - name: Deploy HTML to GitHub Pages
