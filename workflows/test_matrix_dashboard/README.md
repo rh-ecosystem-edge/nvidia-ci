@@ -172,4 +172,3 @@ The following GitHub Actions workflow automates the process of updating test dat
 10. **Deploy HTML to GitHub Pages:**  
     - *Purpose:* Publishes the generated HTML and updated data to GitHub Pages.  
     - *Details:* Uses the [JamesIves/github-pages-deploy-action](https://github.com/JamesIves/github-pages-deploy-action) to deploy the contents of the output directory to the `gh-pages` branch.
-
