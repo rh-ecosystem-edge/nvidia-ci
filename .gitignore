@@ -1,5 +1,5 @@
 /workflows/generated-files/
-/workflows/__pycache__/
-/workflows/dashboard_matrix/venv/
+__pycache__/
+venv/
 __pycache__/
 *.pyc
