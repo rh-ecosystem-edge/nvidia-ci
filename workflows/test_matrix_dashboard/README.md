@@ -19,11 +19,7 @@ ignore this comment
    - Reads `ocp_data.json` and **generates** an HTML dashboard summarizing pass/fail statuses across OCP versions, GPU Operator versions, etc.  
    - Outputs an **`index.html`** file (by default in `workflows/test_matrix_dashboard/output/index.html`).
 
-4. **`store_data.py`**  
-   - Contains data structures (e.g., `TestResults` dataclass) and helper functions for storing results in memory (`store_ocp_data()`) and saving them to JSON (`save_to_json()`).  
-   - Used by `generate_test_matrix_data.py` to aggregate and persist new test findings.
-
-5. **`requirements.txt`**  
+4. **`requirements.txt`**  
    - Lists Python dependencies required by the above scripts (e.g., `requests`).  
 
    - Install them with:
@@ -31,11 +27,6 @@ ignore this comment
      pip install -r requirements.txt
      ```
 
-6. **`output/`**  
-   - Receives the generated HTML (`index.html`) so it can be deployed (e.g., to GitHub Pages).  
-   - Receives the generated JSON file (`ocp_data.json`).
-
----
 
 ## How to Use Locally
 
