@@ -4,8 +4,10 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from helpers.config import CURRENT_OCP_DATA_FILE
-from helpers.logger import logger
+
+from generate_test_matrix_data import CURRENT_OCP_DATA_FILE
+from logger import logger
+
 
 
 def generate_html_header() -> str:
