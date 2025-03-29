@@ -331,7 +331,7 @@ github.com/pkg/errors
 ## explicit; go 1.22.0
 github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring
 github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1
-# github.com/regclient/regclient v0.7.0
+# github.com/regclient/regclient v0.7.1
 ## explicit; go 1.20
 github.com/regclient/regclient/types/errs
 github.com/regclient/regclient/types/ref
