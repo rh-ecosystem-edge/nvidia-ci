@@ -1,2 +1,4 @@
 /workflows/generated-files/
-/workflows/__pycache__/
+__pycache__/
+venv/
+*.pyc

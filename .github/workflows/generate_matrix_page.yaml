@@ -1,0 +1,86 @@
+name: Generate test matrices pages
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to check out'
+        default: 'main'
+        required: false
+        type: string
+      pr_number:
+        description: 'PR number to process (must be specified as a number or "all")'
+        required: true
+        type: string
+
+jobs:
+  generate-matrix:
+    if: github.event_name != 'pull_request' || (github.repository == 'rh-ecosystem-edge/nvidia-ci' && github.event.pull_request.merged == true) 
+    runs-on: ubuntu-latest
+    env:
+      OUTPUT_DIR: 'workflows/test_matrix_dashboard/output'
+      OLD_OCP_FILE: 'old_ocp_data.json'
+      OCP_FILE: 'ocp_data.json'
+      HTML_FILE: 'gpu_operator_matrix.html'
+    steps:
+      - name: Determine PR Number
+        id: determine_pr
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+              echo "Processing merged pull request."
+              echo "PR_NUMBER=${{github.event.pull_request.number}}" >> "$GITHUB_OUTPUT"
+          else
+              echo "PR_NUMBER=${{ github.event.inputs.pr_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.event.inputs.branch }}
+
+      - name: Checkout baseline
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: baseline
+
+      - name: Rename and move ${{ env.OCP_FILE }} to ${{ env.OUTPUT_DIR }}/${{ env.OLD_OCP_FILE }}
+        run: |
+          mkdir -p "${{ env.OUTPUT_DIR }}"
+          cp baseline/${{ env.OCP_FILE }} "${{ env.OUTPUT_DIR }}/${{ env.OLD_OCP_FILE }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r workflows/test_matrix_dashboard/requirements.txt
+
+      - name: Run Extraction Script
+        run: |
+          echo "Processing PR: ${{ steps.determine_pr.outputs.PR_NUMBER }}"
+          python workflows/test_matrix_dashboard/generate_test_matrix_data.py \
+            --pr "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
+            --output_dir "${{ env.OUTPUT_DIR }}" \
+            --old_data_file "${{ env.OLD_OCP_FILE }}" \
+            --new_data_file "${{ env.OCP_FILE }}"
+
+      - name: Generate UI
+        run: |
+          python workflows/test_matrix_dashboard/generate_test_matrix_ui.py \
+            --output_dir "${{ env.OUTPUT_DIR }}" \
+            --data_file "${{ env.OCP_FILE }}" \
+            --output_file "${{ env.HTML_FILE }}"
+
+      - name: Deploy HTML to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: ${{ env.OUTPUT_DIR }}
