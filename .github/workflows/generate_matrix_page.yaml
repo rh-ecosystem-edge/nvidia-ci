@@ -19,7 +19,7 @@ on:
 
 jobs:
   generate-matrix:
-    if: github.event_name != 'pull_request' || (github.repository == 'rh-ecosystem-edge/nvidia-ci' && github.event.pull_request.merged == true) 
+    if: github.event_name != 'pull_request' || (github.repository == 'rh-ecosystem-edge/nvidia-ci' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     env:
       OUTPUT_DIR: 'workflows/test_matrix_dashboard/output'
@@ -41,18 +41,17 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.event.inputs.branch }}
+          ref: ${{ github.event.pull_request.base.ref || github.event.inputs.branch }}
 
-      - name: Checkout baseline
+      - name: Checkout GitHub Pages
         uses: actions/checkout@v4
         with:
           ref: gh-pages
-          path: baseline
+          path: ${{ env.OUTPUT_DIR }}
 
-      - name: Rename and move ${{ env.OCP_FILE }} to ${{ env.OUTPUT_DIR }}/${{ env.OLD_OCP_FILE }}
+      - name: Back up ${{ env.OUTPUT_DIR }}/${{ env.OCP_FILE }}
         run: |
-          mkdir -p "${{ env.OUTPUT_DIR }}"
-          cp baseline/${{ env.OCP_FILE }} "${{ env.OUTPUT_DIR }}/${{ env.OLD_OCP_FILE }}"
+          cp "${{ env.OUTPUT_DIR }}/${{ env.OCP_FILE }}" "${{ env.OUTPUT_DIR }}/${{ env.OLD_OCP_FILE }}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -84,3 +83,4 @@ jobs:
         with:
           branch: gh-pages
           folder: ${{ env.OUTPUT_DIR }}
+          clean: false
