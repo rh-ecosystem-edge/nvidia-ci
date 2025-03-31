@@ -83,6 +83,7 @@ jobs:
       - name: Deploy HTML to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           branch: gh-pages
           folder: ${{ env.OUTPUT_DIR }}
           clean: false
