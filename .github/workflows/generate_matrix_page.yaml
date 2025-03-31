@@ -19,6 +19,8 @@ on:
 
 jobs:
   generate-matrix:
+    permissions:
+      contents: write
     if: github.event_name != 'pull_request' || (github.repository == 'rh-ecosystem-edge/nvidia-ci' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     env:
