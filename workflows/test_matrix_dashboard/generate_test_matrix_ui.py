@@ -75,7 +75,7 @@ def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
 
     bundle_html = """
   <div style="margin-top: 20px; font-size: 0.9em; color: #888; background-color: #f7f7f7; padding: 10px; border-radius: 4px;">
-    <strong>From main branch GPU bundle (OLM bundle)</strong>
+    <strong>From main branch (OLM bundle)</strong>
   </div>
   <div class="history-bar" style="opacity: 0.7;">
     <div style="margin-top: 5px;">
