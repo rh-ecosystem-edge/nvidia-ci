@@ -3,6 +3,7 @@ import json
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List
+from distutils.version import LooseVersion
 
 from logger import logger
 
@@ -17,38 +18,60 @@ def load_template(filename: str) -> str:
     with open(file_path, 'r', encoding='utf-8') as f:
         return f.read()
 
-def parse_gpu_version(version_str: str) -> tuple:
+def parse_gpu_version(version_str: str):
     """
-    Convert a GPU version string into a tuple for numeric comparison.
-    If the version is "master" (case-insensitive), it's treated as the highest version.
-    For other version strings, split by '.' and convert to integers.
-    If conversion fails, returns (0,).
+    Convert a GPU version string into a comparable key.
+    
+    If the version string is "master" (case-insensitive), returns float('inf') to
+    denote the highest version; otherwise, returns a LooseVersion object representing
+    the version for natural ordering.
     """
     if version_str.lower() == "master":
-        return (float('inf'),)
-    try:
-        parts = version_str.split('.')
-        return tuple(int(x) for x in parts)
-    except ValueError:
-        return (0,)
+        return float('inf')
+    return LooseVersion(version_str)
 
 def build_table_rows(regular_results: List[Dict[str, Any]]) -> str:
     """
-    Build the <tr> rows for the table, grouped by the full OCP version.
-    Each OCP version row includes clickable GPU version links.
+    Generate HTML table rows from grouped GPU test results.
+    
+    This function groups GPU test result dictionaries by their 'ocp' version and, for each group,
+    deduplicates entries by retaining only the record with the latest timestamp for each 'gpu'.
+    The remaining GPU entries are sorted in descending order using a GPU version parsing function,
+    and each is converted into a clickable link. The resulting HTML consists of table rows (<tr>)
+    with two cells: one for the OCP version and one for the associated GPU links.
+    
+    Args:
+        regular_results: A list of dictionaries representing GPU test results. Each dictionary
+            should include the keys 'ocp', 'gpu', 'timestamp', and 'link'.
+    
+    Returns:
+        A string containing HTML table row elements with grouped OCP and corresponding GPU links.
     """
     grouped = {}
-    # Group results by the full OCP version
+    # Group results by the full OCP version.
     for result in regular_results:
         ocp_full = result["ocp"]
         grouped.setdefault(ocp_full, []).append(result)
 
     rows_html = ""
-    # Sort OCP versions descending
+    # Process each OCP version group, sorting by OCP version descending.
     for ocp_full in sorted(grouped.keys(), reverse=True):
         rows = grouped[ocp_full]
-        # Sort GPU versions from largest to smallest
-        sorted_rows = sorted(rows, key=lambda r: parse_gpu_version(r["gpu"]), reverse=True)
+
+        # Deduplicate rows by GPU version, keeping only the entry with the latest timestamp.
+        deduped = {}
+        for row in rows:
+            gpu = row["gpu"]
+            # take only latest timestamp
+            if gpu not in deduped or row["timestamp"] > deduped[gpu]["timestamp"]:
+                deduped[gpu] = row
+
+        # Convert deduped results back to a list.
+        deduped_rows = list(deduped.values())
+        # Sort GPU versions from largest to smallest using your parsing function.
+        sorted_rows = sorted(deduped_rows, key=lambda r: parse_gpu_version(r["gpu"]), reverse=True)
+
+        # Create clickable links for each GPU entry.
         gpu_links = ", ".join(
             f'<a href="{r["link"]}" target="_blank">{r["gpu"]}</a>'
             for r in sorted_rows
@@ -63,15 +86,29 @@ def build_table_rows(regular_results: List[Dict[str, Any]]) -> str:
 
 def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
     """
-    Build the small HTML snippet that displays info about GPU bundle statuses.
-    (Shown in a 'history-bar' with colored squares.)
+    Generate an HTML snippet showing GPU bundle statuses in a history bar.
+    
+    Sorts the provided bundle results (a list of dictionaries with keys 'timestamp', 'status',
+    and 'link') in descending order by timestamp. The most recent timestamp is used to display
+    the last bundle job date. For each bundle, a colored square is generated with a clickable
+    link that opens the bundle details in a new tab. Returns an empty string if no bundle results
+    are provided.
+    
+    Args:
+        bundle_results: A list of dictionaries containing bundle details. Each dictionary should
+                        include a Unix timestamp ('timestamp'), a status string ('status', e.g.,
+                        "SUCCESS" or "FAILURE"), and a URL ('link').
+    
+    Returns:
+        A string containing HTML markup for the GPU bundle status history.
     """
     if not bundle_results:
         return ""  # If no bundle results, return empty string
 
-    # De-emphasize GPU bundle info
-    first_timestamp = bundle_results[0]["timestamp"]
-    last_bundle_date = datetime.fromtimestamp(first_timestamp, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    # Sort bundles from newest (left) to oldest (right)
+    sorted_bundles = sorted(bundle_results, key=lambda r: r["timestamp"], reverse=True)
+    leftmost_bundle = sorted_bundles[0]
+    last_bundle_date = datetime.fromtimestamp(leftmost_bundle["timestamp"], timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     bundle_html = """
   <div style="margin-top: 20px; font-size: 0.9em; color: #888; background-color: #f7f7f7; padding: 10px; border-radius: 4px;">
@@ -83,7 +120,7 @@ def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
     </div>
     """.format(last_bundle_date=last_bundle_date)
 
-    for bundle in bundle_results:
+    for bundle in sorted_bundles:
         status = bundle.get("status", "Unknown").upper()
         if status == "SUCCESS":
             status_class = "history-success"

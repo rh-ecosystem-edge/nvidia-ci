@@ -136,7 +136,18 @@ def get_job_results(
     ocp_data.setdefault(ocp_version, []).append(result.to_dict())
 
 def get_all_pr_tests(pr_num: str, ocp_data: Dict[str, List[Dict[str, Any]]]) -> None:
-    """Retrieve and store test results for all jobs under a single PR."""
+    """
+    Retrieve and store test results for all jobs under a pull request.
+    
+    This function sends an HTTP request to list job prefixes associated with the given pull
+    request, filters them using a predefined test pattern, and extracts version details from each
+    matching job. For every valid job prefix, it delegates the retrieval of detailed test results
+    to another function, updating the provided data dictionary with the results.
+    
+    Args:
+        pr_num: The pull request number as a string.
+        ocp_data: A dictionary to accumulate and store test result entries.
+    """
     logger.info(f"Fetching tests for PR #{pr_num}")
     params = {
         "prefix": f"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/{pr_num}/",
@@ -157,9 +168,18 @@ def get_all_pr_tests(pr_num: str, ocp_data: Dict[str, List[Dict[str, Any]]]) -> 
         ocp = match.group("ocp_version")
         gpu_suffix = match.group("gpu_version")
         get_job_results(pr_num, job, ocp, gpu_suffix, ocp_data)
-    
+
 def retrieve_all_prs(ocp_data: Dict[str, List[Dict[str, Any]]]) -> None:
-    """Retrieve and store test results for all closed PRs against the main branch."""
+    """
+    Retrieves and stores test results for all closed PRs on the main branch.
+    
+    This function queries the GitHub API for closed pull requests targeting the main branch
+    of the nvidia-ci repository. For each PR in the response, it processes the test results by
+    invoking get_all_pr_tests, updating the provided test results data dictionary.
+    
+    Args:
+        ocp_data: A dictionary that accumulates test result data indexed by job identifiers.
+    """
     logger.info("Retrieving PR history...")
     url = "https://api.github.com/repos/rh-ecosystem-edge/nvidia-ci/pulls"
     params = {"state": "closed", "base": "main", "per_page": "100", "page": "1"}
@@ -172,20 +192,53 @@ def retrieve_all_prs(ocp_data: Dict[str, List[Dict[str, Any]]]) -> None:
         pr_num = str(pr["number"])
         logger.info(f"Processing PR #{pr_num}")
         get_all_pr_tests(pr_num, ocp_data)
-   
+
+def composite_key(item: Dict[str, Any]) -> Tuple:
+        """
+        Generate a composite key tuple from a test result dictionary.
+        
+        Extracts the "ocp", "gpu", "status", "link", and "timestamp" values from the
+        provided dictionary, returning them as a tuple. This key is used to identify
+        unique test result entries.
+        """
+        return (item.get("ocp"), item.get("gpu"), item.get("status"), item.get("link"), item.get("timestamp") )
+
 def save_to_json(new_data: Dict[str, List[Dict[str, Any]]],
                  output_dir: str,
                  new_data_file: str,
                  existing_data: Dict[str, List[Dict[str, Any]]] = None) -> None:
     """
-    Merge new_data into existing_data (if provided) and write to JSON.
-    This ensures old entries remain and new ones are appended.
-    """
+                 Merge new test result data with existing data and write to a JSON file.
+                 
+                 This function integrates the provided test results with an optional existing dataset,
+                 using composite keys to prevent duplicate entries. The merged data is then serialized
+                 to a formatted JSON file located in the specified output directory.
+                 
+                 Args:
+                     new_data: Dictionary mapping keys to lists of test result dictionaries.
+                     output_dir: Directory path where the JSON file will be saved.
+                     new_data_file: Name of the JSON file to create.
+                     existing_data: Optional dictionary of preexisting data to merge into.
+                 """
     file_path = os.path.join(output_dir, new_data_file)
     logger.info(f"Saving JSON to {file_path}")
     merged_data = existing_data.copy() if existing_data else {}
+
+
+    # Process each key in new_data
     for key, new_values in new_data.items():
-        merged_data.setdefault(key, []).extend(new_values)
+        # Ensure we have a list for this key in merged_data
+        merged_data.setdefault(key, [])
+        # Create a set of composite keys from existing items for fast membership checks.
+        seen_keys = set(composite_key(item) for item in merged_data[key])
+
+        # Append new items only if they are not duplicates
+        for item in new_values:
+            key_tuple = composite_key(item)
+            if key_tuple not in seen_keys:
+                merged_data[key].append(item)
+                seen_keys.add(key_tuple)
+
     with open(file_path, "w") as f:
         json.dump(merged_data, f, indent=4)
     logger.info(f"Data successfully saved to {file_path}")
