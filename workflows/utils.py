@@ -3,9 +3,17 @@ import logging
 from logging import Logger
 from semver import Version
 from typing import Any
+import re
 
 test_command_template = "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}"
 
+GCS_API_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o"
+
+# Regular expression to match test result paths.
+TEST_RESULT_PATH_REGEX = re.compile(
+    r"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/\d+/pull-ci-rh-ecosystem-edge-nvidia-ci-main-"
+    r"(?P<ocp_version>\d+\.\d+)-stable-nvidia-gpu-operator-e2e-(?P<gpu_version>\d+-\d+-x|master)/"
+)
 
 def get_logger(name: str) -> Logger:
     logger = logging.getLogger(name)
@@ -109,6 +117,10 @@ def calculate_diffs(old_versions: dict, new_versions: dict) -> dict:
 
 def version2suffix(v: str):
     return v if v == 'master' else f'{v.replace(".", "-")}-x'
+
+# def parse_gpu_version(gpu: str) -> str:
+#     """Convert GPU suffix to a version string, e.g., '14-9-x' -> '14.9'."""
+#     return gpu if gpu == "master" else gpu[:-2].replace("-", ".")
 
 def max_version(a: str, b: str) -> str:
     """
