@@ -89,19 +89,63 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_
 - `NVIDIANETWORK_NNO_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - _required when deploying fallback custom NNO catalogsource_
 - `NVIDIANETWORK_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
-- `NVIDIANETWORK_OFED_DRIVER_VERSION`: OFED Driver Version.  If not specified, the default driver version is used - _optional_    
-- `NVIDIANETWORK_OFED_REPOSITORY`:  OFED Driver Repository.   If not specified, the default repository is used - _optional_            
-- `NVIDIANETWORK_RDMA_CLIENT_HOSTNAME:` RDMA Client hostname of first worker node for ib_write_bw test - _required when running the RDMA testcase_ 
-- `NVIDIANETWORK_RDMA_SERVER_HOSTNAME:` RDMA Server hostname of second worker node for ib_write_bw test - _required when running the RDMA testcase_   
+- `NVIDIANETWORK_OFED_DRIVER_VERSION`: OFED Driver Version.  If not specified, the default driver version is used - _optional_
+- `NVIDIANETWORK_OFED_REPOSITORY`:  OFED Driver Repository.   If not specified, the default repository is used - _optional_
+- `NVIDIANETWORK_RDMA_CLIENT_HOSTNAME:` RDMA Client hostname of first worker node for ib_write_bw test - _required when running the RDMA testcase_
+- `NVIDIANETWORK_RDMA_SERVER_HOSTNAME:` RDMA Server hostname of second worker node for ib_write_bw test - _required when running the RDMA testcase_
 - `NVIDIANETWORK_RDMA_TEST_IMAGE:` RDMA Test Container Image that runs the entrypoint.sh script with optional arguments specified in the pod spec.  This container will clone the "https://github.com/linux-rdma/perftest" repo and builds the ib_write_bw binaries with or without cuda headers.  It will also run the ib_write_bw command with arguments either in CLient or Server mode.  Defaults to "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.1" - _optional_
-- `NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME`: Mellanox Ethernet Interface Name - Defaults to "ens8f0np0" if not specified - _optional_  
-- `NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME`:  Mellanox Infiniband Interface Name - Defaults to "ens8f0np0" if not specified - _optional_   
-- `NVIDIANETWORK_MACVLANNETWORK_NAME`: MacvlanNetwork Custom Resource instance name  - Defaults to name from Cluster Service Bersion alm-examples section if not specified  - _optional_ 
-- `NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE`: MacvlanNetwork Custom Resource instance IPAM or IP Address/Subnet mask range for Eth or IB interface - _required_    
-- `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - _required_         
+- `NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME`: Mellanox Ethernet Interface Name - Defaults to "ens8f0np0" if not specified - _optional_
+- `NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME`:  Mellanox Infiniband Interface Name - Defaults to "ens8f0np0" if not specified - _optional_
+- `NVIDIANETWORK_MACVLANNETWORK_NAME`: MacvlanNetwork Custom Resource instance name  - Defaults to name from Cluster Service Bersion alm-examples section if not specified  - _optional_
+- `NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE`: MacvlanNetwork Custom Resource instance IPAM or IP Address/Subnet mask range for Eth or IB interface - _required_
+- `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - _required_
 
+### Testing MPS with GPU Operator
+
+To test the Multi-Process Service (MPS) functionality, you need to first deploy the GPU Operator and then run the MPS tests without cleaning up the GPU Operator deployment between test suites.
 
 It is recommended to execute the runner script through the `make run-tests` make target.
+
+#### Steps to run MPS tests:
+
+1. First, deploy the GPU Operator with cleanup disabled for example:
+```
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DUMP_FAILED_TESTS=true
+$ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
+$ export TEST_FEATURES="nvidiagpu"
+$ export TEST_LABELS='nvidia-ci,gpu'
+$ export TEST_TRACE=true
+$ export VERBOSE_LEVEL=100
+$ export NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE="g4dn.xlarge"
+$ export NVIDIAGPU_CATALOGSOURCE="certified-operators"
+$ export NVIDIAGPU_SUBSCRIPTION_CHANNEL="v23.9"
+$ export NVIDIAGPU_CLEANUP=false  # Important: don't clean up after deployment
+$ make run-tests
+```
+2. After the GPU Operator deployment completes successfully, run the MPS tests:
+```
+$ export TEST_FEATURES="nvidiagpu"
+$ export TEST_LABELS='nvidia-ci,mps'  # Run MPS-specific tests
+$ make run-tests
+```
+The MPS tests will use the existing GPU Operator deployment that was left in place from the previous test run. This ensures that the MPS tests can properly validate MPS functionality on an already configured GPU environment.
+
+#### Test Suite Ordering:
+
+The test framework ensures that the GPU Operator deployment tests run before MPS tests through Ginkgo's ordering mechanisms. If you need to add new MPS tests, make sure they are organized to run after the GPU Operator deployment by using proper labeling and ordering in your test files.
+
+#### Cleanup:
+
+After completing the MPS tests, you may want to clean up all resources by running:
+
+```
+$ export TEST_FEATURES="nvidiagpu"
+$ export TEST_LABELS='nvidia-ci,cleanup'
+$ export NVIDIAGPU_CLEANUP=true
+$ make run-tests
+```
+This will remove all resources created by both the GPU Operator deployment and MPS tests.
 
 Example running the end-to-end GPU Operator test case:
 ```
@@ -144,7 +188,7 @@ scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,operator-upgrade" ./tests/nvidiagpu
 ```
 
-Example running the end-to-end test case and creating custom catalogsources for NFD and GPU Operator packagmanifests 
+Example running the end-to-end test case and creating custom catalogsources for NFD and GPU Operator packagmanifests
 when missing from their default catalogsources.
 ```
 $ export KUBECONFIG=/path/to/kubeconfig
