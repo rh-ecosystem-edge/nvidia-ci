@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gopkg.in/k8snetworkplumbingwg/multus-cni.v4/pkg/logging"
 	"time"
+
+	"gopkg.in/k8snetworkplumbingwg/multus-cni.v4/pkg/logging"
 
 	"github.com/golang/glog"
 	. "github.com/onsi/gomega"
@@ -337,12 +338,11 @@ func GetNFDCRJson(apiClient *clients.Settings, nfdCRName string, nfdNamespace st
 }
 
 // NFDCRDeleteAndWait deletes NodeFeatureDiscovery instance and waits until it is deleted.
-func NFDCRDeleteAndWait(apiClient *clients.Settings, nfdCRName string, nfdCRNamespace string, pollInterval,
-	timeout time.Duration) error {
-	// return wait.PollImmediate(pollInterval, timeout, func() (bool, error) {
+func NFDCRDeleteAndWait(apiClient *clients.Settings) error {
+	// return wait.PollImmediate(DeletionPollInterval, timeout, func() (bool, error) {
 	return wait.PollUntilContextTimeout(
-		context.TODO(), pollInterval, timeout, false, func(ctx context.Context) (bool, error) {
-			nfdCR, err := Pull(apiClient, nfdCRName, nfdCRNamespace)
+		context.TODO(), DeletionPollInterval, DeletionTimeoutDuration, false, func(ctx context.Context) (bool, error) {
+			nfdCR, err := Pull(apiClient, CRName, OperatorNamespace)
 
 			if err != nil {
 				glog.V(gpuparams.GpuLogLevel).Infof("NodeFeatureDiscovery pull from cluster error: %s\n", err)
@@ -357,7 +357,7 @@ func NFDCRDeleteAndWait(apiClient *clients.Settings, nfdCRName string, nfdCRName
 
 			if !nfdCR.Exists() {
 				glog.V(gpuparams.GpuLogLevel).Infof("NodeFeatureDiscovery instance '%s' in namespace '%s' does "+
-					"not exist", nfdCRName, nfdCRNamespace)
+					"not exist", CRName, OperatorNamespace)
 
 				// this exists out of the wait.PollImmediate()
 				return true, nil
@@ -475,7 +475,7 @@ func DeleteAnyNFDCSV(apiClient *clients.Settings) error {
 	return nil
 }
 
-func CreateNFDDeployment(apiClient *clients.Settings, catalogSource, operatorDeploymentName, operatorNamespace string, checkInterval, timeout time.Duration, logLevel logging.Level) bool {
+func CreateNFDDeployment(apiClient *clients.Settings, catalogSource string, logLevel logging.Level) bool {
 	glog.V(glog.Level(logLevel)).Info("Deploying NFD Subscription")
 	err := CreateNFDSubscription(apiClient, catalogSource)
 	Expect(err).ToNot(HaveOccurred(), "error creating NFD Subscription: %v", err)
@@ -483,8 +483,8 @@ func CreateNFDDeployment(apiClient *clients.Settings, catalogSource, operatorDep
 	glog.V(glog.Level(logLevel)).Info("Sleeping for 2 minutes to allow the NFD Operator deployment to stabilize")
 	time.Sleep(2 * time.Minute)
 
-	glog.V(glog.Level(logLevel)).Infof("Waiting up to %v for NFD Operator deployment to be fully created", timeout)
-	nfdDeploymentCreated := nvidiagpuwait.DeploymentCreated(apiClient, operatorDeploymentName, operatorNamespace, checkInterval, timeout)
+	glog.V(glog.Level(logLevel)).Infof("Waiting up to %v for NFD Operator deployment to be fully created", NFDOperatorTimeout)
+	nfdDeploymentCreated := nvidiagpuwait.DeploymentCreated(apiClient, OperatorDeploymentName, OperatorNamespace, NFDOperatorCheckInterval, NFDOperatorTimeout)
 	Expect(nfdDeploymentCreated).ToNot(BeFalse(), "timed out waiting for NFD operator deployment")
 
 	glog.V(glog.Level(logLevel)).Info("Checking if NFD Operator deployment is active")

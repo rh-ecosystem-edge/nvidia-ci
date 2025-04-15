@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidianetworkconfig"
 	rdmatest "github.com/rh-ecosystem-edge/nvidia-ci/internal/rdma"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfdcheck"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"time"
 
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
@@ -18,22 +20,22 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/deploy"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
-
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/networkparams"
+	internalNFD "github.com/rh-ecosystem-edge/nvidia-ci/internal/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
+	nfd "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidianetwork"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 )
 
 var (
-	Nfd = nfd.NewCustomConfig()
+	nfdInstance = operatorconfig.NewCustomConfig()
 
 	WorkerNodeSelector = map[string]string{
 		inittools.GeneralConfig.WorkerLabel: "",
@@ -42,6 +44,7 @@ var (
 
 	// NvidiaNetworkConfig provides access to general configuration parameters.
 	nvidiaNetworkConfig *nvidianetworkconfig.NvidiaNetworkConfig
+	nfdConfig           *internalNFD.NFDConfig
 	CatalogSource                         = UndefinedValue
 	SubscriptionChannel                   = UndefinedValue
 	InstallPlanApproval v1alpha1.Approval = "Automatic"
@@ -112,6 +115,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 	}
 
 	nvidiaNetworkConfig = nvidianetworkconfig.NewNvidiaNetworkConfig()
+	nfdConfig = internalNFD.NewNFDConfig()
 
 	Context("DeployNNO", Label("deploy-nno-with-dtk"), func() {
 
@@ -306,26 +310,26 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				createNNOCustomCatalogsource = false
 			}
 
-			if nvidiaNetworkConfig.NFDFallbackCatalogsourceIndexImage != "" {
+			if nfdConfig.FallbackCatalogSourceIndexImage != "" {
 				glog.V(networkparams.LogLevel).Infof("env variable "+
 					"NVIDIANETWORK_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE is set, and has value: '%s'",
-					nvidiaNetworkConfig.NFDFallbackCatalogsourceIndexImage)
+					nfdConfig.FallbackCatalogSourceIndexImage)
 
-				Nfd.CustomCatalogSourceIndexImage = nvidiaNetworkConfig.NFDFallbackCatalogsourceIndexImage
+				nfdInstance.CustomCatalogSourceIndexImage = nfdConfig.FallbackCatalogSourceIndexImage
 
 				glog.V(networkparams.LogLevel).Infof("Setting flag to create custom NFD operator " +
 					"catalogsource from fall back index image to True")
 
-				Nfd.CreateCustomCatalogsource = true
+				nfdInstance.CreateCustomCatalogsource = true
 
-				Nfd.CustomCatalogSource = nfd.CatalogSourceDefault + "-custom"
+				nfdInstance.CustomCatalogSource = nfd.CatalogSourceDefault + "-custom"
 				glog.V(networkparams.LogLevel).Infof("Setting custom NFD catalogsource name to '%s'",
-					Nfd.CustomCatalogSource)
+					nfdInstance.CustomCatalogSource)
 
 			} else {
 				glog.V(networkparams.LogLevel).Infof("Setting flag to create custom NFD operator " +
 					"catalogsource from fall back index image to False")
-				Nfd.CreateCustomCatalogsource = false
+				nfdInstance.CreateCustomCatalogsource = false
 			}
 
 			By("Report OpenShift version")
@@ -341,7 +345,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				}
 			}
 
-			nfd.EnsureNFDIsInstalled(inittools.APIClient, Nfd, ocpVersion, networkparams.LogLevel)
+			nfd.EnsureNFDIsInstalled(inittools.APIClient, nfdInstance, ocpVersion, networkparams.LogLevel)
 
 		})
 
@@ -355,24 +359,9 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 		AfterAll(func() {
 
-			if Nfd.CleanupAfterInstall && cleanupAfterTest {
-				// Here need to check if NFD CR is deployed, otherwise Deleting a non-existing CR will throw an error
-				// skipping error check for now cause any failure before entire NFD stack
-				By("Delete NFD CR instance in NFD namespace")
-				_ = nfd.NFDCRDeleteAndWait(inittools.APIClient, nfd.CRName, nfd.OperatorNamespace, 30*time.Second,
-					5*time.Minute)
-
-				By("Delete NFD CSV")
-				_ = nfd.DeleteNFDCSV(inittools.APIClient)
-
-				By("Delete NFD Subscription in NFD namespace")
-				_ = nfd.DeleteNFDSubscription(inittools.APIClient)
-
-				By("Delete NFD OperatorGroup in NFD namespace")
-				_ = nfd.DeleteNFDOperatorGroup(inittools.APIClient)
-
-				By("Delete NFD Namespace in NFD namespace")
-				_ = nfd.DeleteNFDNamespace(inittools.APIClient)
+			if nfdInstance.CleanupAfterInstall && cleanupAfterTest {
+				err := nfd.Cleanup(inittools.APIClient)
+				Expect(err).ToNot(HaveOccurred(), "Error cleaning up NFD resources: %v", err)
 			}
 
 		})

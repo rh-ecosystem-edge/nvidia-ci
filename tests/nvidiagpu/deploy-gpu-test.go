@@ -11,13 +11,17 @@ import (
 	nvidiagpuv1alpha1 "github.com/NVIDIA/k8s-operator-libs/api/upgrade/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/networkparams"
+
+	internalNFD "github.com/rh-ecosystem-edge/nvidia-ci/internal/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
 	_ "github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/machine"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
+
+	nfd "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfdcheck"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"
 
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
@@ -41,8 +45,8 @@ import (
 )
 
 var (
-	Nfd  = nfd.NewCustomConfig()
-	burn = nvidiagpu.NewDefaultGPUBurnConfig()
+	nfdInstance = operatorconfig.NewCustomConfig()
+	burn        = nvidiagpu.NewDefaultGPUBurnConfig()
 
 	InstallPlanApproval v1alpha1.Approval = "Automatic"
 
@@ -62,8 +66,10 @@ var (
 
 	// NvidiaGPUConfig provides access to general configuration parameters.
 	nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig
-	ScaleCluster    = false
-	CatalogSource   = UndefinedValue
+	nfdConfig       *internalNFD.NFDConfig
+
+	ScaleCluster  = false
+	CatalogSource = UndefinedValue
 
 	CustomCatalogSource = UndefinedValue
 
@@ -90,6 +96,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 	)
 
 	nvidiaGPUConfig = nvidiagpuconfig.NewNvidiaGPUConfig()
+
+	nfdConfig = internalNFD.NewNFDConfig()
 
 	Context("DeployGpu", Label("deploy-gpu-with-dtk"), func() {
 
@@ -125,14 +133,12 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					"NVIDIAGPU_SUBSCRIPTION_CHANNEL value '%s'", SubscriptionChannel)
 			}
 
-			if nvidiaGPUConfig.CleanupAfterTest {
-				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_CLEANUP" +
-					" is not set or is set to True, will cleanup resources after test case execution")
-				cleanupAfterTest = true
+			cleanupAfterTest = nvidiaGPUConfig.CleanupAfterTest
+
+			if cleanupAfterTest {
+				glog.V(gpuparams.GpuLogLevel).Info("NVIDIAGPU_CLEANUP is not set or is set to true; cleaning up resources after test case execution.")
 			} else {
-				cleanupAfterTest = nvidiaGPUConfig.CleanupAfterTest
-				glog.V(gpuparams.GpuLogLevel).Infof("Flag to cleanup after test is set to env variable "+
-					"NVIDIAGPU_CLEANUP value '%v'", cleanupAfterTest)
+				glog.V(gpuparams.GpuLogLevel).Infof("NVIDIAGPU_CLEANUP is set to '%v'; skipping cleanup after test case execution.", cleanupAfterTest)
 			}
 
 			if nvidiaGPUConfig.DeployFromBundle {
@@ -186,27 +192,27 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					" from fall back index image to False")
 				createGPUCustomCatalogsource = false
 			}
-			//dont like that the NFDFallbackCatalogsourceIndexImage is in the
-			if nvidiaGPUConfig.NFDFallbackCatalogsourceIndexImage != "" {
-				glog.V(gpuparams.GpuLogLevel).Infof("env variable "+
-					"NVIDIAGPU_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE is set, and has value: '%s'",
-					nvidiaGPUConfig.NFDFallbackCatalogsourceIndexImage)
 
-				Nfd.CustomCatalogSourceIndexImage = nvidiaGPUConfig.NFDFallbackCatalogsourceIndexImage
+			if nfdConfig.FallbackCatalogSourceIndexImage != "" {
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable "+
+					"NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE is set, and has value: '%s'",
+					nfdConfig.FallbackCatalogSourceIndexImage)
+
+				nfdInstance.CustomCatalogSourceIndexImage = nfdConfig.FallbackCatalogSourceIndexImage
 
 				glog.V(gpuparams.GpuLogLevel).Infof("Setting flag to create custom NFD operator catalogsource" +
 					" from fall back index image to True")
 
-				Nfd.CreateCustomCatalogsource = true
+				nfdInstance.CreateCustomCatalogsource = true
 
-				Nfd.CustomCatalogSource = nfd.CatalogSourceDefault + "-custom"
+				nfdInstance.CustomCatalogSource = nfd.CatalogSourceDefault + "-custom"
 				glog.V(gpuparams.GpuLogLevel).Infof("Setting custom NFD catalogsource name to '%s'",
-					Nfd.CustomCatalogSource)
+					nfdInstance.CustomCatalogSource)
 
 			} else {
 				glog.V(gpuparams.GpuLogLevel).Infof("Setting flag to create custom NFD operator catalogsource" +
 					" from fall back index image to False")
-				Nfd.CreateCustomCatalogsource = false
+				nfdInstance.CreateCustomCatalogsource = false
 			}
 
 			By("Report OpenShift version")
@@ -218,9 +224,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			} else if err := inittools.GeneralConfig.WriteReport(OpenShiftVersionFile, []byte(ocpVersion)); err != nil {
 				glog.Error("Error writing an OpenShift version file: ", err)
 			}
-			///////////////////////////////////////////////////////////////////////////////////////////////////////////
-			//start from here but then would need to pass Nfd instance by pointer
-			nfd.EnsureNFDIsInstalled(inittools.APIClient, Nfd, ocpVersion, gpuparams.GpuLogLevel)
+
+			nfd.EnsureNFDIsInstalled(inittools.APIClient, nfdInstance, ocpVersion, gpuparams.GpuLogLevel)
 
 		})
 
@@ -234,23 +239,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 		AfterAll(func() {
 
-			if Nfd.CleanupAfterInstall && cleanupAfterTest {
-				// Here need to check if NFD CR is deployed, otherwise Deleting a non-existing CR will throw an error
-				// skipping error check for now cause any failure before entire NFD stack
-				By("Delete NFD CR instance in NFD namespace")
-				_ = nfd.NFDCRDeleteAndWait(inittools.APIClient, nfd.CRName, nfd.OperatorNamespace, nvidiagpu.DeletionPollInterval, nvidiagpu.DeletionTimeoutDuration)
-
-				By("Delete NFD CSV")
-				_ = nfd.DeleteNFDCSV(inittools.APIClient)
-
-				By("Delete NFD Subscription in NFD namespace")
-				_ = nfd.DeleteNFDSubscription(inittools.APIClient)
-
-				By("Delete NFD OperatorGroup in NFD namespace")
-				_ = nfd.DeleteNFDOperatorGroup(inittools.APIClient)
-
-				By("Delete NFD Namespace in NFD namespace")
-				_ = nfd.DeleteNFDNamespace(inittools.APIClient)
+			if nfdInstance.CleanupAfterInstall && cleanupAfterTest {
+				err := nfd.Cleanup(inittools.APIClient)
+				Expect(err).ToNot(HaveOccurred(), "Error cleaning up NFD resources: %v", err)
 			}
 		})
 
