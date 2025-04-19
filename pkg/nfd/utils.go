@@ -1,8 +1,9 @@
 package nfd
 
 import (
-	"context"
 	"fmt"
+	"time"
+
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,9 +17,8 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 	_ "github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"
 	"gopkg.in/k8snetworkplumbingwg/multus-cni.v4/pkg/logging"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"time"
 )
 
 // EnsureNFDIsInstalled ensures that the Node Feature Discovery (NFD) operator
@@ -99,17 +99,12 @@ func EnsureNFDIsInstalled(apiClient *clients.Settings, Nfd *CustomConfig, ocpVer
 				nfdChannel)
 
 		}
-		// i dont need to pass fd.OperatorDeploymentName,
-		//					nfd.OperatorNamespace, nfd.NFDOperatorCheckInterval,
-		//					nfd.NFDOperatorTimeout
-		// if the DeployNFDOperatorWithRetries is in the nfd package
-		DeployNFDOperatorWithRetries(inittools.APIClient, Nfd, OperatorDeploymentName,
-			OperatorNamespace, NFDOperatorCheckInterval,
-			NFDOperatorTimeout, level, ocpVersion)
+
+		DeployNFDOperatorWithRetries(inittools.APIClient, Nfd, level, ocpVersion)
 	}
 }
 
-func DeployNFDOperatorWithRetries(apiClient *clients.Settings, nfdInstance *CustomConfig, operatorDeploymentName, operatorNamespace string, nfdCheckInterval, nfdTimeout time.Duration, logLevel glog.Level, ocpVersion string) {
+func DeployNFDOperatorWithRetries(apiClient *clients.Settings, nfdInstance *CustomConfig, logLevel glog.Level, ocpVersion string) {
 	By("Deploy NFD Operator in NFD namespace")
 	err := CreateNFDNamespace(apiClient)
 	Expect(err).ToNot(HaveOccurred(), "error creating NFD Namespace: %v", err)
@@ -118,7 +113,7 @@ func DeployNFDOperatorWithRetries(apiClient *clients.Settings, nfdInstance *Cust
 	err = CreateNFDOperatorGroup(apiClient)
 	Expect(err).ToNot(HaveOccurred(), "error creating NFD OperatorGroup: %v", err)
 
-	nfdDeployed := CreateNFDDeployment(apiClient, nfdInstance.CatalogSource, operatorDeploymentName, operatorNamespace, nfdCheckInterval, nfdTimeout, logging.Level(logLevel))
+	nfdDeployed := CreateNFDDeployment(apiClient, nfdInstance.CatalogSource, logging.Level(logLevel))
 	if !nfdDeployed {
 		By(fmt.Sprintf("Applying workaround for NFD failing to deploy on OCP %s", ocpVersion))
 
@@ -128,38 +123,16 @@ func DeployNFDOperatorWithRetries(apiClient *clients.Settings, nfdInstance *Cust
 		err = DeleteAnyNFDCSV(apiClient)
 		Expect(err).ToNot(HaveOccurred(), "error deleting NFD CSV: %v", err)
 
-		err = DeleteOLMPods(apiClient, logging.Level(logLevel))
+		err = olm.DeleteOLMPods(apiClient, logging.Level(logLevel))
 		Expect(err).ToNot(HaveOccurred(), "error deleting OLM pods for operator cache workaround: %v", err)
 
 		glog.V(logLevel).Info("Re-trying NFD deployment")
 
-		nfdDeployed = CreateNFDDeployment(apiClient, nfdInstance.CatalogSource, operatorDeploymentName, operatorNamespace, nfdCheckInterval, nfdTimeout, logging.Level(logLevel))
+		nfdDeployed = CreateNFDDeployment(apiClient, nfdInstance.CatalogSource, logging.Level(logLevel))
 		Expect(nfdDeployed).ToNot(BeFalse(), "failed to deploy NFD operator")
 	}
 
 	By("Deploy NFD CR instance in NFD namespace")
 	err = DeployCRInstance(apiClient)
 	Expect(err).ToNot(HaveOccurred(), "error deploying NFD CR instance in NFD namespace: %v", err)
-}
-
-func DeleteOLMPods(apiClient *clients.Settings, logLevel logging.Level) error {
-	olmNamespace := "openshift-operator-lifecycle-manager"
-	glog.V(glog.Level(logLevel)).Info("Deleting catalog operator pods")
-	if err := apiClient.Pods(olmNamespace).DeleteCollection(context.TODO(),
-		metav1.DeleteOptions{},
-		metav1.ListOptions{LabelSelector: "app=catalog-operator"}); err != nil {
-		glog.Errorf("Error deleting catalog operator pods: %v", err)
-		return err
-	}
-
-	glog.V(glog.Level(logLevel)).Info("Deleting OLM operator pods")
-	if err := apiClient.Pods(olmNamespace).DeleteCollection(
-		context.TODO(),
-		metav1.DeleteOptions{},
-		metav1.ListOptions{LabelSelector: "app=olm-operator"}); err != nil {
-		glog.Errorf("Error deleting OLM operator pods: %v", err)
-		return err
-	}
-
-	return nil
 }

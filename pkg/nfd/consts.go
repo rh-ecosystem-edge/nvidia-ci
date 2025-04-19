@@ -18,4 +18,7 @@ const (
 	NFDOperatorTimeout       = 5 * time.Minute
 	resourceCRD              = "NodeFeatureDiscovery"
 	LogLevel                 = 100
+
+	DeletionPollInterval    = 30 * time.Second
+	DeletionTimeoutDuration = 5 * time.Minute
 )
