@@ -32,11 +32,11 @@ var _ = JustAfterEach(func() {
 	reporter.ReportIfFailed(
 		specReport, currentFile, tsparams.ReporterNamespacesToDump, tsparams.ReporterCRDsToDump, clients.SetScheme)
 
-	dumpDir := inittools.GeneralConfig.GetDumpFailedTestReportLocation(currentFile)
+	dumpDir := inittools.GeneralConfig.GetDumpTestReportLocation(currentFile)
 	if dumpDir != "" {
 		artifactDir := fmt.Sprintf("%s/gpu-must-gather", dumpDir)
-		if err := reporter.MustGatherIfFailed(specReport, artifactDir, 5*time.Minute); err != nil {
-			glog.Errorf("Error running MustGatherIfFailed, %v", err)
+		if err := reporter.RunMustGather(artifactDir, 5*time.Minute); err != nil {
+			glog.Errorf("Error running RunMustGather, %v", err)
 		}
 	}
 })
