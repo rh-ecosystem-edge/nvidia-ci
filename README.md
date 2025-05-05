@@ -125,7 +125,7 @@ $ make run-tests
 ```
 2. After the GPU Operator deployment completes successfully, run the MPS tests:
 ```
-$ export TEST_FEATURES="nvidiagpu"
+$ export TEST_FEATURES="mps"
 $ export TEST_LABELS='nvidia-ci,mps'  # Run MPS-specific tests
 $ make run-tests
 ```
