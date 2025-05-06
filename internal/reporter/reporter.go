@@ -134,7 +134,10 @@ func removeFile(fPath string) error {
 	return nil
 }
 
-func RunMustGather(artifactDir string, timeout time.Duration) error {
+func MustGatherIfFailed(specReport types.SpecReport, artifactDir string, timeout time.Duration) error {
+	if !types.SpecStateFailureStates.Is(specReport.State) {
+		return nil
+	}
 	if artifactDir == "" {
 		return fmt.Errorf("artifact directory cannot be empty")
 	}
