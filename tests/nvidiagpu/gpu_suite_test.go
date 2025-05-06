@@ -1,7 +1,6 @@
 package nvidiagpu
 
 import (
-	"fmt"
 	"github.com/golang/glog"
 	"runtime"
 	"testing"
@@ -31,12 +30,8 @@ var _ = JustAfterEach(func() {
 	specReport := CurrentSpecReport()
 	reporter.ReportIfFailed(
 		specReport, currentFile, tsparams.ReporterNamespacesToDump, tsparams.ReporterCRDsToDump, clients.SetScheme)
-
-	dumpDir := inittools.GeneralConfig.GetDumpFailedTestReportLocation(currentFile)
-	if dumpDir != "" {
-		artifactDir := fmt.Sprintf("%s/gpu-must-gather", dumpDir)
-		if err := reporter.MustGatherIfFailed(specReport, artifactDir, 5*time.Minute); err != nil {
-			glog.Errorf("Error running MustGatherIfFailed, %v", err)
-		}
+	artifactDir := inittools.GeneralConfig.GetReportPath("gpu-must-gather")
+	if err := reporter.RunMustGather(artifactDir, 5*time.Minute); err != nil {
+		glog.Errorf("Failed to collect must-gather for the GPU operator, %v", err)
 	}
 })
