@@ -34,10 +34,14 @@ def fetch_ocp_versions() -> dict:
     logger.debug(f'Received OpenShift versions: {accepted_versions}')
 
     for ver in accepted_versions:
+        if ignored_regex.fullmatch(ver):
+            logger.debug(f'Exact version {ver} is ignored')
+            continue
+
         sem_ver = semver.VersionInfo.parse(ver)
         minor = f'{sem_ver.major}.{sem_ver.minor}'
         if ignored_regex.fullmatch(minor):
-            logger.debug(f'Version {ver} ignored')
+            logger.debug(f'Version {ver} is ignored because all {minor} are ignored')
             continue
 
         patches = versions.get(minor)

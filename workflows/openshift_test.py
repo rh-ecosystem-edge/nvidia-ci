@@ -47,13 +47,13 @@ class TestOpenShift(unittest.TestCase):
     @patch('workflows.openshift.requests.get')
     def test_fetch_ocp_versions_ignored(self, mock_get, mock_settings):
         """Test that ignored versions are correctly filtered out."""
-        # Mock settings with a regex to ignore 4.10 and 4.12
-        mock_settings.ignored_versions = "4.10|4.12"
+        # Mock settings with a regex to ignore 4.10, 4.12 and 4.19.0-rc.1
+        mock_settings.ignored_versions = "^4.10$|^4.12$|^4.19.0-rc.1$"
         mock_settings.request_timeout_sec = 30
 
         # Mock API response
         mock_response = MagicMock()
-        mock_response.json.return_value = {'4-stable': ['4.10.1', '4.10.2', '4.11.0', '4.12.3']}
+        mock_response.json.return_value = {'4-stable': ['4.10.1', '4.10.2', '4.11.0', '4.12.3', '4.19.0-rc.0', '4.19.0-rc.1']}
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 
@@ -61,8 +61,10 @@ class TestOpenShift(unittest.TestCase):
         result = fetch_ocp_versions()
 
         # Verify only the non-ignored version is included
+        # Only 4.11 and 4.19 should remain, but not 4.19.0-rc.1
         expected = {
-            '4.11': '4.11.0',  # Only 4.11 should remain
+            '4.11': '4.11.0',
+            '4.19': '4.19.0-rc.0'
         }
         self.assertEqual(result, expected)
 
