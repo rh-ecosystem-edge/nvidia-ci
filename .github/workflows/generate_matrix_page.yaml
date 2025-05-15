@@ -1,7 +1,7 @@
 name: Generate test matrices pages
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - main
     types: [closed]
@@ -20,7 +20,7 @@ permissions:
   contents: write
 jobs:
   generate-matrix:
-    if: github.event_name != 'pull_request' || (github.repository == 'rh-ecosystem-edge/nvidia-ci' && github.event.pull_request.merged == true)
+    if: github.event_name != 'pull_request_target' || (github.repository == 'rh-ecosystem-edge/nvidia-ci' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     env:
       DASHBOARD_OUTPUT_DIR: 'workflows/test_matrix_dashboard/output'
@@ -32,7 +32,7 @@ jobs:
         id: determine_pr
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
+          if [ "${{ github.event_name }}" == "pull_request_target" ]; then
               echo "Processing merged pull request."
               echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
           else
