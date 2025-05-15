@@ -2,6 +2,7 @@ package nfdcheck
 
 import (
 	"fmt"
+
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -9,11 +10,11 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 )
 
-func CheckNfdInstallation(apiClient *clients.Settings, label, labelValue string, workerLabelMap map[string]string, logLevel int) {
+func CheckNfdInstallation(apiClient *clients.Settings, label string, allowedLabelValues []string, workerLabelMap map[string]string, logLevel int) {
 	By(fmt.Sprintf("Check if NFD is installed using label: %s", label))
-	nfdLabelDetected, err := check.AllNodeLabel(apiClient, label, labelValue, workerLabelMap)
+	nfdLabelDetected, err := check.AllNodeLabel(apiClient, label, allowedLabelValues, workerLabelMap)
 	Expect(err).ToNot(HaveOccurred(), "error calling check.NodeLabel: %v", err)
-	Expect(nfdLabelDetected).NotTo(BeFalse(), "NFD node label check failed to match label %s and label value %s on all nodes", label, labelValue)
+	Expect(nfdLabelDetected).NotTo(BeFalse(), "NFD node label check failed to match label %s and label values %v on all nodes", label, allowedLabelValues)
 	glog.V(glog.Level(logLevel)).Infof("The check for NFD label returned: %v", nfdLabelDetected)
 
 	isNfdInstalled, err := check.NFDDeploymentsReady(apiClient)

@@ -2,6 +2,7 @@ package check
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/golang/glog"
@@ -20,7 +21,7 @@ const (
 )
 
 // AllNodeLabel checks if label is present on all nodes matching nodeSelector.
-func AllNodeLabel(apiClient *clients.Settings, nodeLabel, nodeLabelValue string,
+func AllNodeLabel(apiClient *clients.Settings, nodeLabel string, nodeLabelValues []string,
 	nodeSelector map[string]string) (bool, error) {
 	nodeBuilder, err := nodes.List(apiClient, v1.ListOptions{LabelSelector: labels.Set(nodeSelector).String()})
 
@@ -39,9 +40,9 @@ func AllNodeLabel(apiClient *clients.Settings, nodeLabel, nodeLabelValue string,
 	for _, node := range nodeBuilder {
 		labelValue := node.Object.Labels[nodeLabel]
 
-		if labelValue == nodeLabelValue {
-			glog.V(gpuparams.GpuLogLevel).Infof("Found label %v that contains %v with label value % s on "+
-				"node %v", nodeLabel, nodeLabel, nodeLabelValue, node.Object.Name)
+		if slices.Contains(nodeLabelValues, labelValue) {
+			glog.V(gpuparams.GpuLogLevel).Infof("Found label %v that contains %v with label value %s on "+
+				"node %v", nodeLabel, nodeLabel, labelValue, node.Object.Name)
 
 			foundLabels++
 			// if all nodes matching nodeSelector have this label with label value.
@@ -51,8 +52,8 @@ func AllNodeLabel(apiClient *clients.Settings, nodeLabel, nodeLabelValue string,
 		}
 	}
 
-	err = fmt.Errorf("not all (%v) nodes have the label '%s' with value '%s'", len(nodeBuilder),
-		nodeLabel, nodeLabelValue)
+	err = fmt.Errorf("not all (%v) nodes have the label '%s' with a value in '%v'", len(nodeBuilder),
+		nodeLabel, nodeLabelValues)
 
 	return false, err
 }

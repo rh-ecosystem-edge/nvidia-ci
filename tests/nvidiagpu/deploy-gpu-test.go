@@ -247,7 +247,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 		It("Deploy NVIDIA GPU Operator with DTK", Label("nvidia-ci:gpu"), func() {
 
-			nfdcheck.CheckNfdInstallation(inittools.APIClient, nfd.RhcosLabel, nfd.RhcosLabelValue, inittools.GeneralConfig.WorkerLabelMap, networkparams.LogLevel)
+			nfdcheck.CheckNfdInstallation(inittools.APIClient, nfd.OSLabel, nfd.GetAllowedOSLabels(), inittools.GeneralConfig.WorkerLabelMap, networkparams.LogLevel)
 
 			By("Check if at least one worker node is GPU enabled")
 			gpuNodeFound, _ := check.NodeWithLabel(inittools.APIClient, nvidiagpu.NvidiaGPULabel, inittools.GeneralConfig.WorkerLabelMap)

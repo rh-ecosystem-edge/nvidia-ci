@@ -2,11 +2,14 @@ package nfd
 
 import "time"
 
+func GetAllowedOSLabels() []string {
+	return []string{"rhcos", "rhel"}
+}
+
 const (
 	CustomNFDCatalogSourcePublisherName = "Red Hat"
 	CustomCatalogSourceDisplayName      = "Redhat Operators Custom"
-	RhcosLabel                          = "feature.node.kubernetes.io/system-os_release.ID"
-	RhcosLabelValue                     = "rhcos"
+	OSLabel                             = "feature.node.kubernetes.io/system-os_release.ID"
 	OperatorNamespace                   = "openshift-nfd"
 	CatalogSourceDefault                = "redhat-operators"
 	CatalogSourceNamespace              = "openshift-marketplace"

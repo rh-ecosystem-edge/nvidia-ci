@@ -458,7 +458,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 		It("Deploy NVIDIA Network Operator with DTK", Label("nno"), func() {
 
-			nfdcheck.CheckNfdInstallation(inittools.APIClient, nfd.RhcosLabel, nfd.RhcosLabelValue, inittools.GeneralConfig.WorkerLabelMap, networkparams.LogLevel)
+			nfdcheck.CheckNfdInstallation(inittools.APIClient, nfd.OSLabel, nfd.GetAllowedOSLabels(), inittools.GeneralConfig.WorkerLabelMap, networkparams.LogLevel)
 
 			By("Check if at least one worker node is has label for Mellanox cards enabled")
 			networkNodeFound, _ := check.NodeWithLabel(inittools.APIClient, nvidiaNetworkLabel,
