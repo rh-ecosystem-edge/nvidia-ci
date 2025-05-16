@@ -15,6 +15,10 @@ type NvidiaGPUConfig struct {
 	BundleImage                        string `envconfig:"NVIDIAGPU_BUNDLE_IMAGE"`
 	OperatorUpgradeToChannel           string `envconfig:"NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL"`
 	GPUFallbackCatalogsourceIndexImage string `envconfig:"NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"`
+	GPUDriverImage                     string `envconfig:"NVIDIAGPU_GPU_DRIVER_IMAGE"`
+	GPUDriverRepo                      string `envconfig:"NVIDIAGPU_GPU_DRIVER_REPO"`
+	GPUDriverVersion                   string `envconfig:"NVIDIAGPU_GPU_DRIVER_VERSION"`
+	GPUDriverEnableRDMA                bool   `envconfig:"NVIDIAGPU_GPU_DRIVER_ENABLE_RDMA" default:"false"`
 }
 
 // NewNvidiaGPUConfig returns an instance of NvidiaGPUConfig.

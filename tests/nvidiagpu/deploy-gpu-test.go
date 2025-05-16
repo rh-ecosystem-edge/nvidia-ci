@@ -86,6 +86,14 @@ var (
 	CurrentCSV                 = ""
 	CurrentCSVVersion          = ""
 	clusterArchitecture        = UndefinedValue
+
+	gpuDriverImage      = UndefinedValue
+	gpuDriverRepo       = UndefinedValue
+	gpuDriverVersion    = UndefinedValue
+	gpuDriverEnableRDMA = false
+
+	// Default behavior
+	updateGPUDriverSpec = false
 )
 
 var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
@@ -136,9 +144,11 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			cleanupAfterTest = nvidiaGPUConfig.CleanupAfterTest
 
 			if cleanupAfterTest {
-				glog.V(gpuparams.GpuLogLevel).Info("NVIDIAGPU_CLEANUP is not set or is set to true; cleaning up resources after test case execution.")
+				glog.V(gpuparams.GpuLogLevel).Info("NVIDIAGPU_CLEANUP is not set or is set to true; " +
+					"cleaning up resources after test case execution.")
 			} else {
-				glog.V(gpuparams.GpuLogLevel).Infof("NVIDIAGPU_CLEANUP is set to '%v'; skipping cleanup after test case execution.", cleanupAfterTest)
+				glog.V(gpuparams.GpuLogLevel).Infof("NVIDIAGPU_CLEANUP is set to '%v'; skipping cleanup "+
+					"after test case execution.", cleanupAfterTest)
 			}
 
 			if nvidiaGPUConfig.DeployFromBundle {
@@ -191,6 +201,46 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				glog.V(gpuparams.GpuLogLevel).Infof("Setting flag to create custom GPU operator catalogsource" +
 					" from fall back index image to False")
 				createGPUCustomCatalogsource = false
+			}
+
+			if nvidiaGPUConfig.GPUDriverImage != "" {
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_GPU_DRIVER_IMAGE is set, and has"+
+					" value: '%s'", nvidiaGPUConfig.GPUDriverImage)
+				gpuDriverImage = nvidiaGPUConfig.GPUDriverImage
+
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting internal flag to update GPU Driver spec" +
+					" in clusterpolicy to True")
+				updateGPUDriverSpec = true
+			}
+
+			if nvidiaGPUConfig.GPUDriverRepo != "" {
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_GPU_DRIVER_REPO is set, and has"+
+					" value: '%s'", nvidiaGPUConfig.GPUDriverRepo)
+				gpuDriverRepo = nvidiaGPUConfig.GPUDriverRepo
+
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting internal flag to update GPU Driver spec" +
+					" in clusterpolicy to True")
+				updateGPUDriverSpec = true
+			}
+
+			if nvidiaGPUConfig.GPUDriverVersion != "" {
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_GPU_DRIVER_VERSION is set, "+
+					"and has value: '%s'", nvidiaGPUConfig.GPUDriverVersion)
+				gpuDriverVersion = nvidiaGPUConfig.GPUDriverVersion
+
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting internal flag to update GPU Driver spec" +
+					" in clusterpolicy to True")
+				updateGPUDriverSpec = true
+			}
+
+			if nvidiaGPUConfig.GPUDriverEnableRDMA {
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_GPU_DRIVER_ENABLE_RDMA is set, "+
+					"and has value: '%v'", nvidiaGPUConfig.GPUDriverEnableRDMA)
+				gpuDriverEnableRDMA = nvidiaGPUConfig.GPUDriverEnableRDMA
+
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting internal flag to update GPU Driver spec" +
+					" in clusterpolicy to True")
+				updateGPUDriverSpec = true
 			}
 
 			if nfdConfig.FallbackCatalogSourceIndexImage != "" {
@@ -535,7 +585,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			By(fmt.Sprintf("Sleep for %s to allow the GPU Operator deployment to be created", nvidiagpu.OperatorDeploymentCreationDelay))
-			glog.V(gpuparams.GpuLogLevel).Infof("Sleep for %s to allow the GPU Operator deployment to be created", nvidiagpu.OperatorDeploymentCreationDelay)
+			glog.V(gpuparams.GpuLogLevel).Infof("Sleep for %s to allow the GPU Operator deployment to be "+
+				"created", nvidiagpu.OperatorDeploymentCreationDelay)
 			time.Sleep(nvidiagpu.OperatorDeploymentCreationDelay)
 
 			By(fmt.Sprintf("Wait for up to %s for GPU Operator deployment to be created", nvidiagpu.DeploymentCreationTimeout))
@@ -549,7 +600,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			Expect(gpuDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy GPU operator")
 
 			By("Check if the GPU operator deployment is ready")
-			gpuOperatorDeployment, err := deployment.Pull(inittools.APIClient, nvidiagpu.OperatorDeployment, nvidiagpu.NvidiaGPUNamespace)
+			gpuOperatorDeployment, err := deployment.Pull(inittools.APIClient, nvidiagpu.OperatorDeployment,
+				nvidiagpu.NvidiaGPUNamespace)
 
 			Expect(err).ToNot(HaveOccurred(), "Error trying to pull GPU operator "+
 				"deployment is: %v", err)
@@ -625,9 +677,48 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				"from cluster:  %v ", err)
 			glog.V(gpuparams.GpuLogLevel).Infof("almExamples block from clusterCSV  is : %v ", almExamples)
 
-			By("Deploy ClusterPolicy")
-			glog.V(gpuparams.GpuLogLevel).Infof("Creating ClusterPolicy from CSV almExamples")
+			By("Create ClusterPolicy Builder Object")
+			glog.V(gpuparams.GpuLogLevel).Infof("Creating ClusterPolicy builder object from CSV almExamples")
 			clusterPolicyBuilder := nvidiagpu.NewBuilderFromObjectString(inittools.APIClient, almExamples)
+
+			By("Check if driver Spec needs to be updated")
+			if updateGPUDriverSpec {
+				glog.V(gpuparams.GpuLogLevel).Infof("Updating ClusterPolicy object driver spec params")
+
+				if gpuDriverEnableRDMA {
+					glog.V(gpuparams.GpuLogLevel).Infof("Updating ClusterPolicy object driver param for RDMA "+
+						"enable to '%v'", gpuDriverEnableRDMA)
+
+					// Ensure GPUDirectRDMA element exists, otherwise initialize it
+					if clusterPolicyBuilder.Definition.Spec.Driver.GPUDirectRDMA == nil {
+						clusterPolicyBuilder.Definition.Spec.Driver.GPUDirectRDMA = &nvidiagpuv1.GPUDirectRDMASpec{}
+					}
+
+					// Now it's safe to set the Enabled field
+					clusterPolicyBuilder.Definition.Spec.Driver.GPUDirectRDMA.Enabled =
+						nvidiagpu.BoolPtr(gpuDriverEnableRDMA)
+				}
+
+				if gpuDriverImage != UndefinedValue {
+					glog.V(gpuparams.GpuLogLevel).Infof("Updating ClusterPolicy object driver image param "+
+						"to '%s'", gpuDriverImage)
+					clusterPolicyBuilder.Definition.Spec.Driver.Image = gpuDriverImage
+				}
+
+				if gpuDriverRepo != UndefinedValue {
+					glog.V(gpuparams.GpuLogLevel).Infof("Updating ClusterPolicy object driver repository "+
+						"param to '%s'", gpuDriverRepo)
+					clusterPolicyBuilder.Definition.Spec.Driver.Repository = gpuDriverRepo
+				}
+
+				if gpuDriverVersion != UndefinedValue {
+					glog.V(gpuparams.GpuLogLevel).Infof("Updating ClusterPolicy object driver version param "+
+						"to '%s'", gpuDriverVersion)
+					clusterPolicyBuilder.Definition.Spec.Driver.Version = gpuDriverVersion
+				}
+			}
+
+			glog.V(gpuparams.GpuLogLevel).Infof("Deploying ClusterPolicy object on cluster ")
 			createdClusterPolicyBuilder, err := clusterPolicyBuilder.Create()
 			Expect(err).ToNot(HaveOccurred(), "Error Creating ClusterPolicy from csv "+
 				"almExamples  %v ", err)
