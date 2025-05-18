@@ -24,7 +24,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DASHBOARD_OUTPUT_DIR: 'workflows/test_matrix_dashboard/output'
-      PREVIOUS_JSON_FILE: 'gpu_operator_matrix_old.json'
       CURRENT_JSON_FILE: 'gpu_operator_matrix.json'
       DASHBOARD_HTML_FILE: 'gpu_operator_matrix.html'
     steps:
@@ -49,10 +48,6 @@ jobs:
         with:
           ref: gh-pages
           path: ${{ env.DASHBOARD_OUTPUT_DIR }}
-
-      - name: Back up ${{ env.DASHBOARD_OUTPUT_DIR }}/${{ env.CURRENT_JSON_FILE }}
-        run: |
-          cp "${{ env.DASHBOARD_OUTPUT_DIR }}/${{ env.CURRENT_JSON_FILE }}" "${{ env.DASHBOARD_OUTPUT_DIR }}/${{ env.PREVIOUS_JSON_FILE }}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
