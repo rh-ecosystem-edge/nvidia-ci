@@ -24,9 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DASHBOARD_OUTPUT_DIR: 'workflows/test_matrix_dashboard/output'
-      CURRENT_JSON_FILE: 'gpu_operator_matrix.json'
-      DASHBOARD_HTML_FILE: 'gpu_operator_matrix.html'
     steps:
+      - name: Set dynamic env vars
+        run: |
+          echo "DASHBOARD_DATA_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.json" >> "$GITHUB_ENV"
+          echo "DASHBOARD_HTML_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.html" >> "$GITHUB_ENV"
+        env:
+          DASHBOARD_OUTPUT_DIR: ${{ env.DASHBOARD_OUTPUT_DIR }}
       - name: Determine PR Number
         id: determine_pr
         shell: bash
@@ -58,15 +62,26 @@ jobs:
         run: |
           pip install -r workflows/dashboard_requirements.txt
 
-      - name: Run Dashboard Generation Script
+      - name: Fetch CI Data
         run: |
           echo "Processing PR: ${{ steps.determine_pr.outputs.PR_NUMBER }}"
-          python workflows/generate_ci_dashboard.py \
+          python workflows/fetch_ci_data.py \
             --pr_number "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
-            --baseline_data_file "${{ env.CURRENT_JSON_FILE }}" \
-            --merged_data_file "${{ env.CURRENT_JSON_FILE }}" \
-            --dashboard_file "${{ env.DASHBOARD_HTML_FILE }}" \
-            --output_dir "${{ env.DASHBOARD_OUTPUT_DIR }}"
+            --baseline_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
+            --merged_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}"
+
+
+      - name: Generate HTML Dashboard (only if JSON changed)
+        run: |
+          cd "${{ env.DASHBOARD_OUTPUT_DIR }}"
+          if git diff --exit-code gpu_operator_matrix.json; then
+            echo "no changes"
+          else
+            cd "${{ github.workspace }}"
+            python workflows/generate_ci_dashboard.py \
+              --dashboard_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
+              --dashboard_html_filepath "${{ env.DASHBOARD_HTML_FILEPATH }}"
+          fi
 
       - name: Deploy HTML to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
