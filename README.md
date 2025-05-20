@@ -78,6 +78,8 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 - `NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL`: specific subscription channel to upgrade to from previous version.  _required when running operator-upgrade testcase_
 - `NVIDIAGPU_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_
 - `NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - _required when deploying fallback custom GPU catalogsource_
+- `NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH`: a JSON patch to apply to a default cluster policy from ALM examples, written according to
+   [RFC 6902](http://tools.ietf.org/html/rfc6902) (also see [kubectl patch](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_patch/)) - _optional_
 - `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
 
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
@@ -89,18 +91,18 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_
 - `NVIDIANETWORK_NNO_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - _required when deploying fallback custom NNO catalogsource_
 - `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
-- `NVIDIANETWORK_OFED_DRIVER_VERSION`: OFED Driver Version.  If not specified, the default driver version is used - _optional_    
-- `NVIDIANETWORK_OFED_REPOSITORY`:  OFED Driver Repository.   If not specified, the default repository is used - _optional_            
+- `NVIDIANETWORK_OFED_DRIVER_VERSION`: OFED Driver Version.  If not specified, the default driver version is used - _optional_
+- `NVIDIANETWORK_OFED_REPOSITORY`:  OFED Driver Repository.   If not specified, the default repository is used - _optional_
 - `NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE`:  RDMA workload pod namespace - _required_
 - `NVIDIANETWORK_RDMA_LINK_TYPE` Layer 2 link type, Infinband or Ethernet - _required_
-- `NVIDIANETWORK_RDMA_MLX_DEVICE:` mlx5 device ID corresponding to the interface port connected to Spectrum or Infiniband switch - _required_
-- `NVIDIANETWORK_RDMA_CLIENT_HOSTNAME:` RDMA Client hostname of first worker node for ib_write_bw test - _required when running the RDMA testcase_ 
-- `NVIDIANETWORK_RDMA_SERVER_HOSTNAME:` RDMA Server hostname of second worker node for ib_write_bw test - _required when running the RDMA testcase_   
-- `NVIDIANETWORK_RDMA_TEST_IMAGE:` RDMA Test Container Image that runs the entrypoint.sh script with optional arguments specified in the pod spec.  This container will clone the "https://github.com/linux-rdma/perftest" repo and builds the ib_write_bw binaries with or without cuda headers.  It will also run the ib_write_bw command with arguments either in CLient or Server mode.  Defaults to "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.2" - _optional_
-- `NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME`: Mellanox Ethernet Interface Name - Defaults to "ens8f0np0" if not specified - _optional_  
-- `NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME`:  Mellanox Infiniband Interface Name - Defaults to "ens8f0np0" if not specified - _optional_   
-- `NVIDIANETWORK_MACVLANNETWORK_NAME`: MacvlanNetwork Custom Resource instance name  - Defaults to name from Cluster Service Version alm-examples section if not specified  - _optional_ 
-- `NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE`: MacvlanNetwork Custom Resource instance IPAM or IP Address/Subnet mask range for Eth or IB interface - _required_    
+- `NVIDIANETWORK_RDMA_MLX_DEVICE`: mlx5 device ID corresponding to the interface port connected to Spectrum or Infiniband switch - _required_
+- `NVIDIANETWORK_RDMA_CLIENT_HOSTNAME`: RDMA Client hostname of first worker node for ib_write_bw test - _required when running the RDMA testcase_
+- `NVIDIANETWORK_RDMA_SERVER_HOSTNAME`: RDMA Server hostname of second worker node for ib_write_bw test - _required when running the RDMA testcase_
+- `NVIDIANETWORK_RDMA_TEST_IMAGE`: RDMA Test Container Image that runs the entrypoint.sh script with optional arguments specified in the pod spec.  This container will clone the "https://github.com/linux-rdma/perftest" repo and builds the ib_write_bw binaries with or without cuda headers.  It will also run the ib_write_bw command with arguments either in CLient or Server mode.  Defaults to "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.2" - _optional_
+- `NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME`: Mellanox Ethernet Interface Name - Defaults to "ens8f0np0" if not specified - _optional_
+- `NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME`:  Mellanox Infiniband Interface Name - Defaults to "ens8f0np0" if not specified - _optional_
+- `NVIDIANETWORK_MACVLANNETWORK_NAME`: MacvlanNetwork Custom Resource instance name  - Defaults to name from Cluster Service Version alm-examples section if not specified  - _optional_
+- `NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE`: MacvlanNetwork Custom Resource instance IPAM or IP Address/Subnet mask range for Eth or IB interface - _required_
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - _required_
 
 ### Testing MPS with GPU Operator

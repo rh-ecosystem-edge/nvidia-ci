@@ -6,6 +6,7 @@ require (
 	github.com/Mellanox/network-operator v1.4.0
 	github.com/NVIDIA/gpu-operator v1.8.3-0.20240924212236-e4f1f5d26c11
 	github.com/NVIDIA/k8s-operator-libs v0.0.0-20240826221728-249ba446fa35
+	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/golang/glog v1.2.4
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo/v2 v2.22.2
@@ -39,7 +40,6 @@ require (
 	github.com/containernetworking/cni v1.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.12.1 // indirect
-	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect

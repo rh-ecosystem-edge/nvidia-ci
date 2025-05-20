@@ -3,14 +3,17 @@ package nvidiagpu
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/msg"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/json"
+	k8sjson "k8s.io/apimachinery/pkg/util/json"
 	goclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -30,14 +33,49 @@ type Builder struct {
 
 // NewBuilderFromObjectString creates a Builder object from CSV alm-examples.
 func NewBuilderFromObjectString(apiClient *clients.Settings, almExample string) *Builder {
-	glog.V(100).Infof(
-		"Initializing new Builder structure from almExample string")
+	glog.V(100).Infof("Initializing new Builder structure from almExample string")
+	var clusterPolicy nvidiagpuv1.ClusterPolicy
+	clusterPolicyExample, err := olm.GetALMExampleItem(0, almExample)
+	if err != nil {
+		return newBuilder(apiClient, &clusterPolicy, err)
+	}
 
-	clusterPolicy, err := getClusterPolicyFromAlmExample(almExample)
+	err = k8sjson.Unmarshal(clusterPolicyExample, &clusterPolicy)
+	return newBuilder(apiClient, &clusterPolicy, err)
+}
 
+// NewBuilderFromObjectStringAndPatch creates a Builder object from CSV alm-examples and applies an RFC6902 JSON patch to it.
+func NewBuilderFromObjectStringAndPatch(apiClient *clients.Settings, almExample, patchJSON string) *Builder {
+	glog.V(100).Infof("Initializing new Builder structure from almExample string and a patch JSON")
+	var clusterPolicy nvidiagpuv1.ClusterPolicy
+	if strings.TrimSpace(patchJSON) == "" {
+		err := fmt.Errorf("patch JSON cannot be an empty string")
+		return newBuilder(apiClient, &clusterPolicy, err)
+	}
+
+	clusterPolicyExample, err := olm.GetALMExampleItem(0, almExample)
+	if err != nil {
+		return newBuilder(apiClient, &clusterPolicy, err)
+	}
+
+	patch, err := jsonpatch.DecodePatch([]byte(patchJSON))
+	if err != nil {
+		return newBuilder(apiClient, &clusterPolicy, fmt.Errorf("invalid JSON patch: %w", err))
+	}
+
+	glog.V(100).Infof("Applying patch to the default cluster policy")
+	modifiedExample, err := patch.Apply(clusterPolicyExample)
+	if err != nil {
+		return newBuilder(apiClient, &clusterPolicy, err)
+	}
+
+	err = k8sjson.Unmarshal(modifiedExample, &clusterPolicy)
+	return newBuilder(apiClient, &clusterPolicy, err)
+}
+
+func newBuilder(apiClient *clients.Settings, clusterPolicy *nvidiagpuv1.ClusterPolicy, err error) *Builder {
 	glog.V(100).Infof(
-		"Initializing new Builder structure from almExample string with clusterPolicy name: %s",
-		clusterPolicy.Name)
+		"Initializing new Builder structure with clusterPolicy name: %s", clusterPolicy.Name)
 
 	builder := Builder{
 		apiClient:  apiClient,
@@ -202,27 +240,6 @@ func (builder *Builder) Update(force bool) (*Builder, error) {
 	}
 
 	return builder, err
-}
-
-// getClusterPolicyFromAlmExample extracts the ClusterPolicy from the alm-examples block.
-func getClusterPolicyFromAlmExample(almExample string) (*nvidiagpuv1.ClusterPolicy, error) {
-	clusterPolicyList := &nvidiagpuv1.ClusterPolicyList{}
-
-	if almExample == "" {
-		return nil, fmt.Errorf("almExample is an empty string")
-	}
-
-	err := json.Unmarshal([]byte(almExample), &clusterPolicyList.Items)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(clusterPolicyList.Items) == 0 {
-		return nil, fmt.Errorf("failed to get alm examples")
-	}
-
-	return &clusterPolicyList.Items[0], nil
 }
 
 // validate will check that the builder and builder definition are properly initialized before

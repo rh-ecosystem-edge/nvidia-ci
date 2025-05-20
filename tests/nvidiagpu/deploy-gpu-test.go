@@ -133,6 +133,14 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					"NVIDIAGPU_SUBSCRIPTION_CHANNEL value '%s'", SubscriptionChannel)
 			}
 
+			if nvidiaGPUConfig.ClusterPolicyPatch == "" {
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH" +
+					" is not set, will deploy default ClusterPolicy")
+			} else {
+				glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy patch env variable NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH"+
+					" is set to '%s'", nvidiaGPUConfig.ClusterPolicyPatch)
+			}
+
 			cleanupAfterTest = nvidiaGPUConfig.CleanupAfterTest
 
 			if cleanupAfterTest {
@@ -626,8 +634,16 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("almExamples block from clusterCSV  is : %v ", almExamples)
 
 			By("Deploy ClusterPolicy")
-			glog.V(gpuparams.GpuLogLevel).Infof("Creating ClusterPolicy from CSV almExamples")
-			clusterPolicyBuilder := nvidiagpu.NewBuilderFromObjectString(inittools.APIClient, almExamples)
+
+			var clusterPolicyBuilder *nvidiagpu.Builder
+			if nvidiaGPUConfig.ClusterPolicyPatch == "" {
+				glog.V(gpuparams.GpuLogLevel).Infof("Creating default ClusterPolicy from CSV almExamples without modifications")
+				clusterPolicyBuilder = nvidiagpu.NewBuilderFromObjectString(inittools.APIClient, almExamples)
+			} else {
+				glog.V(gpuparams.GpuLogLevel).Infof("Creating default ClusterPolicy from CSV almExamples and aplying a patch")
+				clusterPolicyBuilder = nvidiagpu.NewBuilderFromObjectStringAndPatch(inittools.APIClient, almExamples, nvidiaGPUConfig.ClusterPolicyPatch)
+			}
+
 			createdClusterPolicyBuilder, err := clusterPolicyBuilder.Create()
 			Expect(err).ToNot(HaveOccurred(), "Error Creating ClusterPolicy from csv "+
 				"almExamples  %v ", err)
