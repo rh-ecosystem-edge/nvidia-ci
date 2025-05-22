@@ -225,6 +225,11 @@ func getClusterPolicyFromAlmExample(almExample string) (*nvidiagpuv1.ClusterPoli
 	return &clusterPolicyList.Items[0], nil
 }
 
+// BoolPtr returns a pointer to bool true or false
+func BoolPtr(b bool) *bool {
+	return &b
+}
+
 // validate will check that the builder and builder definition are properly initialized before
 // accessing any member fields.
 func (builder *Builder) validate() (bool, error) {

@@ -79,6 +79,11 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 - `NVIDIAGPU_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_
 - `NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - _required when deploying fallback custom GPU catalogsource_
 - `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
+- `NVIDIAGPU_GPU_DRIVER_IMAGE`: specific GPU driver image specified in clusterPolicy - _optional_
+- `NVIDIAGPU_GPU_DRIVER_REPO`: specific GPU driver image repository specified in clusterPolicy - _optional_
+- `NVIDIAGPU_GPU_DRIVER_VERSION`: specific GPU driver version specified in clusterPolicy - _optional_
+- `NVIDIAGPU_GPU_DRIVER_ENABLE_RDMA`: option to enable GPUDirect RDMA in clusterpolicy.  Default value is false - _optional_
+
 
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
 - `NVIDIANETWORK_CATALOGSOURCE`: custom catalogsource to be used.  If not specified, the default "certified-operators" catalog is used - _optional_
@@ -162,6 +167,13 @@ $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE="g4dn.xlarge"
 $ export NVIDIAGPU_CATALOGSOURCE="certified-operators"
 $ export NVIDIAGPU_SUBSCRIPTION_CHANNEL="v23.9"
+# Optional variables are commented below, used as needed:
+# export NVIDIAGPU_GPU_DRIVER_IMAGE="driver" 
+# export NVIDIAGPU_GPU_DRIVER_REPO="nvcr.io/nvidia"
+# for OCP 4.12
+# export NVIDIAGPU_GPU_DRIVER_VERSION="570.130.20"
+# export NVIDIAGPU_GPU_DRIVER_ENABLE_RDMA=true
+
 $ make run-tests
 Executing nvidiagpu test-runner script
 scripts/test-runner.sh
