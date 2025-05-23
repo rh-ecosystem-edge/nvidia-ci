@@ -58,12 +58,30 @@ jobs:
         run: |
           pip install -r workflows/dashboard_requirements.txt
 
-      - name: Run Dashboard Generation Script
+      - name: Fetch CI Data
         run: |
           echo "Processing PR: ${{ steps.determine_pr.outputs.PR_NUMBER }}"
-          python workflows/generate_ci_dashboard.py \
+          python workflows/fetch_ci_data.py \
             --pr_number "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
             --baseline_data_file "${{ env.CURRENT_JSON_FILE }}" \
+            --merged_data_file "${{ env.CURRENT_JSON_FILE }}" \
+            --dashboard_file "${{ env.DASHBOARD_HTML_FILE }}" \
+            --output_dir "${{ env.DASHBOARD_OUTPUT_DIR }}"
+
+      - name: Check if JSON file changed
+        id: json_diff_check
+        run: |
+          JSON_PATH="${{ env.DASHBOARD_OUTPUT_DIR }}/${{ env.CURRENT_JSON_FILE }}"
+          if grep -q '^{[[:space:]]*}$' "$JSON_PATH"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate HTML Dashboard (only if JSON changed)
+        if: steps.json_diff_check.outputs.changed == 'true'
+        run: |
+          python workflows/generate_ci_dashboard.py \
             --merged_data_file "${{ env.CURRENT_JSON_FILE }}" \
             --dashboard_file "${{ env.DASHBOARD_HTML_FILE }}" \
             --output_dir "${{ env.DASHBOARD_OUTPUT_DIR }}"
