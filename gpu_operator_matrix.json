@@ -239,6 +239,20 @@
             "test_status": "SUCCESS",
             "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/162/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.12-stable-nvidia-gpu-operator-e2e-25-3-x/1918133410425999360",
             "job_timestamp": 1746158467
+        },
+        {
+            "ocp_full_version": "4.12.77",
+            "gpu_operator_version": "24.9.2",
+            "test_status": "SUCCESS",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/185/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.12-stable-nvidia-gpu-operator-e2e-24-9-x/1928296519249694720",
+            "job_timestamp": 1748581913
+        },
+        {
+            "ocp_full_version": "4.12.77",
+            "gpu_operator_version": "25.3.0",
+            "test_status": "SUCCESS",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/185/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.12-stable-nvidia-gpu-operator-e2e-25-3-x/1928329630163406848",
+            "job_timestamp": 1748589759
         }
     ],
     "4.17": [
@@ -423,6 +437,20 @@
             "test_status": "SUCCESS",
             "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/184/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-25-3-x/1925725054448963584",
             "job_timestamp": 1747969617
+        },
+        {
+            "ocp_full_version": "4.17.32",
+            "gpu_operator_version": "24.9.2",
+            "test_status": "SUCCESS",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/185/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-24-9-x/1928296519400689664",
+            "job_timestamp": 1748582765
+        },
+        {
+            "ocp_full_version": "4.17.32",
+            "gpu_operator_version": "25.3.0",
+            "test_status": "SUCCESS",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/185/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.17-stable-nvidia-gpu-operator-e2e-25-3-x/1928296519446827008",
+            "job_timestamp": 1748581927
         }
     ],
     "4.18": [
@@ -775,6 +803,20 @@
             "test_status": "SUCCESS",
             "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/184/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-25-3-x/1925725054553821184",
             "job_timestamp": 1747969708
+        },
+        {
+            "ocp_full_version": "4.18.16",
+            "gpu_operator_version": "24.9.2",
+            "test_status": "SUCCESS",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/185/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-24-9-x/1928296519488770048",
+            "job_timestamp": 1748582493
+        },
+        {
+            "ocp_full_version": "4.18.16",
+            "gpu_operator_version": "25.3.0",
+            "test_status": "SUCCESS",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/185/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-25-3-x/1928296519530713088",
+            "job_timestamp": 1748582693
         }
     ],
     "4.16": [
@@ -954,6 +996,20 @@
             "test_status": "SUCCESS",
             "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/177/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.15-stable-nvidia-gpu-operator-e2e-25-3-x/1923595955135844352",
             "job_timestamp": 1747461841
+        },
+        {
+            "ocp_full_version": "4.15.52",
+            "gpu_operator_version": "24.9.2",
+            "test_status": "SUCCESS",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/185/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.15-stable-nvidia-gpu-operator-e2e-24-9-x/1928296519320997888",
+            "job_timestamp": 1748582187
+        },
+        {
+            "ocp_full_version": "4.15.52",
+            "gpu_operator_version": "25.3.0",
+            "test_status": "SUCCESS",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/185/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.15-stable-nvidia-gpu-operator-e2e-25-3-x/1928296519362940928",
+            "job_timestamp": 1748582397
         }
     ],
     "4.13": [
@@ -1133,6 +1189,20 @@
             "test_status": "SUCCESS",
             "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/183/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.19-stable-nvidia-gpu-operator-e2e-25-3-x/1925405389029904384",
             "job_timestamp": 1747893430
+        },
+        {
+            "ocp_full_version": "4.19.0",
+            "gpu_operator_version": "24.9.2",
+            "test_status": "SUCCESS",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/185/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.19-stable-nvidia-gpu-operator-e2e-24-9-x/1928296520742866944",
+            "job_timestamp": 1748582673
+        },
+        {
+            "ocp_full_version": "4.19.0",
+            "gpu_operator_version": "25.3.0",
+            "test_status": "SUCCESS",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/185/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.19-stable-nvidia-gpu-operator-e2e-25-3-x/1928296527453753344",
+            "job_timestamp": 1748582683
         }
     ]
 }
