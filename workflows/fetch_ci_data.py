@@ -175,18 +175,19 @@ def process_closed_prs(results_by_ocp: Dict[str, List[Dict[str, Any]]]) -> None:
 def merge_and_save_results(
     new_results: Dict[str, List[Dict[str, Any]]],
     output_file: str,
-    existing_results: Dict[str, List[Dict[str, Any]]] = None
+    existing_results: Dict[str, Dict[str, Any]] = None
 ) -> None:
     file_path = output_file
     logger.info(f"Saving JSON to {file_path}")
     merged_results = existing_results.copy() if existing_results else {}
     for key, new_values in new_results.items():
-        merged_results.setdefault(key, [])
-        seen_keys = set(TestResult(**item).composite_key() for item in merged_results[key])
+        merged_results.setdefault(key, {"notes": [], "tests": []})
+        merged_results[key].setdefault("tests", [])
+        seen_keys = set(TestResult(**item).composite_key() for item in merged_results[key]["tests"])
         for item in new_values:
             key_instance = TestResult(**item).composite_key()
             if key_instance not in seen_keys:
-                merged_results[key].append(item)
+                merged_results[key]["tests"].append(item)
                 seen_keys.add(key_instance)
     with open(file_path, "w") as f:
         json.dump(merged_results, f, indent=4)
@@ -208,7 +209,7 @@ def main() -> None:
 
     # Update JSON data.
     with open(args.baseline_data_filepath, "r") as f:
-        existing_results: Dict[str, List[Dict[str, Any]]] = json.load(f)
+        existing_results: Dict[str, Dict[str, Any]] = json.load(f)
     logger.info(f"Loaded baseline data from: {args.baseline_data_filepath} with keys: {list(existing_results.keys())}")
 
     local_results: Dict[str, List[Dict[str, Any]]] = {}

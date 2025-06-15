@@ -16,6 +16,11 @@ on:
         description: 'PR number to process (must be specified as a number or "all")'
         required: true
         type: string
+      gh_pages_branch:
+        description: 'GitHub pages branch to update'
+        default: 'gh-pages'
+        required: false
+        type: string
 permissions:
   contents: write
 jobs:
@@ -29,6 +34,7 @@ jobs:
         run: |
           echo "DASHBOARD_DATA_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.json" >> "$GITHUB_ENV"
           echo "DASHBOARD_HTML_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.html" >> "$GITHUB_ENV"
+          echo "GH_PAGES_BRANCH=${{ github.event.inputs.gh_pages_branch || 'gh-pages' }}" >> "$GITHUB_ENV"
         env:
           DASHBOARD_OUTPUT_DIR: ${{ env.DASHBOARD_OUTPUT_DIR }}
       - name: Determine PR Number
@@ -50,7 +56,7 @@ jobs:
       - name: Checkout GitHub Pages
         uses: actions/checkout@v4
         with:
-          ref: gh-pages
+          ref: ${{ env.GH_PAGES_BRANCH }}
           path: ${{ env.DASHBOARD_OUTPUT_DIR }}
 
       - name: Set up Python
@@ -86,7 +92,7 @@ jobs:
       - name: Deploy HTML to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          branch: gh-pages
+          branch: ${{ env.GH_PAGES_BRANCH }}
           folder: ${{ env.DASHBOARD_OUTPUT_DIR }}
           clean: false
           force: false

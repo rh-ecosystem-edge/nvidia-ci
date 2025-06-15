@@ -32,7 +32,8 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
     main_table_template = load_template("main_table.html")
     sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
     for ocp_key in sorted_ocp_keys:
-        results = ocp_data[ocp_key]
+        notes = ocp_data[ocp_key].get("notes")
+        results = ocp_data[ocp_key]["tests"]
         regular_results = [
             r for r in results
             if ("bundle" not in r["gpu_operator_version"].lower())
@@ -40,12 +41,14 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
                and (r.get("test_status") == "SUCCESS")
         ]
         bundle_results = [r for r in results if r not in regular_results]
+        notes_html = build_notes(notes)
         table_rows_html = build_catalog_table_rows(regular_results)
         bundle_info_html = build_bundle_info(bundle_results)
         table_block = main_table_template
         table_block = table_block.replace("{ocp_key}", ocp_key)
         table_block = table_block.replace("{table_rows}", table_rows_html)
         table_block = table_block.replace("{bundle_info}", bundle_info_html)
+        table_block = table_block.replace("{notes}", notes_html)
         html_content += table_block
 
     footer_template = load_template("footer.html")
@@ -105,6 +108,22 @@ def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
 
     return rows_html
 
+def build_notes(notes: List[str]) -> str:
+    """
+    Build a HTML snipped with manual notes for an OCP version
+    """
+    if not notes:
+        return ""
+
+    items = "\n".join(f'<li class="note-item">{n}</li>' for n in notes)
+    return f"""
+  <div class="section-label">Notes</div>
+  <div class="note-items">
+    <ul>
+      {items}
+    </ul>
+  </div>
+    """
 
 def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
     """
@@ -117,7 +136,7 @@ def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
     leftmost_bundle = sorted_bundles[0]
     last_bundle_date = datetime.fromtimestamp(int(leftmost_bundle["job_timestamp"]), timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     bundle_html = f"""
-  <div style="margin-top: 20px; font-size: 0.9em; color: #009688; padding: 10px; border-radius: 4px;">
+  <div class="section-label">
     <strong>From main branch (OLM bundle)</strong>
   </div>
   <div class="history-bar" style="opacity: 0.7;">
