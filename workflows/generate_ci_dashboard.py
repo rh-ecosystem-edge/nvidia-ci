@@ -28,9 +28,9 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
     """
     header_template = load_template("header.html")
     html_content = header_template
-
     main_table_template = load_template("main_table.html")
     sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
+    html_content += build_toc(sorted_ocp_keys)
     for ocp_key in sorted_ocp_keys:
         notes = ocp_data[ocp_key].get("notes")
         results = ocp_data[ocp_key]["tests"]
@@ -123,6 +123,18 @@ def build_notes(notes: List[str]) -> str:
       {items}
     </ul>
   </div>
+    """
+
+def build_toc(ocp_keys: List[str]) -> str:
+    """
+    Build a TOC of OpenShift versions
+    """
+    toc_links = ", ".join(f'<a href="#ocp-{ocp_version}">{ocp_version}</a>' for ocp_version in ocp_keys)
+    return f"""
+<div class="toc">
+    <div class="ocp-version-header">OpenShift Versions</div>
+    {toc_links}
+</div>
     """
 
 def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
