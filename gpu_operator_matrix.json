@@ -288,6 +288,13 @@
             "test_status": "FAILURE",
             "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/193/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.12-stable-nvidia-gpu-operator-e2e-25-3-x/1933619943803195392",
             "job_timestamp": 1749850569
+        },
+        {
+            "ocp_full_version": "4.12.77",
+            "gpu_operator_version": "25.3.1",
+            "test_status": "SUCCESS",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_release/66091/rehearse-66091-pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.12-stable-nvidia-gpu-operator-e2e-25-3-x/1933946676385419264",
+            "job_timestamp": 1749923798
         }
     ],
     "4.17": [
