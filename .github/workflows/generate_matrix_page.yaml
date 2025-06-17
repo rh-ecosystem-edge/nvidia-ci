@@ -80,7 +80,7 @@ jobs:
       - name: Generate HTML Dashboard (only if JSON changed)
         run: |
           cd "${{ env.DASHBOARD_OUTPUT_DIR }}"
-          if git diff --exit-code gpu_operator_matrix.json; then
+          if [[ ${{ github.event_name }} == "pull_request_target" ]] && git diff --exit-code gpu_operator_matrix.json; then
             echo "no changes"
           else
             cd "${{ github.workspace }}"
