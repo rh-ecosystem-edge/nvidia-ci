@@ -35,7 +35,7 @@ h2 {
     color: #666;
 }
 
-.ocp-version-container {
+.ocp-version-container, .toc {
     margin-bottom: 40px;
     padding: 20px;
     background-color: #fff;
