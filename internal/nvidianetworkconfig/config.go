@@ -21,6 +21,9 @@ type NvidiaNetworkConfig struct {
 	RdmaServerHostname                 string `envconfig:"NVIDIANETWORK_RDMA_SERVER_HOSTNAME"`
 	RdmaTestImage                      string `envconfig:"NVIDIANETWORK_RDMA_TEST_IMAGE"`
 	RdmaMlxDevice                      string `envconfig:"NVIDIANETWORK_RDMA_MLX_DEVICE"`
+	RdmaNetworkType                    string `envconfig:"NVIDIANETWORK_RDMA_NETWORK_TYPE"`
+	RdmaGPUDirect                      bool   `envconfig:"NVIDIANETWORK_RDMA_GPUDIRECT"`
+	SriovNetworkName                   string `envconfig:"NVIDIANETWORK_RDMA_SRIOV_NETWORK_NAME"`
 	MellanoxEthernetInterfaceName      string `envconfig:"NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME"`
 	MellanoxInfinibandInterfaceName    string `envconfig:"NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME"`
 	MacvlanNetworkName                 string `envconfig:"NVIDIANETWORK_MACVLANNETWORK_NAME"`

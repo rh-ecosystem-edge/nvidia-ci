@@ -30,12 +30,18 @@ var (
 	}
 )
 
+const (
+	RdmaLegacySriovResourceName corev1.ResourceName = "openshift.io/sriovlegacy"
+	gpuResourceName             corev1.ResourceName = "nvidia.com/gpu"
+)
+
 // CreateRdmaWorkloadPod create RDMA worker pod.
 func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, crName,
-	image, linkType, serverIP string) *corev1.Pod {
+	image, linkType, serverIP string, rdmaNetworkType string) *corev1.Pod {
 
 	var (
-		args []string
+		args          []string
+		rdmaResources corev1.ResourceRequirements
 	)
 
 	if mode == "server" {
@@ -43,6 +49,56 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 	} else {
 		args = []string{"-c", withCuda, "-m", mode, "-n", "net1", "-d", device, "-i", serverIP}
 	}
+
+	if rdmaNetworkType == "sriov" {
+
+		if withCuda == "yes" {
+			rdmaResources = corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					gpuResourceName:             resource.MustParse("1"),
+					RdmaLegacySriovResourceName: resource.MustParse("1"),
+				},
+				Requests: corev1.ResourceList{
+					gpuResourceName:             resource.MustParse("1"),
+					RdmaLegacySriovResourceName: resource.MustParse("1"),
+				},
+			}
+		} else {
+			rdmaResources = corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					RdmaLegacySriovResourceName: resource.MustParse("1"),
+				},
+				Requests: corev1.ResourceList{
+					RdmaLegacySriovResourceName: resource.MustParse("1"),
+				},
+			}
+		}
+
+	} else if rdmaNetworkType == "shared-device" || rdmaNetworkType == "undefined" {
+
+		if withCuda == "yes" {
+			rdmaResources = corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					gpuResourceName:                        resource.MustParse("1"),
+					RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
+				},
+				Requests: corev1.ResourceList{
+					gpuResourceName:                        resource.MustParse("1"),
+					RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
+				},
+			}
+		} else {
+			rdmaResources = corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
+				},
+				Requests: corev1.ResourceList{
+					RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
+				},
+			}
+		}
+	}
+	// Add case for HostDevice in future
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -70,14 +126,7 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 							Add: []corev1.Capability{"IPC_LOCK"},
 						},
 					},
-					Resources: corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
-						},
-						Requests: corev1.ResourceList{
-							RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
-						},
-					},
+					Resources: rdmaResources,
 				},
 			},
 		},
@@ -89,6 +138,10 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 func boolPtr(b bool) *bool {
 	return &b
 }
+func ptrInt64(i int64) *int64 {
+	return &i
+}
+
 func ptrInt64(i int64) *int64 {
 	return &i
 }

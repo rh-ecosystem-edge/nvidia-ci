@@ -61,12 +61,14 @@ var (
 	createNNOCustomCatalogsource  bool = false
 	CustomCatalogsourceIndexImage      = UndefinedValue
 
-	rdmaWorkloadNamespace = UndefinedValue
-	rdmaLinkType          = UndefinedValue
-	rdmaMlxDevice         = UndefinedValue
-	rdmaClientHostname    = UndefinedValue
-	rdmaServerHostname    = UndefinedValue
-	rdmaTestImage         = UndefinedValue
+	rdmaWorkloadNamespace      = UndefinedValue
+	rdmaLinkType               = UndefinedValue
+	rdmaMlxDevice              = UndefinedValue
+	rdmaClientHostname         = UndefinedValue
+	rdmaServerHostname         = UndefinedValue
+	rdmaTestImage              = UndefinedValue
+	rdmaNetworkType            = "shared-device"
+	rdmaGPUDirect         bool = false
 
 	mellanoxEthernetInterfaceName   = UndefinedValue
 	mellanoxInfinibandInterfaceName = UndefinedValue
@@ -82,6 +84,8 @@ var (
 
 	ofedDriverVersion    = UndefinedValue
 	ofedDriverRepository = UndefinedValue
+
+	sriovNetworkName = UndefinedValue
 )
 
 const (
@@ -102,7 +106,7 @@ const (
 	nnoCustomCatalogSourcePublisherName = "Red Hat"
 	nnoCustomCatalogSourceDisplayName   = "Certified Operators Custom"
 
-	rdmaTestImageDefault                   = "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.2"
+	rdmaTestImageDefault                   = "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.3"
 	mellanoxEthernetInterfaceNameDefault   = "ens1f0np0"
 	mellanoxInfinibandInterfaceNameDefault = "ibs1f1"
 )
@@ -259,6 +263,18 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					"NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP2 value '%s'", ipoibNetworkIPAMExcludeIP2)
 			}
 
+			if nvidiaNetworkConfig.SriovNetworkName == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_SRIOV_NETWORK_NAME" +
+					" is not set, skipping test case execution")
+				glog.V(networkparams.LogLevel).Infof("Skipping testcase:  env variable " +
+					"NVIDIANETWORK_RDMA_SRIOV_NETWORK_NAME is not set")
+				Skip("env variable NVIDIANETWORK_RDMA_SRIOV_NETWORK_NAME is not set")
+			} else {
+				sriovNetworkName = nvidiaNetworkConfig.SriovNetworkName
+				glog.V(networkparams.LogLevel).Infof("SRIOV Network Name is set to env variable "+
+					"NVIDIANETWORK_RDMA_SRIOV_NETWORK_NAME value '%s'", sriovNetworkName)
+			}
+
 			if nvidiaNetworkConfig.RdmaClientHostname == "" {
 				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_CLIENT_HOSTNAME" +
 					" is not set skipping test case execution")
@@ -327,6 +343,30 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				rdmaMlxDevice = nvidiaNetworkConfig.RdmaMlxDevice
 				glog.V(networkparams.LogLevel).Infof("rdmaMlxDevice is set to env variable "+
 					"NVIDIANETWORK_RDMA_MLX_DEVICE value '%v'", rdmaMlxDevice)
+			}
+
+			if nvidiaNetworkConfig.RdmaGPUDirect {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_GPUDIRECT" +
+					" is set to 'True', will add the cuda switch in RDMA tests")
+				rdmaGPUDirect = nvidiaNetworkConfig.RdmaGPUDirect
+			} else {
+				rdmaGPUDirect = false
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_GPUDIRECT is " +
+					"not set or set to False, will execute RDMA tests without cuda switch")
+			}
+
+			if nvidiaNetworkConfig.RdmaNetworkType == "sriov" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_NETWORK_TYPE" +
+					" is set to 'sriov', will remove the RDMASaredDevicePlugin element form the NicClusterPolicy")
+				rdmaNetworkType = nvidiaNetworkConfig.RdmaNetworkType
+			} else if nvidiaNetworkConfig.RdmaNetworkType == "shared-device" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_NETWORK_TYPE" +
+					" is set to 'shared-device', proceeding with setting up default NicCLusterPolicy for Shared Device")
+				rdmaNetworkType = nvidiaNetworkConfig.RdmaNetworkType
+			} else {
+				rdmaNetworkType = "shared-device"
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_NETWORK_TYPE is " +
+					"not set, proceeding with setting up default NicCLusterPolicy for Shared Device")
 			}
 
 			if nvidiaNetworkConfig.MellanoxEthernetInterfaceName == "" {
@@ -458,7 +498,8 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 		It("Deploy NVIDIA Network Operator with DTK", Label("nno"), func() {
 
-			nfdcheck.CheckNfdInstallation(inittools.APIClient, nfd.OSLabel, nfd.GetAllowedOSLabels(), inittools.GeneralConfig.WorkerLabelMap, networkparams.LogLevel)
+			nfdcheck.CheckNfdInstallation(inittools.APIClient, nfd.OSLabel, nfd.GetAllowedOSLabels(),
+				inittools.GeneralConfig.WorkerLabelMap, networkparams.LogLevel)
 
 			By("Check if at least one worker node is has label for Mellanox cards enabled")
 			networkNodeFound, _ := check.NodeWithLabel(inittools.APIClient, nvidiaNetworkLabel,
@@ -483,6 +524,24 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			clusterArchitecture = clusterArch
 			glog.V(networkparams.LogLevel).Infof("cluster architecture for network enabled worker node "+
 				"is: %s", clusterArchitecture)
+
+			// 06-17-2025
+			By("Delete /opt/mofed-container/inventory RPMs directory on worker nodes")
+			// Delete the "/opt/mofed-container/inventory" dir on each worker node
+			// func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, nodeName string) (string, error)
+			rdmaWorkerNodes := []string{rdmaClientHostname, rdmaServerHostname}
+
+			for i, workerNode := range rdmaWorkerNodes {
+				glog.V(networkparams.LogLevel).Infof("Deleting MOFED RPMS dir on worker node '%d' named'%s'",
+					i, workerNode)
+				debugPodName := fmt.Sprintf("delete-rpm-pod-%d", i) // ensure unique name
+				deleteMofedRPMDirOutput, err := rdmatest.DeleteMofedRpmDir(inittools.APIClient, debugPodName,
+					"default", workerNode)
+				Expect(err).ToNot(HaveOccurred(), "Error deleting MOFED RPMs dir on worker node"+
+					" '%s':   %v", workerNode, err)
+				glog.V(networkparams.LogLevel).Infof("Output from deleting MOFED RPMS dir on worker node '%s'"+
+					" : \n%s", workerNode, deleteMofedRPMDirOutput)
+			}
 
 			By("Check if Network Operator Deployment is from Bundle")
 			if deployFromBundle {
@@ -721,11 +780,32 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 			Expect(err).ToNot(HaveOccurred(), "Error getting list of CSVs in Network operator "+
 				"namespace: '%v'", err)
-			Expect(csvBuilderList).To(HaveLen(1), "Exactly one Network operator CSV is expected")
 
+			// Need to handle cae where there are more than one CSV in nvidia-network-operator namespace,
+			// such as in RHOAI environment
+			// nnoCSVName = "nvidia-network-operator.v25.4.0-rc.3"
+			// var nnoCSVName string = ""
+			// var nnoCSVVersion = "v25.4.0"
+			// var nnoCSVNamePrefix = "nvidia-network-operator"
+
+			// nnoCSVName := nnoCSVNamePrefix + "." + nnoCSVVersion
+
+			// Not always garanteed to be first in list but on DOCA1, need to grep on match on nvidia-network-operator prefix
 			csvBuilder := csvBuilderList[0]
+			/*
+				oc get csv -n nvidia-network-operator
+				NAME                              DISPLAY                        VERSION   REPLACES                      PHASE
+				nvidia-network-operator.v25.1.0   NVIDIA Network Operator        25.1.0                                  Succeeded
+				rhods-operator.2.19.0             Red Hat OpenShift AI           2.19.0    rhods-operator.2.16.2         Succeeded
+				serverless-operator.v1.35.1       Red Hat OpenShift Serverless   1.35.1    serverless-operator.v1.35.0   Succeeded
+				trident-operator.v25.2.1          NetApp Trident                 25.2.1    trident-operator.v25.2.0      Succeeded
+			*/
 
 			nnoCurrentCSV := csvBuilder.Definition.Name
+			// nnoCurrentCSVVersion := csvBuilder.Definition.Spec.Version
+			// glog.V(networkparams.LogLevel).Infof("Deployed ClusterServiceVersion version: '%s",
+			// 	nnoCurrentCSVVersion)
+
 			glog.V(networkparams.LogLevel).Infof("Deployed ClusterServiceVersion is: '%s", nnoCurrentCSV)
 
 			nnoCurrentCSVVersion := csvBuilder.Definition.Spec.Version.String()
@@ -799,109 +879,128 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(networkparams.LogLevel).Infof("Add extra env variables to the ofedDriver in " +
 				"NicClusterPolicy for amd64 clusters")
 
-			if clusterArchitecture == "amd64" {
+			glog.V(networkparams.LogLevel).Infof("Adding 4 extra env variables to the ofedDriver spec in " +
+				"NicClusterPolicy")
 
-				glog.V(networkparams.LogLevel).Infof("Cluster architecture is 'amd64', adding 3 extra env " +
-					"variables to the ofedDriver env spec in NicClusterPolicy ")
+			var updatedOfedDriverEnvVars []corev1.EnvVar
 
-				var updatedOfedDriverEnvVars []corev1.EnvVar
+			newEnvVars := map[string]string{
+				"UNLOAD_STORAGE_MODULES":            "true",
+				"RESTORE_DRIVER_ON_POD_TERMINATION": "true",
+				"CREATE_IFNAMES_UDEV":               "true",
+				"ENTRYPOINT_DEBUG":                  "true",
+			}
 
-				newEnvVars := map[string]string{
-					"UNLOAD_STORAGE_MODULES":            "true",
-					"RESTORE_DRIVER_ON_POD_TERMINATION": "true",
-					"CREATE_IFNAMES_UDEV":               "true",
-					"ENTRYPOINT_DEBUG":                  "true",
+			for key, value := range newEnvVars {
+				updatedOfedDriverEnvVars = append(updatedOfedDriverEnvVars, corev1.EnvVar{
+					Name: key, Value: value})
+			}
+
+			nicClusterPolicyBuilder.Definition.Spec.OFEDDriver.Env = updatedOfedDriverEnvVars
+
+			// } else {
+			//	glog.V(networkparams.LogLevel).Infof("Cluster architecture is not 'amd64', skipping adding" +
+			//		"extra env variables to the ofedDriver env spec in NicClusterPolicy ")
+			//}
+			By("Check if RDMA Test type is 'sriov'")
+			if rdmaNetworkType == "sriov" {
+				// Remove the RDMA Shared Device Plugin configuration
+				if nicClusterPolicyBuilder.Definition.Spec.RdmaSharedDevicePlugin != nil {
+					nicClusterPolicyBuilder.Definition.Spec.RdmaSharedDevicePlugin = nil
+					glog.V(networkparams.LogLevel).Infof("Removed RdmaSharedDevicePlugin spec from " +
+						"NicClusterPolicy to support RDMA Legacy SRIOV configuration")
+				} else {
+					glog.V(networkparams.LogLevel).Infof("RdmaSharedDevicePlugin spec in " +
+						"NicClusterPolicy was not found")
 				}
 
-				for key, value := range newEnvVars {
-					updatedOfedDriverEnvVars = append(updatedOfedDriverEnvVars, corev1.EnvVar{
-						Name: key, Value: value})
-				}
+				// Will need an else if statement here for Host Device Network
 
-				nicClusterPolicyBuilder.Definition.Spec.OFEDDriver.Env = updatedOfedDriverEnvVars
-
+				// default case is Shared Device
 			} else {
-				glog.V(networkparams.LogLevel).Infof("Cluster architecture is not 'amd64', skipping adding" +
-					"extra env variables to the ofedDriver env spec in NicClusterPolicy ")
-			}
 
-			By("Update NiClusterPolicy RDMA Shared Device Plugin config to use Eth and IB interface names")
-			glog.V(networkparams.LogLevel).Infof("Building the new config data structure for NicClusterPolicy " +
-				"rdmaSharedDevicePlugin to use Eth and IB interface names passed in env vars")
+				By("Updating default configuration for RdmaSharedDevicePlugin in NiCClusterPolicy")
+				// Avoid a panic later if the RdmaSharedDevicePlugin is nil
+				Expect(nicClusterPolicyBuilder.Definition.Spec.RdmaSharedDevicePlugin).ToNot(BeNil(),
+					"NicClusterPolicy RdmaSharedDevicePlugin is nil")
 
-			// Need to update the rdmaSharedDevicePlugin config element to look like this:
-			/*
-				rdmaSharedDevicePlugin:
-				      config: |
-				        {
-				          "configList": [
-				            {
-				              "resourceName": "rdma_shared_device_ib",
-				              "rdmaHcaMax": 63,
-				              "selectors": {
-				                "ifNames": ["ibs2f0"]
-				              }
-				            },
-				            {
-				              "resourceName": "rdma_shared_device_eth",
-				              "rdmaHcaMax": 63,
-				              "selectors": {
-				                "ifNames": ["ens8f0np0"]
-				              }
-				            }
-				          ]
-				        }
+				glog.V(networkparams.LogLevel).Infof("Building the new config data structure for NicClusterPolicy " +
+					"rdmaSharedDevicePlugin to use Eth and IB interface names passed in env vars")
+
+				// Need to update the rdmaSharedDevicePlugin config element to look like this:
+				/*
+					rdmaSharedDevicePlugin:
+					      config: |
+					        {
+					          "configList": [
+					            {
+					              "resourceName": "rdma_shared_device_ib",
+					              "rdmaHcaMax": 63,
+					              "selectors": {
+					                "ifNames": ["ibs2f0"]
+					              }
+					            },
+					            {
+					              "resourceName": "rdma_shared_device_eth",
+					              "rdmaHcaMax": 63,
+					              "selectors": {
+					                "ifNames": ["ens8f0np0"]
+					              }
+					            }
+					          ]
+					        }
 
 
 
-			*/
+				*/
 
-			// Define the JSON structure in Go structs
-			type Selector struct {
-				IfNames []string `json:"ifNames"`
-			}
+				// Define the JSON structure in Go structs
+				type Selector struct {
+					IfNames []string `json:"ifNames"`
+				}
 
-			type ConfigItem struct {
-				ResourceName string   `json:"resourceName"`
-				RdmaHcaMax   int      `json:"rdmaHcaMax"`
-				Selectors    Selector `json:"selectors"`
-			}
+				type ConfigItem struct {
+					ResourceName string   `json:"resourceName"`
+					RdmaHcaMax   int      `json:"rdmaHcaMax"`
+					Selectors    Selector `json:"selectors"`
+				}
 
-			type Config struct {
-				ConfigList []ConfigItem `json:"configList"`
-			}
+				type Config struct {
+					ConfigList []ConfigItem `json:"configList"`
+				}
 
-			config := Config{
-				ConfigList: []ConfigItem{
-					{
-						ResourceName: "rdma_shared_device_ib",
-						RdmaHcaMax:   63,
-						Selectors:    Selector{IfNames: []string{mellanoxInfinibandInterfaceName}},
+				config := Config{
+					ConfigList: []ConfigItem{
+						{
+							ResourceName: "rdma_shared_device_ib",
+							RdmaHcaMax:   63,
+							Selectors:    Selector{IfNames: []string{mellanoxInfinibandInterfaceName}},
+						},
+						{
+							ResourceName: "rdma_shared_device_eth",
+							RdmaHcaMax:   63,
+							Selectors:    Selector{IfNames: []string{mellanoxEthernetInterfaceName}},
+						},
 					},
-					{
-						ResourceName: "rdma_shared_device_eth",
-						RdmaHcaMax:   63,
-						Selectors:    Selector{IfNames: []string{mellanoxEthernetInterfaceName}},
-					},
-				},
+				}
+
+				// Convert to JSON
+				jsonData, err := json.MarshalIndent(config, "", "  ")
+				if err != nil {
+					fmt.Println("Error marshalling JSON:", err)
+					return
+				}
+
+				// Assign the generated JSON string
+				newRDMASharedDevicePluginConfig := string(jsonData)
+
+				glog.V(networkparams.LogLevel).Infof("New config data structure for NicClusterPolicy "+
+					"rdmaSharedDevicePlugin for Ethernet '%s' and IB '%s' interfaces from env vars:",
+					mellanoxEthernetInterfaceName, mellanoxInfinibandInterfaceName)
+				fmt.Println(newRDMASharedDevicePluginConfig)
+
+				nicClusterPolicyBuilder.Definition.Spec.RdmaSharedDevicePlugin.Config = newRDMASharedDevicePluginConfig
 			}
-
-			// Convert to JSON
-			jsonData, err := json.MarshalIndent(config, "", "  ")
-			if err != nil {
-				fmt.Println("Error marshalling JSON:", err)
-				return
-			}
-
-			// Assign the generated JSON string
-			newRDMASharedDevicePluginConfig := string(jsonData)
-
-			glog.V(networkparams.LogLevel).Infof("New config data structure for NicClusterPolicy "+
-				"rdmaSharedDevicePlugin for Ethernet '%s' and IB '%s' interfaces from env vars:",
-				mellanoxEthernetInterfaceName, mellanoxInfinibandInterfaceName)
-			fmt.Println(newRDMASharedDevicePluginConfig)
-
-			nicClusterPolicyBuilder.Definition.Spec.RdmaSharedDevicePlugin.Config = newRDMASharedDevicePluginConfig
 
 			By("Deploy NicClusterPolicy")
 			createdNicClusterPolicyBuilder, err := nicClusterPolicyBuilder.Create()
@@ -1156,7 +1255,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 			rdmaServerPod := rdmatest.CreateRdmaWorkloadPod(rdmaServerPodName,
 				rdmaWorkloadNamespace, "no", "server", rdmaServerHostname, rdmaMlxDevice,
-				macvlanNetworkName, rdmaTestImage, rdmaLinkType, "none")
+				macvlanNetworkName, rdmaTestImage, rdmaLinkType, "none", rdmaNetworkType)
 
 			createdRdmaServerPod, err := inittools.APIClient.Pods(rdmaServerPod.Namespace).Create(context.TODO(),
 				rdmaServerPod, metav1.CreateOptions{})
@@ -1195,7 +1294,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 			rdmaClientPod := rdmatest.CreateRdmaWorkloadPod(rdmaClientPodName, rdmaWorkloadNamespace, "no",
 				"client", rdmaClientHostname, rdmaMlxDevice, macvlanNetworkName, rdmaTestImage,
-				rdmaLinkType, net1IntIpAddrServer)
+				rdmaLinkType, rdmaNetworkType, net1IntIpAddrServer)
 
 			createdRdmaClientPod, err := inittools.APIClient.Pods(rdmaClientPod.Namespace).Create(context.TODO(),
 				rdmaClientPod, metav1.CreateOptions{})
@@ -1246,5 +1345,165 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				"errors encountered: %v", err)
 			glog.V(networkparams.LogLevel).Infof("RDMA test validation has PASSED.  Successful test !")
 		})
+
+		// RDMA Legacy SRIOV testcase
+		It("Run RDMA connectivity test with ib_write_bw", Label("rdma-legacy-sriov"), func() {
+
+			By("Starting RDMA Legacy SRIOV connectivity test with ib_write_bw testcase")
+
+			var (
+				rdmaServerPodNamePrefix = "rdma-legacy-sriov-server-ci"
+				rdmaClientPodNamePrefix = "rdma-legacy-sriov-client-ci"
+			)
+
+			rdmaServerPodName := rdmaServerPodNamePrefix + "-" + rdmaLinkType
+
+			rdmaClientPodName := rdmaClientPodNamePrefix + "-" + rdmaLinkType
+
+			By("Starting RDMA connectivity test with ib_write_bw testcase")
+			glog.V(networkparams.LogLevel).Infof("\nStarting RDMA Legacy SRIOV connectivity test " +
+				"with ib_write_bw testcase")
+
+			By("Create ib_write_bw server workload pod")
+			glog.V(networkparams.LogLevel).Infof("Create ib_write_bw server workload pod '%s'",
+				rdmaServerPodName)
+
+			// For SRIOV we need to find the RDMA device ids for both server and client
+			// One way to do that is run `rdma link show` inside oc debug pod, but the workload
+			// rdma-tools container will dynamically find it at runtime
+
+			var rdmaCmd = []string{
+				"sh",
+				"-c",
+				"rdma link show"}
+
+			rdmaLinkShowCmdLogClientHostOutput, err := rdmatest.RunCommandsOnSpecificNode(inittools.APIClient,
+				"oc-debug-busy-pod", rdmaWorkloadNamespace, rdmaClientHostname, rdmaCmd)
+
+			if err != nil {
+				glog.V(networkparams.LogLevel).Infof("Failed to run RDMA cmd '%s' in debug node pod : %s",
+					rdmaCmd, err.Error())
+			}
+
+			glog.V(networkparams.LogLevel).Infof("Log returned from RunCommandsOnSpecificNode(): \n'%s'",
+				rdmaLinkShowCmdLogClientHostOutput)
+
+			rdmaLinkShowCmdLogServerHostOutput, err := rdmatest.RunCommandsOnSpecificNode(inittools.APIClient,
+				"oc-debug-busy-pod", rdmaWorkloadNamespace, rdmaServerHostname, rdmaCmd)
+
+			if err != nil {
+				glog.V(networkparams.LogLevel).Infof("Failed to run RDMa cmd '%s' in debug node pod : %s",
+					rdmaCmd, err.Error())
+			}
+
+			glog.V(networkparams.LogLevel).Infof("Log returned from RunCommandsOnSpecificNode: \n'%s'",
+				rdmaLinkShowCmdLogServerHostOutput)
+
+			// NO Need to parse the mlx5_x device id from the logs
+
+			var withCuda string
+
+			if rdmaGPUDirect {
+				withCuda = "yes"
+			} else {
+				withCuda = "no"
+			}
+
+			rdmaServerPod := rdmatest.CreateRdmaWorkloadPod(rdmaServerPodName,
+				rdmaWorkloadNamespace, withCuda, "server", rdmaServerHostname, rdmaNetworkType,
+				sriovNetworkName, rdmaTestImage, rdmaLinkType, "none", rdmaNetworkType)
+
+			createdRdmaServerPod, err := inittools.APIClient.Pods(rdmaServerPod.Namespace).Create(context.TODO(),
+				rdmaServerPod, metav1.CreateOptions{})
+
+			// DEBUG:
+			glog.V(networkparams.LogLevel).Infof("####### Server side - Debug:  err '%v'", err)
+
+			Expect(err).ToNot(HaveOccurred(), "error creating RDMA Server '%s' in cluster: %v",
+				rdmaServerPodName, err)
+
+			glog.V(networkparams.LogLevel).Infof("Successfully created RDMA ib_write_bw server workload pod '%s'",
+				createdRdmaServerPod.Name)
+
+			By("Wait 4 minutes for RDMA server pod to be running")
+			glog.V(networkparams.LogLevel).Infof("Waiting for 4 minutes for the RDMA server to be running")
+			time.Sleep(4 * time.Minute)
+
+			By("Get the interface net1 IP address in the ib_write_bw server workload pod")
+			glog.V(networkparams.LogLevel).Infof("Get the interface net1 interface Ip address in the "+
+				"ib_write_bw server workload pod '%s'", rdmaServerPodName)
+
+			net1IntIpAddrServer, err := rdmatest.GetMyServerIP(inittools.APIClient, rdmaServerPodName,
+				rdmaWorkloadNamespace, "net1")
+
+			Expect(err).ToNot(HaveOccurred(), "error getting RDMA Server '%s' net1 interface ip "+
+				"address: %v", rdmaServerPodName, err)
+
+			glog.V(networkparams.LogLevel).Infof("RDMA Server interface net1 IP address captured: '%s'",
+				net1IntIpAddrServer)
+			Expect(net1IntIpAddrServer).ToNot(BeNil(), fmt.Sprintf("error RDMA Server '%s' net1 interface "+
+				"IP address: '%s' is null", rdmaServerPodName, net1IntIpAddrServer))
+
+			By("Create ib_write_bw client workload pod")
+			glog.V(networkparams.LogLevel).Infof("Create ib_write_bw Client workload pod '%s' and "+
+				"passing server ip address '%s'", rdmaClientPodName, net1IntIpAddrServer)
+
+			rdmaClientPod := rdmatest.CreateRdmaWorkloadPod(rdmaClientPodName, rdmaWorkloadNamespace, withCuda,
+				"client", rdmaClientHostname, "sriov", sriovNetworkName, rdmaTestImage,
+				rdmaLinkType, net1IntIpAddrServer, rdmaNetworkType)
+
+			createdRdmaClientPod, err := inittools.APIClient.Pods(rdmaClientPod.Namespace).Create(context.TODO(),
+				rdmaClientPod, metav1.CreateOptions{})
+
+			// DEBUG:
+			glog.V(networkparams.LogLevel).Infof("####### Client side - Debug:  err '%v'", err)
+
+			Expect(err).ToNot(HaveOccurred(), "error creating RDMA Client '%s' in cluster: %v",
+				rdmaClientPodName, err)
+
+			glog.V(networkparams.LogLevel).Infof("RDMA Client workload pod '%s' was successfully created in "+
+				"namespace '%s' and passed server IP Address '%s'", createdRdmaClientPod.Name,
+				createdRdmaClientPod.Namespace, net1IntIpAddrServer)
+
+			// Later remove sleep time and detect when RDMA test has completed
+			By("Wait 7 minutes for RDMA ib_write_bw tests to complete")
+			glog.V(networkparams.LogLevel).Infof("Waiting for 7 minutes for the RDMA ib_write_bw tests to " +
+				"complete")
+			time.Sleep(7 * time.Minute)
+
+			By("Collect logs from RDMA ib_write_bw tests from server workload pod")
+			glog.V(networkparams.LogLevel).Infof("Collect logs from RDMA ib_write_bw tests from server " +
+				"workload pod")
+
+			serverLogs, err := rdmatest.GetPodLogs(inittools.APIClient, rdmaWorkloadNamespace, rdmaServerPodName)
+
+			Expect(err).ToNot(HaveOccurred(), "error collecting RDMA server '%s' pod logs: %v",
+				rdmaServerPodName, err)
+
+			glog.V(networkparams.LogLevel).Infof("RDMA server logs collected: \n'%s'", serverLogs)
+
+			By("Parse logs from RDMA ib_write_bw tests from server workload pod")
+			parseLogsMap, err := rdmatest.ParseRdmaOutput(serverLogs)
+			Expect(err).ToNot(HaveOccurred(), "error parsing RDMA server '%s' pod logs: %v",
+				rdmaServerPodName, err)
+
+			// Pretty print JSON output
+			jsonParseLogsMap, err := json.MarshalIndent(parseLogsMap, "", "  ")
+			Expect(err).ToNot(HaveOccurred(), "error formatting parsed RDMA server pod logs: %v", err)
+
+			glog.V(networkparams.LogLevel).Infof("Parsed and formatted RDMA server logs: \n'%s'",
+				string(jsonParseLogsMap))
+
+			By("Validate logs from RDMA ib_write_bw tests from server workload pod")
+			rdmaTestPassFail, err := rdmatest.ValidateRDMAResults(parseLogsMap)
+
+			Expect(rdmaTestPassFail).ToNot(BeFalse(), "RDMA test workload execution was FAILED, "+
+				"errors encountered: %v", err)
+			glog.V(networkparams.LogLevel).Infof("RDMA test validation has PASSED.  Successful test !")
+
+			////// debug end
+
+		})
+
 	})
 })

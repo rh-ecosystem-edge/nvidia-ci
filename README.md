@@ -98,13 +98,15 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_RDMA_MLX_DEVICE`: mlx5 device ID corresponding to the interface port connected to Spectrum or Infiniband switch - _required_
 - `NVIDIANETWORK_RDMA_CLIENT_HOSTNAME`: RDMA Client hostname of first worker node for ib_write_bw test - _required when running the RDMA testcase_
 - `NVIDIANETWORK_RDMA_SERVER_HOSTNAME`: RDMA Server hostname of second worker node for ib_write_bw test - _required when running the RDMA testcase_
-- `NVIDIANETWORK_RDMA_TEST_IMAGE`: RDMA Test Container Image that runs the entrypoint.sh script with optional arguments specified in the pod spec.  This container will clone the "https://github.com/linux-rdma/perftest" repo and builds the ib_write_bw binaries with or without cuda headers.  It will also run the ib_write_bw command with arguments either in CLient or Server mode.  Defaults to "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.2" - _optional_
+- `NVIDIANETWORK_RDMA_NETWORK_TYPE`: RDMA network type, e.g. sriov, shared-device.  Defaults to shared-device if not specified - _required when running the RDMA testcase_
+- `NVIDIANETWORK_RDMA_TEST_IMAGE`: RDMA Test Container Image that runs the entrypoint.sh script with optional arguments specified in the pod spec.  This container will clone the "https://github.com/linux-rdma/perftest" repo and builds the ib_write_bw binaries with or without cuda headers.  It will also run the ib_write_bw command with arguments either in CLient or Server mode.  Defaults to "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.3" - _optional_
+- `NVIDIANETWORK_RDMA_SRIOV_NETWORK_NAME`: sriovnetwork resource name  -  _required when running the Legacy SRIOV RDMA testcase_
 - `NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME`: Mellanox Ethernet Interface Name - Defaults to "ens8f0np0" if not specified - _optional_
 - `NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME`:  Mellanox Infiniband Interface Name - Defaults to "ens8f0np0" if not specified - _optional_
 - `NVIDIANETWORK_MACVLANNETWORK_NAME`: MacvlanNetwork Custom Resource instance name  - Defaults to name from Cluster Service Version alm-examples section if not specified  - _optional_
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE`: MacvlanNetwork Custom Resource instance IPAM or IP Address/Subnet mask range for Eth or IB interface - _required_
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - _required_
-
+- `NVIDIANETWORK_RDMA_GPUDIRECT`: Boolean flag to run RDMA workload with 1 nvidia.com/gpu resource - _optional_
 ### Testing MPS with GPU Operator
 
 To test the Multi-Process Service (MPS) functionality, you need to first deploy the GPU Operator and then run the MPS tests without cleaning up the GPU Operator deployment between test suites.
@@ -236,6 +238,9 @@ $ export NVIDIANETWORK_MACVLANNETWORK_NAME="rdmashared-net"
 $ export NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE="default"
 $ export NVIDIANETWORK_RDMA_LINK_TYPE="ethernet"
 $ export NVIDIANETWORK_RDMA_MLX_DEVICE="mlx5_2"
+$ export NVIDIANETWORK_RDMA_GPUDIRECT=true
+# NVIDIANETWORK_RDMA_NETWORK_TYPE supported values are: "sriov", "shared-device"
+$ export NVIDIANETWORK_RDMA_NETWORK_TYPE=sriov
 
 
 $ make run-tests
