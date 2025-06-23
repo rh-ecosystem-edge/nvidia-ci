@@ -46,7 +46,7 @@ fi
 
 
 # Build ginkgo command
-cmd="PATH_TO_MUST_GATHER_SCRIPT=$(pwd)/gpu-operator-must-gather.sh ginkgo -timeout=24h --keep-going --require-suite -r"
+cmd="PATH_TO_GPU_MUST_GATHER_SCRIPT=$(pwd)/gpu-operator-must-gather.sh PATH_TO_NFD_MUST_GATHER_SCRIPT=$(pwd)/scripts/nfd-must-gather.sh ginkgo -timeout=24h --keep-going --require-suite -r"
 
 if [[ "${TEST_VERBOSE}" == "true" ]]; then
     cmd+=" -vv"
@@ -56,9 +56,9 @@ if [[ "${TEST_TRACE}" == "true" ]]; then
     cmd+=" --trace"
 fi
 
-if [[ ! -z "${TEST_LABELS}" ]]; then
-    cmd+=" --label-filter=\"${TEST_LABELS}\""
-fi
+#if [[ ! -z "${TEST_LABELS}" ]]; then
+#    cmd+=" --label-filter=\"${TEST_LABELS}\""
+#fi
 cmd+=" "$feature_dirs" $@"   # + user args --xxx=yyy...
 
 
