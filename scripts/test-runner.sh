@@ -46,7 +46,7 @@ fi
 
 
 # Build ginkgo command
-cmd="PATH_TO_MUST_GATHER_SCRIPT=$(pwd)/gpu-operator-must-gather.sh ginkgo -timeout=24h --keep-going --require-suite -r"
+cmd="PATH_TO_MUST_GATHER_SCRIPT=$(pwd)/scripts/gpu-operator-tests-must-gather.sh ginkgo -timeout=24h --keep-going --require-suite -r"
 
 if [[ "${TEST_VERBOSE}" == "true" ]]; then
     cmd+=" -vv"

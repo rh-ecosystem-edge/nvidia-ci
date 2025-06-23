@@ -134,20 +134,16 @@ func removeFile(fPath string) error {
 	return nil
 }
 
-func RunMustGather(artifactDir string, timeout time.Duration) error {
+func RunMustGather(artifactDir, mustGatherScriptPath string, timeout time.Duration) error {
 	if artifactDir == "" {
 		return fmt.Errorf("artifact directory cannot be empty")
 	}
 
-	mustGatherScriptPath := os.Getenv("PATH_TO_MUST_GATHER_SCRIPT")
-	if mustGatherScriptPath == "" {
-		return fmt.Errorf("PATH_TO_MUST_GATHER_SCRIPT environment variable is not set")
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, mustGatherScriptPath)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("ARTIFACT_DIR=%s", artifactDir))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("ARTIFACT_DIR=%s", artifactDir), fmt.Sprintf("OUTPUT_DIR=%s", artifactDir))
 	output, err := cmd.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		glog.Errorf("%s script timed out: %v", mustGatherScriptPath, ctx.Err())
