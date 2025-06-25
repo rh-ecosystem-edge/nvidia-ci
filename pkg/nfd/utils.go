@@ -38,58 +38,58 @@ func EnsureNFDIsInstalled(apiClient *clients.Settings, Nfd *CustomConfig, ocpVer
 
 		Nfd.CleanupAfterInstall = true
 
-		By("Check if 'nfd' packagemanifest exists in 'redhat-operators' default catalog")
-		nfdPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(apiClient,
-			Package, CatalogSourceNamespace, CatalogSourceDefault)
+		if Nfd.CreateCustomCatalogsource {
+			glog.V(level).Infof("Creating custom catalogsource '%s' for NFD "+
+				"Operator with index image '%s'", Nfd.CustomCatalogSource, Nfd.CustomCatalogSourceIndexImage)
 
-		if nfdPkgManifestBuilderByCatalog == nil {
-			glog.V(level).Infof("NFD packagemanifest was not found in the default '%s'"+
-				" catalog.", CatalogSourceDefault)
+			nfdCustomCatalogSourceBuilder := olm.NewCatalogSourceBuilderWithIndexImage(inittools.APIClient,
+				Nfd.CustomCatalogSource, CatalogSourceNamespace, Nfd.CustomCatalogSourceIndexImage,
+				CustomCatalogSourceDisplayName, CustomNFDCatalogSourcePublisherName)
 
-			if Nfd.CreateCustomCatalogsource {
-				glog.V(level).Infof("Creating custom catalogsource '%s' for NFD "+
-					"catalog.", Nfd.CustomCatalogSource)
-				glog.V(level).Infof("Creating custom catalogsource '%s' for NFD "+
-					"Operator with index image '%s'", Nfd.CustomCatalogSource, Nfd.CustomCatalogSourceIndexImage)
+			Expect(nfdCustomCatalogSourceBuilder).ToNot(BeNil(), "error creating custom "+
+				"NFD catalogsource %s", Nfd.CustomCatalogSource)
 
-				nfdCustomCatalogSourceBuilder := olm.NewCatalogSourceBuilderWithIndexImage(inittools.APIClient,
-					Nfd.CustomCatalogSource, CatalogSourceNamespace, Nfd.CustomCatalogSourceIndexImage,
-					CustomCatalogSourceDisplayName, CustomNFDCatalogSourcePublisherName)
+			createdNFDCustomCatalogSourceBuilder, err := nfdCustomCatalogSourceBuilder.Create()
+			Expect(err).ToNot(HaveOccurred(), "error creating custom NFD "+
+				"catalogsource '%s':  %v", Nfd.CustomCatalogSource, err)
 
-				Expect(nfdCustomCatalogSourceBuilder).ToNot(BeNil(), "error creating custom "+
-					"NFD catalogsource %s:  %v", Package, Nfd.CustomCatalogSource, err)
+			Expect(createdNFDCustomCatalogSourceBuilder).ToNot(BeNil(), "Failed to "+
+				" create custom NFD catalogsource '%s'", Nfd.CustomCatalogSource)
 
-				createdNFDCustomCatalogSourceBuilder, err := nfdCustomCatalogSourceBuilder.Create()
-				Expect(err).ToNot(HaveOccurred(), "error creating custom NFD "+
-					"catalogsource '%s':  %v", Package, Nfd.CustomCatalogSource, err)
+			By(fmt.Sprintf("Sleep for %s to allow the NFD custom catalogsource to be created", nvidiagpu.SleepDuration.String()))
+			time.Sleep(nvidiagpu.SleepDuration)
 
-				Expect(createdNFDCustomCatalogSourceBuilder).ToNot(BeNil(), "Failed to "+
-					" create custom NFD catalogsource '%s'", Nfd.CustomCatalogSource)
+			glog.V(level).Infof("Wait up to %s for custom NFD catalogsource '%s' to be ready", nvidiagpu.WaitDuration.String(), createdNFDCustomCatalogSourceBuilder.Definition.Name)
 
-				By(fmt.Sprintf("Sleep for %s to allow the NFD custom catalogsource to be created", nvidiagpu.SleepDuration.String()))
-				time.Sleep(nvidiagpu.SleepDuration)
+			Expect(createdNFDCustomCatalogSourceBuilder.IsReady(nvidiagpu.WaitDuration)).NotTo(BeFalse())
 
-				glog.V(level).Infof("Wait up to %s for custom NFD catalogsource '%s' to be ready", nvidiagpu.WaitDuration.String(), createdNFDCustomCatalogSourceBuilder.Definition.Name)
+			nfdPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
+				Package, CatalogSourceNamespace, Nfd.CustomCatalogSource, 30*time.Second, 5*time.Minute)
 
-				Expect(createdNFDCustomCatalogSourceBuilder.IsReady(nvidiagpu.WaitDuration)).NotTo(BeFalse())
+			Expect(err).ToNot(HaveOccurred(), "error getting NFD packagemanifest '%s' "+
+				"from custom catalog '%s':  %v", Package, Nfd.CustomCatalogSource, err)
 
-				nfdPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
-					Package, CatalogSourceNamespace, Nfd.CustomCatalogSource, 30*time.Second, 5*time.Minute)
-
-				Expect(err).ToNot(HaveOccurred(), "error getting NFD packagemanifest '%s' "+
-					"from custom catalog '%s':  %v", Package, Nfd.CustomCatalogSource, err)
-
-				Nfd.CatalogSource = Nfd.CustomCatalogSource
-				nfdChannel := nfdPkgManifestBuilderByCustomCatalog.Object.Status.DefaultChannel
-				glog.V(level).Infof("NFD channel '%s' retrieved from packagemanifest "+
-					"of custom catalogsource '%s'", nfdChannel, Nfd.CustomCatalogSource)
-
-			} else {
-				Skip("NFD packagemanifest not found in default 'redhat-operators' catalogsource, " +
-					"and flag to deploy custom catalogsource is false")
-			}
+			Nfd.CatalogSource = Nfd.CustomCatalogSource
+			nfdChannel := nfdPkgManifestBuilderByCustomCatalog.Object.Status.DefaultChannel
+			glog.V(level).Infof("NFD channel '%s' retrieved from packagemanifest "+
+				"of custom catalogsource '%s'", nfdChannel, Nfd.CustomCatalogSource)
 
 		} else {
+
+			By("Check if 'nfd' packagemanifest exists in 'redhat-operators' default catalog")
+			nfdPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(apiClient,
+				Package, CatalogSourceNamespace, CatalogSourceDefault)
+
+			Expect(err).ToNot(HaveOccurred(), "error getting NFD packagemanifest '%s' "+
+				"from default catalog '%s':  %v", Package, CatalogSourceDefault, err)
+
+			if nfdPkgManifestBuilderByCatalog == nil {
+				glog.V(level).Infof("NFD packagemanifest was not found in the default '%s'"+
+					" catalog.", CatalogSourceDefault)
+				Skip("NFD packagemanifest not found in default 'redhat-operators' catalogsource, " +
+					"and no custom catalogsource is defined")
+			}
+
 			glog.V(level).Infof("The nfd packagemanifest '%s' was found in the default"+
 				" catalog '%s'", nfdPkgManifestBuilderByCatalog.Object.Name, CatalogSourceDefault)
 
