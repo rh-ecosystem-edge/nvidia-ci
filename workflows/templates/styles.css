@@ -1,0 +1,186 @@
+/* Overall styling with focus on catalog results */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f7f7;
+    /* Light, soft background */
+    margin: 0;
+    padding: 20px;
+    color: #333;
+    font-size: 16px;
+}
+
+h1 {
+    text-align: left;
+    margin-bottom: 20px;
+    color: #009688;
+    /* Teal title */
+    font-size: 24px;
+    font-weight: bold;
+}
+
+h2 {
+    text-align: center;
+    margin-bottom: 20px;
+    color: #009688;
+    /* Teal title */
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.last-updated {
+    text-align: center;
+    margin-top: 40px;
+    font-style: italic;
+    font-size: 14px;
+    color: #666;
+}
+
+.ocp-version-container, .toc {
+    margin-bottom: 40px;
+    padding: 20px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.ocp-version-header {
+    font-size: 22px;
+    margin-bottom: 15px;
+    color: #333;
+    background-color: #e0f2f1;
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-weight: bold;
+    position: relative;
+}
+
+.section-label {
+    font-size: 16px;
+    font-weight: bold;
+    color: #009688;
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+.note-item {
+    list-style: none;
+}
+
+.note-item::before {
+    content: "\0025BA";
+    padding-right: 8px;
+    color: #009688;
+}
+
+table {
+    width: 95%;
+    margin: 20px auto;
+    border-collapse: collapse;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+th,
+td {
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: left;
+    font-size: 16px;
+    transition: background-color 0.2s ease;
+}
+
+th {
+    background-color: #009688;
+    color: #fff;
+    font-size: 18px;
+    position: relative;
+}
+
+th:hover {
+    background-color: #00796b;
+}
+
+td {
+    background-color: #fff;
+}
+
+td:hover {
+    background-color: #fafafa;
+    cursor: pointer;
+}
+
+/* History bar styling for GPU bundle (de-emphasized) */
+.history-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 20px auto;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #f7f7f7;
+    color: #888;
+    font-size: 0.9em;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    flex-wrap: wrap;
+}
+
+.history-square {
+    width: 20px;
+    height: 20px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+    border: 1px solid #ccc;
+    position: relative;
+    overflow: hidden;
+    box-shadow: none;
+}
+
+.history-square:hover {
+    transform: scale(1.1);
+}
+
+.history-success {
+    background-color: #009688;
+}
+
+.history-failure {
+    background-color: #f44336;
+}
+
+.history-aborted {
+    background-color: #ffc107;
+}
+
+.history-square:hover::after {
+    content: attr(title);
+    position: absolute;
+    background-color: #333;
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    top: 28px;
+    z-index: 10;
+    width: 160px;
+    text-align: center;
+}
+
+@media screen and (max-width: 768px) {
+    table {
+        font-size: 14px;
+    }
+
+    .history-bar {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .history-square {
+        width: 25px;
+        height: 25px;
+    }
+}

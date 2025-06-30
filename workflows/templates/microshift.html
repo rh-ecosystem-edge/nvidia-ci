@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <h2>Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift</h2>
+
+  <script>
+    function sortTable(column, tableId) {
+      var table = document.getElementById(tableId);
+      var rows = Array.from(table.rows);
+      var isAscending = table.rows[0].cells[column].classList.contains('asc');
+      rows = rows.slice(1);
+      rows.sort(function(rowA, rowB) {
+        var cellA = rowA.cells[column].innerText;
+        var cellB = rowB.cells[column].innerText;
+        if (!isNaN(cellA) && !isNaN(cellB)) {
+          return isAscending ? cellA - cellB : cellB - cellA;
+        } else {
+          return isAscending ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+        }
+      });
+      rows.forEach(function(row) {
+        table.appendChild(row);
+      });
+      var header = table.rows[0].cells[column];
+      header.classList.toggle('asc', !isAscending);
+      header.classList.toggle('desc', isAscending);
+    }
+  </script>
+
+
+  <a id="ocp-{ocp_key}"></a>
+  <div class="ocp-version-container">
+    <div class="ocp-version-header">
+      OpenShift {ocp_key}
+    </div>
+    {notes}
+    <div class="section-label">From operator catalog</div>
+    <table id="table-{ocp_key}-regular">
+      <thead>
+        <tr>
+          <th>OpenShift</th>
+          <th>NVIDIA GPU Operator</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="min-width:150px; white-space:nowrap;">{ocp_full}</td>
+          <td>
+
+
+  <div class="history-bar" style="opacity: 0.7;">
+    <div style="margin-top: 5px;">
+      <strong>Last Job Date:</strong> 2025-06-30 02:05:05 UTC
+    </div>
+    
+    <div class='history-square history-success'
+         onclick='window.open("https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.20-periodics-e2e-aws-ai-model-serving-nightly/1939489252291121152/", "_blank")'
+         title='Status: SUCCESS | Timestamp: 2025-06-30 02:05:05 UTC'>
+    </div>
+        
+    <div class='history-square history-success'
+         onclick='window.open("https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.20-periodics-e2e-aws-ai-model-serving-nightly/1939126829075927040/", "_blank")'
+         title='Status: SUCCESS | Timestamp: 2025-06-29 01:52:46 UTC'>
+    </div>
+        
+    <div class='history-square history-success'
+         onclick='window.open("https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.20-periodics-e2e-aws-ai-model-serving-nightly/1938764458713157632/", "_blank")'
+         title='Status: SUCCESS | Timestamp: 2025-06-28 01:53:20 UTC'>
+    </div>
+        
+    <div class='history-square history-success'
+         onclick='window.open("https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.20-periodics-e2e-aws-ai-model-serving-nightly/1938402072651108352/", "_blank")'
+         title='Status: SUCCESS | Timestamp: 2025-06-27 02:02:09 UTC'>
+    </div>
+        
+    <div class='history-square history-success'
+         onclick='window.open("https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.20-periodics-e2e-aws-ai-model-serving-nightly/1938039666410262528/", "_blank")'
+         title='Status: SUCCESS | Timestamp: 2025-06-26 01:52:09 UTC'>
+    </div>
+        </div>
+
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="last-updated">
+    Last updated: {LAST_UPDATED}
+  </div>
+</body>
+</html>
