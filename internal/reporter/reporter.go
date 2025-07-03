@@ -134,15 +134,11 @@ func removeFile(fPath string) error {
 	return nil
 }
 
-func RunMustGather(artifactDir string, timeout time.Duration) error {
+func RunMustGather(artifactDir, mustGatherScriptPath string, timeout time.Duration) error {
 	if artifactDir == "" {
 		return fmt.Errorf("artifact directory cannot be empty")
 	}
 
-	mustGatherScriptPath := os.Getenv("PATH_TO_MUST_GATHER_SCRIPT")
-	if mustGatherScriptPath == "" {
-		return fmt.Errorf("PATH_TO_MUST_GATHER_SCRIPT environment variable is not set")
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 

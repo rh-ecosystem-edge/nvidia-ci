@@ -2,6 +2,7 @@ package nvidiagpu
 
 import (
 	"github.com/golang/glog"
+	"os"
 	"runtime"
 	"testing"
 	"time"
@@ -26,12 +27,31 @@ func TestGPUDeploy(t *testing.T) {
 	RunSpecs(t, "GPU", Label(tsparams.Labels...), reporterConfig)
 }
 
+type mustGatherConfig struct {
+	envVar     string
+	reportPath string
+}
+
 var _ = JustAfterEach(func() {
 	specReport := CurrentSpecReport()
 	reporter.ReportIfFailed(
 		specReport, currentFile, tsparams.ReporterNamespacesToDump, tsparams.ReporterCRDsToDump, clients.SetScheme)
-	artifactDir := inittools.GeneralConfig.GetReportPath("gpu-must-gather")
-	if err := reporter.RunMustGather(artifactDir, 5*time.Minute); err != nil {
-		glog.Errorf("Failed to collect must-gather for the GPU operator, %v", err)
+
+	mustGathers := []mustGatherConfig{
+		{envVar: "PATH_TO_NFD_MUST_GATHER_SCRIPT", reportPath: "nfd-must-gather"},
+		{envVar: "PATH_TO_GPU_MUST_GATHER_SCRIPT", reportPath: "gpu-must-gather"},
+	}
+
+	// Running each must gather script that is in mustGathers
+	for _, mg := range mustGathers {
+		scriptPath := os.Getenv(mg.envVar)
+		if scriptPath == "" {
+			continue
+		}
+
+		artifactDir := inittools.GeneralConfig.GetReportPath(mg.reportPath)
+		if err := reporter.RunMustGather(artifactDir, scriptPath, 5*time.Minute); err != nil {
+			glog.Errorf("Failed to collect must-gather for %s (%s): %v", mg.reportPath, mg.envVar, err)
+		}
 	}
 })
