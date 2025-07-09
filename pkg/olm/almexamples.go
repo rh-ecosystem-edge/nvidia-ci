@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sjson "k8s.io/apimachinery/pkg/util/json"
 )
 
@@ -39,4 +40,28 @@ func GetALMExampleItems(almExample string) ([]json.RawMessage, error) {
 	}
 
 	return examples, nil
+}
+
+func GetALMExampleByKind(almExample string, kind string) (json.RawMessage, error) {
+	rawItems, err := GetALMExampleItems(almExample)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(rawItems) == 0 {
+		return nil, fmt.Errorf("no alm examples found")
+	}
+
+	for _, rawItem := range rawItems {
+		var typeMeta metav1.TypeMeta
+		if err := json.Unmarshal(rawItem, &typeMeta); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal alm-example to typeMeta in order to fetch kind: %v", err)
+		}
+
+		if typeMeta.Kind == kind {
+			return rawItem, nil
+		}
+	}
+
+	return nil, fmt.Errorf("alm-example for kind %s not found", kind)
 }

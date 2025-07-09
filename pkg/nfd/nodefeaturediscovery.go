@@ -2,6 +2,7 @@ package nfd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -9,9 +10,9 @@ import (
 	nfdv1 "github.com/openshift/cluster-nfd-operator/api/v1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/msg"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/json"
 	goclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -220,23 +221,17 @@ func (builder *Builder) Update(force bool) (*Builder, error) {
 
 // getNodeFeatureDiscoveryFromAlmExample extracts the NodeFeatureDiscovery from the alm-examples block.
 func getNodeFeatureDiscoveryFromAlmExample(almExample string) (*nfdv1.NodeFeatureDiscovery, error) {
-	nodeFeatureDiscoveryList := &nfdv1.NodeFeatureDiscoveryList{}
-
-	if almExample == "" {
-		return nil, fmt.Errorf("almExample is an empty string")
-	}
-
-	err := json.Unmarshal([]byte(almExample), &nodeFeatureDiscoveryList.Items)
-
+	rawItem, err := olm.GetALMExampleByKind(almExample, "NodeFeatureDiscovery")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot build a NodeFeatureDiscovery CR because no alm-example for it was found: %v", err)
 	}
 
-	if len(nodeFeatureDiscoveryList.Items) == 0 {
-		return nil, fmt.Errorf("failed to get alm examples")
+	var nfd nfdv1.NodeFeatureDiscovery
+	if err := json.Unmarshal(rawItem, &nfd); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal NodeFeatureDiscovery: %v", err)
 	}
 
-	return &nodeFeatureDiscoveryList.Items[0], nil
+	return &nfd, nil
 }
 
 // validate will check that the builder and builder definition are properly initialized before
