@@ -41,16 +41,27 @@ unit-test:
 	go test github.com/rh-ecosystem-edge/nvidia-ci/$(TEST)
 
 get-gpu-operator-must-gather:
-	test -s gpu-operator-must-gather.sh || (\
+	test -s scripts/gpu-operator-must-gather.sh || (\
     		SCRIPT_URL="https://raw.githubusercontent.com/NVIDIA/gpu-operator/v23.9.1/hack/must-gather.sh" && \
-    		if ! curl -SsL -o gpu-operator-must-gather.sh -L $$SCRIPT_URL; then \
+    		if ! curl -SsL -o scripts/gpu-operator-must-gather.sh -L $$SCRIPT_URL; then \
     			echo "Failed to download must-gather script" >&2; \
     			exit 1; \
     		fi && \
-    		chmod +x gpu-operator-must-gather.sh \
+    		chmod +x scripts/gpu-operator-must-gather.sh \
     	)
 
-run-tests: get-gpu-operator-must-gather
+get-nfd-must-gather:
+	# TODO: change it to use release branch when it will be released
+	test -s scripts/nfd-must-gather.sh || (\
+		SCRIPT_URL="https://raw.githubusercontent.com/openshift/cluster-nfd-operator/c93914db38232ebf2abf62fa8028c23a154a5048/must-gather/gather" && \
+		if ! curl -SsL -o scripts/nfd-must-gather.sh -L $$SCRIPT_URL; then \
+			echo "Failed to download NFD must-gather script" >&2; \
+			exit 1; \
+		fi && \
+		chmod +x scripts/nfd-must-gather.sh \
+	)
+
+run-tests: get-gpu-operator-must-gather get-nfd-must-gather
 	@echo "Executing nvidiagpu test-runner script"
 	scripts/test-runner.sh
 
