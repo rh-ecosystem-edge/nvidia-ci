@@ -114,10 +114,10 @@ def build_microshift_table_row(version: str, results: List[Dict[str, Any]]) -> s
 
     output = f"""
         <tr>
-          <td style="min-width:150px; white-space:nowrap;">MicroShift {version}</td>
+          <td class="version-cell">MicroShift {version}</td>
           <td>
-            <div class="history-bar" style="border: none; margin: 0; padding: 0; background-color: transparent; box-shadow: none;">
-              <div style="margin-top: 5px;">
+            <div class="history-bar-inner">
+              <div>
                 <strong>Latest run:</strong> {latest_result_date}
               </div>
 """

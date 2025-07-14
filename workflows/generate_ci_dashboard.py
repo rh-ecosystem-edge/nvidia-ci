@@ -101,7 +101,7 @@ def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
 
         rows_html += f"""
         <tr>
-          <td style="min-width:150px; white-space:nowrap;">{ocp_full}</td>
+          <td class="version-cell">{ocp_full}</td>
           <td>{gpu_links}</td>
         </tr>
         """
@@ -151,7 +151,7 @@ def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
   <div class="section-label">
     <strong>From main branch (OLM bundle)</strong>
   </div>
-  <div class="history-bar" style="opacity: 0.7;">
+  <div class="history-bar-inner history-bar-outer">
     <div style="margin-top: 5px;">
       <strong>Last Bundle Job Date:</strong> {last_bundle_date}
     </div>
