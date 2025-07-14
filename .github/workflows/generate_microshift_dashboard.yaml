@@ -50,9 +50,13 @@ jobs:
         run: |
           pip install -r workflows/microshift_requirements.txt
 
+      - name: Fetch MicroShift job results
+        run: |
+          python workflows/microshift.py fetch-data --output-data "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift_results.json"
+
       - name: Generate MicroShift dashboard
         run: |
-          python workflows/microshift.py --output "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift.html"
+          python workflows/microshift.py generate-dashboard --input-data "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift_results.json" --output-dashboard "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift.html"
 
       - name: Deploy HTML to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4

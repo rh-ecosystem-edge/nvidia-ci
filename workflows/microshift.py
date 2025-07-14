@@ -160,19 +160,34 @@ def generate_microshift_dashboard(fin_results: Dict[str, List[Dict[str, Any]]]) 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Microshift x NVIDIA Device Plugin CI Dashboard")
-    parser.add_argument("--job-limit", type=int, default=15, help="Amount of the latest job results to fetch")
-    parser.add_argument("--output", help="Path to save the dashboard HTML file")
+    subparsers = parser.add_subparsers(dest="command")
+
+    parser_fetch = subparsers.add_parser("fetch-data", help="Fetch the job results")
+    parser_fetch.add_argument("--job-limit", type=int, default=15, help="Amount of the latest job results to fetch")
+    parser_fetch.add_argument("--output-data", help="Path to save the results file", required=True)
+
+    parser_generate = subparsers.add_parser("generate-dashboard", help="Generate the dashboard")
+    parser_generate.add_argument("--input-data", help="Path to the results file", required=True)
+    parser_generate.add_argument("--output-dashboard", help="Path to save the dashboard HTML file", required=True)
+
     args = parser.parse_args()
 
-    results = get_all_results(args.job_limit)
+    if args.command == "fetch-data":
+        results = get_all_results(args.job_limit)
+        with open(args.output_data, "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2)
 
-    dashboard = generate_microshift_dashboard(results)
-    if args.output:
-        with open(args.output, "w", encoding="utf-8") as f:
+    elif args.command == "generate-dashboard":
+        with open(args.input_data, "r", encoding="utf-8") as f:
+            results = json.load(f)
+
+        dashboard = generate_microshift_dashboard(results)
+        with open(args.output_dashboard, "w", encoding="utf-8") as f:
             f.write(dashboard)
-            logger.info(f"Dashboard saved to {args.output}")
+            logger.info(f"Dashboard saved to {args.output_dashboard}")
+
     else:
-        print(dashboard)
+        parser.print_help()
 
 if __name__ == "__main__":
     main()
