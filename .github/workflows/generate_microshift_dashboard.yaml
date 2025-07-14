@@ -1,0 +1,63 @@
+name: Generate MicroShift dashboard
+
+# Nightly job to update the MicroShift dashboard.
+# Keep existing GitHub Pages intact - only add new html file.
+
+on:
+  schedule:
+    - cron: '0 5 * * *' # Every day at 5:00 AM UTC
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to check out'
+        default: 'main'
+        required: false
+        type: string
+      gh_pages_branch:
+        description: 'GitHub pages branch to update'
+        default: 'gh-pages'
+        required: false
+        type: string
+
+jobs:
+  generate-microshift-dashboard:
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_OUTPUT_DIR: 'workflows/test_matrix_dashboard/output'
+    steps:
+      - name: Set dynamic env vars
+        run: |
+          echo "GH_PAGES_BRANCH=${{ github.event.inputs.gh_pages_branch || 'gh-pages' }}" >> "$GITHUB_ENV"
+        env:
+          DASHBOARD_OUTPUT_DIR: ${{ env.DASHBOARD_OUTPUT_DIR }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Checkout GitHub Pages
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.GH_PAGES_BRANCH }}
+          path: ${{ env.DASHBOARD_OUTPUT_DIR }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+      - name: Install Dependencies
+        run: |
+          pip install -r workflows/dashboard_requirements.txt
+
+      - name: Generate MicroShift dashboard
+        run: |
+          python workflows/microshift.py --output "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift.html"
+
+      - name: Deploy HTML to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: ${{ env.GH_PAGES_BRANCH }}
+          folder: ${{ env.DASHBOARD_OUTPUT_DIR }}
+          clean: false
+          force: false
