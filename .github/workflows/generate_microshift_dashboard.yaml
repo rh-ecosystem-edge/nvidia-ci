@@ -48,7 +48,7 @@ jobs:
           python-version: 3.13
       - name: Install Dependencies
         run: |
-          pip install -r workflows/dashboard_requirements.txt
+          pip install -r workflows/microshift_requirements.txt
 
       - name: Generate MicroShift dashboard
         run: |
