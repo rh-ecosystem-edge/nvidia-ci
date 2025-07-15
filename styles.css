@@ -111,19 +111,29 @@ td:hover {
     cursor: pointer;
 }
 
+.version-cell {
+    min-width: 150px;
+    white-space: nowrap;
+}
+
 /* History bar styling for GPU bundle (de-emphasized) */
-.history-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+.history-bar-outer {
     margin: 20px auto;
     padding: 10px;
     border: 1px solid #ccc;
     border-radius: 4px;
     background-color: #f7f7f7;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    opacity: 0.7;
+}
+
+.history-bar-inner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 4px;
     color: #888;
     font-size: 0.9em;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     flex-wrap: wrap;
 }
 
