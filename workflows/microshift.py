@@ -2,7 +2,7 @@
 
 
 import time
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 import argparse
 import datetime
 import json
@@ -28,6 +28,18 @@ VERSION_JOB_NAME = {
 
 GCP_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o/"
 
+def gcp_list_dir(path: str) -> List[str]:
+    resp = requests.get(url=GCP_BASE_URL, params={"alt":"json", "delimiter":"/", "prefix":f"{path}"}, timeout=60)
+    content = json.loads(resp.content.decode("UTF-8"))
+    if 'prefixes' not in content:
+        return []
+    return content['prefixes']
+
+
+def gcp_get_file(path: str) -> Tuple[bool, str]:
+    resp = requests.get(url=GCP_BASE_URL + urllib.parse.quote_plus(path), params={"alt":"media"}, timeout=60)
+    return resp.status_code == 200, resp.content.decode("UTF-8").strip()
+
 
 def get_job_runs_for_version(version: str, job_limit: int) -> List[Dict[str, Any]]:
     """
@@ -36,11 +48,8 @@ def get_job_runs_for_version(version: str, job_limit: int) -> List[Dict[str, Any
     The subdir list is oldest-first, so we're taking 'job_limit' jobs from the end.
     """
     job_name = f"periodic-ci-openshift-microshift-release-{version}-" + VERSION_JOB_NAME.get(version, DEFAULT_VERSION_JOB_NAME)
-    resp = requests.get(url=GCP_BASE_URL, params={"alt":"json", "delimiter":"/", "prefix":f"logs/{job_name}/"}, timeout=60)
-    content = json.loads(resp.content.decode("UTF-8"))
-    if 'prefixes' in content:
-        return [ {"path": path, "num": int(path.split("/")[2]) } for path in content['prefixes'][-job_limit:] ]
-    return []
+    prefixes = gcp_list_dir(f"logs/{job_name}/")
+    return [ {"path": path, "num": int(path.split("/")[2]) } for path in prefixes[-job_limit:] ]
 
 
 def get_job_finished_json(job_path: str) -> Dict[str, Any]:
@@ -48,9 +57,10 @@ def get_job_finished_json(job_path: str) -> Dict[str, Any]:
     Fetches the finished.json file for particular job run described by job_path variable
     which is expected to be in the format 'logs/{job_name}/{job_run_number}/'.
     """
-    url = GCP_BASE_URL + urllib.parse.quote_plus(job_path + "finished.json")
-    resp = requests.get(url=url, params={"alt":"media"}, timeout=60)
-    return json.loads(resp.content.decode("UTF-8"))
+    found, content = gcp_get_file(f"{job_path}finished.json")
+    if not found:
+        raise Exception(f"Failed to fetch finished.json for {job_path=}")
+    return json.loads(content)
 
 
 def get_job_result(job_run: Dict[str, Any]) -> Dict[str, Any]:
