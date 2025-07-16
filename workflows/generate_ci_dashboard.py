@@ -167,8 +167,10 @@ def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
         bundle_timestamp = datetime.fromtimestamp(int(bundle["job_timestamp"]), timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         bundle_html += f"""
     <div class='history-square {status_class}'
-         onclick='window.open("{bundle["prow_job_url"]}", "_blank")'
-         title='Status: {status} | Timestamp: {bundle_timestamp}'>
+         onclick='window.open("{bundle["prow_job_url"]}", "_blank")'>
+         <span class="history-square-tooltip">
+          Status: {status} | Timestamp: {bundle_timestamp}
+         </span>
     </div>
         """
     bundle_html += "</div>"
