@@ -52,6 +52,23 @@ def get_job_runs_for_version(version: str, job_limit: int) -> List[Dict[str, Any
     return [ {"path": path, "num": int(path.split("/")[2]) } for path in prefixes[-job_limit:] ]
 
 
+def get_job_microshift_version(job_path: str) -> str:
+    """
+    Fetches the microshift-version.txt file for particular job run described by job_path variable
+    which is expected to be in the format 'logs/{job_name}/{job_run_number}/'.
+    """
+    # Each branch uses slightly different job name: find subdir starting with e2e-.
+    # There should be only one.
+    files = gcp_list_dir(f"{job_path}artifacts/e2e-")
+    if len(files) != 1:
+        raise Exception(f"Expected only one file starting with 'e2e-' for {job_path=}, got {files}")
+    found, content = gcp_get_file(f"{files[0]}openshift-microshift-e2e-bare-metal-tests/artifacts/microshift-version.txt")
+    # Some jobs don't have the file yet
+    if not found:
+        return ""
+    return content
+
+
 def get_job_finished_json(job_path: str) -> Dict[str, Any]:
     """
     Fetches the finished.json file for particular job run described by job_path variable
@@ -68,11 +85,13 @@ def get_job_result(job_run: Dict[str, Any]) -> Dict[str, Any]:
     Fetches the finished.json and returns a complete dictionary with the job results for dashboard creation.
     """
     finished = get_job_finished_json(job_run['path'])
+    version = get_job_microshift_version(job_run['path'])
     return {
             "num": job_run['num'],
             "timestamp": finished['timestamp'],
             "status": finished['result'],
-            "url": f"https://prow.ci.openshift.org/view/gs/test-platform-results/{job_run['path']}"
+            "url": f"https://prow.ci.openshift.org/view/gs/test-platform-results/{job_run['path']}",
+            "microshift_version": version,
         }
 
 
@@ -144,7 +163,7 @@ def build_microshift_table_row(version: str, results: List[Dict[str, Any]]) -> s
         output += f"""
               <div class='history-square {status_class}'
                 onclick='window.open("{result["url"]}", "_blank")'
-                title='Status: {status} | Timestamp: {result_date}'>
+                title='Status: {status}&#10;Timestamp: {result_date}&#10;MicroShift: {result["microshift_version"]}'>
               </div>
 """
 
