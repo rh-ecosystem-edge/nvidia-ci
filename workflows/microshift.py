@@ -160,10 +160,17 @@ def build_microshift_table_row(version: str, results: List[Dict[str, Any]]) -> s
         else:
             status_class = "history-aborted"
         result_date = datetime.datetime.fromtimestamp(int(result["timestamp"]), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        microshift_version = result["microshift_version"] or version
         output += f"""
               <div class='history-square {status_class}'
-                onclick='window.open("{result["url"]}", "_blank")'
-                title='Status: {status}&#10;Timestamp: {result_date}&#10;MicroShift: {result["microshift_version"]}'>
+                onclick='window.open("{result["url"]}", "_blank")'>
+                <span class="history-square-tooltip">
+                  <b>Status</b>: {status}
+                  <br>
+                  <b>Timestamp</b>: {result_date}
+                  <br>
+                  <b>MicroShift</b>: {microshift_version}
+                </span>
               </div>
 """
 
