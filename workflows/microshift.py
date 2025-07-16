@@ -36,10 +36,10 @@ def get_job_runs_for_version(version: str, job_limit: int) -> List[Dict[str, Any
     The subdir list is oldest-first, so we're taking 'job_limit' jobs from the end.
     """
     job_name = f"periodic-ci-openshift-microshift-release-{version}-" + VERSION_JOB_NAME.get(version, DEFAULT_VERSION_JOB_NAME)
-    req = requests.get(url=GCP_BASE_URL, params={"alt":"json", "delimiter":"/", "prefix":f"logs/{job_name}/"}, timeout=60)
-    resp = json.loads(req.content.decode("UTF-8"))
-    if 'prefixes' in resp:
-        return [ {"path": path, "num": int(path.split("/")[2]) } for path in resp['prefixes'][-job_limit:] ]
+    resp = requests.get(url=GCP_BASE_URL, params={"alt":"json", "delimiter":"/", "prefix":f"logs/{job_name}/"}, timeout=60)
+    content = json.loads(resp.content.decode("UTF-8"))
+    if 'prefixes' in content:
+        return [ {"path": path, "num": int(path.split("/")[2]) } for path in content['prefixes'][-job_limit:] ]
     return []
 
 
@@ -49,8 +49,8 @@ def get_job_finished_json(job_path: str) -> Dict[str, Any]:
     which is expected to be in the format 'logs/{job_name}/{job_run_number}/'.
     """
     url = GCP_BASE_URL + urllib.parse.quote_plus(job_path + "finished.json")
-    req = requests.get(url=url, params={"alt":"media"}, timeout=60)
-    return json.loads(req.content.decode("UTF-8"))
+    resp = requests.get(url=url, params={"alt":"media"}, timeout=60)
+    return json.loads(resp.content.decode("UTF-8"))
 
 
 def get_job_result(job_run: Dict[str, Any]) -> Dict[str, Any]:
