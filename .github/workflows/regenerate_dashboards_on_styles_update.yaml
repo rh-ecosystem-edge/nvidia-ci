@@ -1,0 +1,86 @@
+name: Regenerate dashboards on styles update
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to check out'
+        default: 'main'
+        required: false
+        type: string
+      gh_pages_branch:
+        description: 'GitHub pages branch to update'
+        default: 'gh-pages'
+        required: false
+        type: string
+
+jobs:
+  regenerate-dashboards-on-styles-update:
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_OUTPUT_DIR: 'workflows/test_matrix_dashboard/output'
+    steps:
+      - name: Set dynamic env vars
+        run: |
+          echo "DASHBOARD_DATA_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.json" >> "$GITHUB_ENV"
+          echo "DASHBOARD_HTML_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.html" >> "$GITHUB_ENV"
+          echo "GH_PAGES_BRANCH=${{ github.event.inputs.gh_pages_branch || 'gh-pages' }}" >> "$GITHUB_ENV"
+        env:
+          DASHBOARD_OUTPUT_DIR: ${{ env.DASHBOARD_OUTPUT_DIR }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Checkout GitHub Pages
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.GH_PAGES_BRANCH }}
+          path: ${{ env.DASHBOARD_OUTPUT_DIR }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+
+      - name: Update styles.css
+        run: |
+          cp workflows/templates/styles.css "${{ env.DASHBOARD_OUTPUT_DIR }}/styles.css"
+          cd "${{ env.DASHBOARD_OUTPUT_DIR }}"
+          if git diff --exit-code styles.css; then
+            echo "STYLES_CHANGED=false" >> "$GITHUB_ENV"
+          else
+            echo "styles.css changed - dashboard needs to be regenerated"
+            echo "STYLES_CHANGED=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Generate MicroShift dashboard
+        if: ${{ env.STYLES_CHANGED == 'true' }}
+        run: |
+          cd "${{ github.workspace }}"
+          pip install -r workflows/microshift_requirements.txt
+          python workflows/microshift.py \
+            generate-dashboard \
+              --input-data "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift_results.json" \
+              --output-dashboard "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift.html"
+
+      - name: Generate OCP dashboard
+        if: ${{ env.STYLES_CHANGED == 'true' }}
+        run: |
+          cd "${{ github.workspace }}"
+          pip install -r workflows/dashboard_requirements.txt
+          python workflows/generate_ci_dashboard.py \
+            --dashboard_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
+            --dashboard_html_filepath "${{ env.DASHBOARD_HTML_FILEPATH }}"
+
+      - name: Deploy HTML to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: ${{ env.GH_PAGES_BRANCH }}
+          folder: ${{ env.DASHBOARD_OUTPUT_DIR }}
+          clean: false
+          force: false
