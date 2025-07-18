@@ -2,7 +2,7 @@
 
 
 import time
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 import argparse
 import datetime
 import json
@@ -28,6 +28,18 @@ VERSION_JOB_NAME = {
 
 GCP_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o/"
 
+def gcp_list_dir(path: str) -> List[str]:
+    resp = requests.get(url=GCP_BASE_URL, params={"alt":"json", "delimiter":"/", "prefix":f"{path}"}, timeout=60)
+    content = json.loads(resp.content.decode("UTF-8"))
+    if 'prefixes' not in content:
+        return []
+    return content['prefixes']
+
+
+def gcp_get_file(path: str) -> Tuple[bool, str]:
+    resp = requests.get(url=GCP_BASE_URL + urllib.parse.quote_plus(path), params={"alt":"media"}, timeout=60)
+    return resp.status_code == 200, resp.content.decode("UTF-8").strip()
+
 
 def get_job_runs_for_version(version: str, job_limit: int) -> List[Dict[str, Any]]:
     """
@@ -36,11 +48,25 @@ def get_job_runs_for_version(version: str, job_limit: int) -> List[Dict[str, Any
     The subdir list is oldest-first, so we're taking 'job_limit' jobs from the end.
     """
     job_name = f"periodic-ci-openshift-microshift-release-{version}-" + VERSION_JOB_NAME.get(version, DEFAULT_VERSION_JOB_NAME)
-    req = requests.get(url=GCP_BASE_URL, params={"alt":"json", "delimiter":"/", "prefix":f"logs/{job_name}/"}, timeout=60)
-    resp = json.loads(req.content.decode("UTF-8"))
-    if 'prefixes' in resp:
-        return [ {"path": path, "num": int(path.split("/")[2]) } for path in resp['prefixes'][-job_limit:] ]
-    return []
+    prefixes = gcp_list_dir(f"logs/{job_name}/")
+    return [ {"path": path, "num": int(path.split("/")[2]) } for path in prefixes[-job_limit:] ]
+
+
+def get_job_microshift_version(job_path: str) -> str:
+    """
+    Fetches the microshift-version.txt file for particular job run described by job_path variable
+    which is expected to be in the format 'logs/{job_name}/{job_run_number}/'.
+    """
+    # Each branch uses slightly different job name: find subdir starting with e2e-.
+    # There should be only one.
+    files = gcp_list_dir(f"{job_path}artifacts/e2e-")
+    if len(files) != 1:
+        raise Exception(f"Expected only one file starting with 'e2e-' for {job_path=}, got {files}")
+    found, content = gcp_get_file(f"{files[0]}openshift-microshift-e2e-bare-metal-tests/artifacts/microshift-version.txt")
+    # Some jobs don't have the file yet
+    if not found:
+        return ""
+    return content
 
 
 def get_job_finished_json(job_path: str) -> Dict[str, Any]:
@@ -48,9 +74,10 @@ def get_job_finished_json(job_path: str) -> Dict[str, Any]:
     Fetches the finished.json file for particular job run described by job_path variable
     which is expected to be in the format 'logs/{job_name}/{job_run_number}/'.
     """
-    url = GCP_BASE_URL + urllib.parse.quote_plus(job_path + "finished.json")
-    req = requests.get(url=url, params={"alt":"media"}, timeout=60)
-    return json.loads(req.content.decode("UTF-8"))
+    found, content = gcp_get_file(f"{job_path}finished.json")
+    if not found:
+        raise Exception(f"Failed to fetch finished.json for {job_path=}")
+    return json.loads(content)
 
 
 def get_job_result(job_run: Dict[str, Any]) -> Dict[str, Any]:
@@ -58,11 +85,13 @@ def get_job_result(job_run: Dict[str, Any]) -> Dict[str, Any]:
     Fetches the finished.json and returns a complete dictionary with the job results for dashboard creation.
     """
     finished = get_job_finished_json(job_run['path'])
+    version = get_job_microshift_version(job_run['path'])
     return {
             "num": job_run['num'],
             "timestamp": finished['timestamp'],
             "status": finished['result'],
-            "url": f"https://prow.ci.openshift.org/view/gs/test-platform-results/{job_run['path']}"
+            "url": f"https://prow.ci.openshift.org/view/gs/test-platform-results/{job_run['path']}",
+            "microshift_version": version,
         }
 
 
@@ -131,10 +160,17 @@ def build_microshift_table_row(version: str, results: List[Dict[str, Any]]) -> s
         else:
             status_class = "history-aborted"
         result_date = datetime.datetime.fromtimestamp(int(result["timestamp"]), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        microshift_version = result["microshift_version"] or version
         output += f"""
               <div class='history-square {status_class}'
-                onclick='window.open("{result["url"]}", "_blank")'
-                title='Status: {status} | Timestamp: {result_date}'>
+                onclick='window.open("{result["url"]}", "_blank")'>
+                <span class="history-square-tooltip">
+                  <b>Status</b>: {status}
+                  <br>
+                  <b>Timestamp</b>: {result_date}
+                  <br>
+                  <b>MicroShift</b>: {microshift_version}
+                </span>
               </div>
 """
 
