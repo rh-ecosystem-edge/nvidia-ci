@@ -1,10 +1,12 @@
 package nvidiagpu
 
 import (
-	"github.com/golang/glog"
+	"os"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/golang/glog"
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/reporter"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
@@ -30,8 +32,12 @@ var _ = JustAfterEach(func() {
 	specReport := CurrentSpecReport()
 	reporter.ReportIfFailed(
 		specReport, currentFile, tsparams.ReporterNamespacesToDump, tsparams.ReporterCRDsToDump, clients.SetScheme)
-	artifactDir := inittools.GeneralConfig.GetReportPath("gpu-must-gather")
-	if err := reporter.RunMustGather(artifactDir, 5*time.Minute); err != nil {
-		glog.Errorf("Failed to collect must-gather for the GPU operator, %v", err)
+
+	scriptPath := os.Getenv("PATH_TO_MUST_GATHER_SCRIPT")
+	if scriptPath != "" {
+		artifactDir := inittools.GeneralConfig.GetReportPath("gpu-operator-tests-must-gather")
+		if err := reporter.RunMustGather(artifactDir, scriptPath, 5*time.Minute); err != nil {
+			glog.Errorf("Failed to collect must-gather: %v", err)
+		}
 	}
 })
