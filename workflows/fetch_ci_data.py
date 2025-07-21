@@ -12,6 +12,18 @@ from utils import logger, GCS_API_BASE_URL, TEST_RESULT_PATH_REGEX, version2suff
 
 
 # =============================================================================
+# Constants
+# =============================================================================
+
+# Expected number of slashes for top-level GPU operator E2E finished.json paths
+# Format: pr-logs/pull/org/pr/job/build/finished.json (6 slashes)
+EXPECTED_FINISHED_JSON_SLASH_COUNT = 6
+
+# Maximum number of results per GCS API request for pagination
+GCS_MAX_RESULTS_PER_REQUEST = 1000
+
+
+# =============================================================================
 # Data Fetching & JSON Update Functions
 # =============================================================================
 
@@ -39,30 +51,7 @@ def build_prow_job_url(pr_number: str, ocp_minor: str, gpu_suffix: str, job_id: 
         f"{ocp_minor}-stable-nvidia-gpu-operator-e2e-{gpu_suffix}/{job_id}"
     )
 
-def fetch_build_versions(job_prefix: str, build_id: str, gpu_version_suffix: str) -> Tuple[str, str]:
-    """Fetch the exact OCP and GPU versions for a given build."""
-    logger.info(f"Fetching versions for build {build_id}")
-    ocp_version_file = (
-        f"{job_prefix}{build_id}/artifacts/nvidia-gpu-operator-e2e-{gpu_version_suffix}/"
-        "gpu-operator-e2e/artifacts/ocp.version"
-    )
-    gpu_version_file = (
-        f"{job_prefix}{build_id}/artifacts/nvidia-gpu-operator-e2e-{gpu_version_suffix}/"
-        "gpu-operator-e2e/artifacts/operator.version"
-    )
-    ocp_version = fetch_gcs_file_content(ocp_version_file)
-    gpu_version = fetch_gcs_file_content(gpu_version_file)
-    return ocp_version, gpu_version
 
-def fetch_build_status_and_timestamp(job_prefix: str, build_id: str) -> Tuple[str, Any]:
-    """Fetch the status (SUCCESS/FAILURE/UNKNOWN) and timestamp for a given build."""
-    logger.info(f"Fetching status for build {build_id}")
-    finished_file = f"{job_prefix}{build_id}/finished.json"
-    url = f"{GCS_API_BASE_URL}/{urllib.parse.quote_plus(finished_file)}"
-    data = http_get_json(url, params={"alt": "media"})
-    status = data.get("result", "UNKNOWN")
-    timestamp = data.get("timestamp", None)
-    return status, timestamp
 
 # --- Pydantic Model and Domain Model for Test Results ---
 
@@ -102,60 +91,189 @@ class TestResult:
             job_timestamp=str(self.job_timestamp)
         )
 
-def process_job_result(
-    pr_number: str,
-    job_prefix: str,
-    ocp_full_version: str,
-    gpu_version_suffix: str,
-    results_by_ocp: Dict[str, List[Dict[str, Any]]]
-) -> None:
-    """Fetch and store results for a specific job prefix."""
-    logger.info(f"Processing job results for {job_prefix}")
-    params = {
-        "prefix": job_prefix,
-        "alt": "json",
-        "delimiter": "/",
-        "includeFoldersAsPrefixes": "True",
-        "maxResults": "1000",
-        "projection": "noAcl",
-    }
-    headers = {"Accept": "application/json"}
-    response_data = http_get_json(GCS_API_BASE_URL, params=params, headers=headers)
-    latest_build = fetch_gcs_file_content(response_data["items"][0]["name"])
-    logger.info(f"Latest build for {job_prefix}: {latest_build}")
 
-    status, timestamp = fetch_build_status_and_timestamp(job_prefix, latest_build)
-    job_url = build_prow_job_url(pr_number, ocp_full_version, gpu_version_suffix, latest_build)
 
-    if status == "SUCCESS":
-        exact_ocp, exact_gpu_version = fetch_build_versions(job_prefix, latest_build, gpu_version_suffix)
-        result = TestResult(exact_ocp, exact_gpu_version, status, job_url, timestamp)
-    else:
-        converted_gpu = version2suffix(gpu_version_suffix)
-        result = TestResult(ocp_full_version, converted_gpu, status, job_url, timestamp)
-    results_by_ocp.setdefault(ocp_full_version, []).append(result.to_dict())
+def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, Any]]:
+    """Fetch files matching a specific glob pattern for a PR."""
+    logger.info(f"Fetching files matching pattern: {glob_pattern}")
 
-def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str, Any]]]) -> None:
-    """Retrieve and store test results for all jobs under a single PR."""
-    logger.info(f"Fetching tests for PR #{pr_number}")
     params = {
         "prefix": f"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/{pr_number}/",
         "alt": "json",
-        "delimiter": "/",
-        "includeFoldersAsPrefixes": "True",
-        "maxResults": "1000",
+        "matchGlob": glob_pattern,
+        "maxResults": str(GCS_MAX_RESULTS_PER_REQUEST),
         "projection": "noAcl",
     }
     headers = {"Accept": "application/json"}
-    response_data = http_get_json(GCS_API_BASE_URL, params=params, headers=headers)
-    job_prefixes = response_data.get("prefixes", [])
-    for job_prefix in job_prefixes:
-        match = TEST_RESULT_PATH_REGEX.match(job_prefix)
+
+    all_items = []
+    next_page_token = None
+
+    # Handle pagination
+    while True:
+        if next_page_token:
+            params["pageToken"] = next_page_token
+
+        response_data = http_get_json(GCS_API_BASE_URL, params=params, headers=headers)
+        items = response_data.get("items", [])
+        all_items.extend(items)
+
+        next_page_token = response_data.get("nextPageToken")
+        if not next_page_token:
+            break
+
+    logger.info(f"Found {len(all_items)} files matching {glob_pattern}")
+    return all_items
+
+def fetch_pr_files(pr_number: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Fetch all required file types for a PR using targeted filtering."""
+    logger.info(f"Fetching files for PR #{pr_number}")
+
+    # Fetch the 3 file types we need using glob patterns
+    all_finished_files = fetch_filtered_files(pr_number, "**/finished.json")
+    ocp_version_files = fetch_filtered_files(pr_number, "**/gpu-operator-e2e/artifacts/ocp.version")
+    gpu_version_files = fetch_filtered_files(pr_number, "**/gpu-operator-e2e/artifacts/operator.version")
+
+    return all_finished_files, ocp_version_files, gpu_version_files
+
+def filter_gpu_finished_files(all_finished_files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Filter to get only top-level finished.json files from GPU operator E2E builds."""
+    finished_files = []
+    for file_item in all_finished_files:
+        path = file_item.get("name", "")
+        # Must be a GPU operator E2E test and a top-level finished.json (not nested in artifacts)
+        if ("nvidia-gpu-operator-e2e" in path and
+            path.count('/') == EXPECTED_FINISHED_JSON_SLASH_COUNT and
+            path.endswith('/finished.json')):
+            finished_files.append(file_item)
+    return finished_files
+
+def build_single_file_lookup(
+    file_items: List[Dict[str, Any]],
+    all_builds: set
+) -> Dict[Tuple[str, str], Dict[str, Any]]:
+    """Build a lookup dictionary for a single file type.
+
+    Args:
+        file_items: List of file items from GCS API
+        all_builds: Set that will be populated with (job_path, build_id) tuples as a side effect
+
+    Returns:
+        Dictionary mapping (job_path, build_id) to file item
+    """
+    lookup = {}
+
+    for file_item in file_items:
+        path = file_item.get("name", "")
+        match = TEST_RESULT_PATH_REGEX.match(path)
         if not match:
             continue
-        ocp_full = match.group("ocp_version")
+
+        path_parts = path.split('/')
+        if len(path_parts) < 6:
+            continue
+
+        build_id = path_parts[5]
+        if build_id in ['latest-build.txt', 'latest-build']:
+            continue
+
+        job_path = '/'.join(path_parts[:5]) + '/'
+        key = (job_path, build_id)
+        lookup[key] = file_item
+        all_builds.add(key)
+
+    return lookup
+
+def build_file_lookups(
+    finished_files: List[Dict[str, Any]],
+    ocp_version_files: List[Dict[str, Any]],
+    gpu_version_files: List[Dict[str, Any]]
+) -> Tuple[Dict[Tuple[str, str], Dict[str, Any]], Dict[Tuple[str, str], Dict[str, Any]], Dict[Tuple[str, str], Dict[str, Any]], set]:
+    """Build lookup dictionaries for fast file access by (job_path, build_id)."""
+    all_builds = set()
+
+    finished_lookup = build_single_file_lookup(finished_files, all_builds)
+    ocp_version_lookup = build_single_file_lookup(ocp_version_files, all_builds)
+    gpu_version_lookup = build_single_file_lookup(gpu_version_files, all_builds)
+
+    return finished_lookup, ocp_version_lookup, gpu_version_lookup, all_builds
+
+def process_single_build(
+    pr_number: str,
+    job_path: str,
+    build_id: str,
+    finished_lookup: Dict[Tuple[str, str], Dict[str, Any]],
+    ocp_version_lookup: Dict[Tuple[str, str], Dict[str, Any]],
+    gpu_version_lookup: Dict[Tuple[str, str], Dict[str, Any]]
+) -> TestResult:
+    """Process a single build and return its test result."""
+    # Extract OCP and GPU versions from job path
+    match = TEST_RESULT_PATH_REGEX.match(job_path)
+    if not match:
+        raise ValueError(f"Invalid job path format: {job_path}")
+
+    ocp_version = match.group("ocp_version")
+    gpu_suffix = match.group("gpu_version")
+
+    # Get build status and timestamp from finished.json
+    key = (job_path, build_id)
+    finished_file = finished_lookup[key]
+
+    finished_content = fetch_gcs_file_content(finished_file['name'])
+    finished_data = json.loads(finished_content)
+    status = finished_data["result"]
+    timestamp = finished_data["timestamp"]
+
+    # Build prow job URL
+    job_url = build_prow_job_url(pr_number, ocp_version, gpu_suffix, build_id)
+
+    # Get exact versions if SUCCESS and files exist
+    ocp_version_file = ocp_version_lookup.get(key)
+    gpu_version_file = gpu_version_lookup.get(key)
+
+    if status == "SUCCESS" and ocp_version_file and gpu_version_file:
+        exact_ocp = fetch_gcs_file_content(ocp_version_file['name']).strip()
+        exact_gpu_version = fetch_gcs_file_content(gpu_version_file['name']).strip()
+        result = TestResult(exact_ocp, exact_gpu_version, status, job_url, timestamp)
+    else:
+        # Use base versions
+        result = TestResult(ocp_version, gpu_suffix, status, job_url, timestamp)
+
+    return result
+
+def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str, Any]]]) -> None:
+    """Retrieve and store test results for all jobs under a single PR using targeted file filtering."""
+    logger.info(f"Fetching targeted test data for PR #{pr_number} using filtered requests")
+
+    # Step 1: Fetch all required files
+    all_finished_files, ocp_version_files, gpu_version_files = fetch_pr_files(pr_number)
+
+    # Step 2: Filter to get only GPU operator E2E finished.json files
+    finished_files = filter_gpu_finished_files(all_finished_files)
+
+    # Step 3: Build lookup dictionaries for fast access
+    finished_lookup, ocp_version_lookup, gpu_version_lookup, all_builds = build_file_lookups(
+        finished_files, ocp_version_files, gpu_version_files)
+
+    logger.info(f"Found {len(all_builds)} unique job/build combinations from filtered files")
+
+    # Step 4: Process each job/build combination
+    for job_path, build_id in sorted(all_builds):
+        # Extract OCP version for logging
+        match = TEST_RESULT_PATH_REGEX.match(job_path)
+        ocp_version = match.group("ocp_version")
         gpu_suffix = match.group("gpu_version")
-        process_job_result(pr_number, job_prefix, ocp_full, gpu_suffix, results_by_ocp)
+
+        logger.info(f"Processing build {build_id} for {ocp_version} + {gpu_suffix}")
+
+        result = process_single_build(
+            pr_number, job_path, build_id,
+            finished_lookup, ocp_version_lookup, gpu_version_lookup)
+
+        results_by_ocp.setdefault(ocp_version, []).append(result.to_dict())
+        logger.info(f"Added result for build {build_id}: {result.test_status}")
+
+    logger.info(f"Successfully processed {len(all_builds)} builds using targeted filtering")
 
 def process_closed_prs(results_by_ocp: Dict[str, List[Dict[str, Any]]]) -> None:
     """Retrieve and store test results for all closed PRs against the main branch."""

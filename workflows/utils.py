@@ -27,20 +27,7 @@ def get_logger(name: str) -> Logger:
 
 logger = get_logger(__name__)
 
-def update_key(versions_file: str, version_key: str, version_value: Any):
-    with open(versions_file, "r+") as json_f:
-        data = json.load(json_f)
-        old_version = data.get(version_key)
-        if old_version == version_value:
-            logger.info('No changes detected, exit')
-            return
 
-        logger.info(f'New version detected: {version_value} (was {old_version})')
-
-        data[version_key] = version_value
-        json_f.seek(0)  # rewind
-        json.dump(data, json_f, indent=4)
-        json_f.truncate()
 
 
 def get_latest_versions(versions: list, count: int) -> list:
@@ -118,9 +105,6 @@ def calculate_diffs(old_versions: dict, new_versions: dict) -> dict:
 def version2suffix(v: str):
     return v if v == 'master' else f'{v.replace(".", "-")}-x'
 
-# def parse_gpu_version(gpu: str) -> str:
-#     """Convert GPU suffix to a version string, e.g., '14-9-x' -> '14.9'."""
-#     return gpu if gpu == "master" else gpu[:-2].replace("-", ".")
 
 def max_version(a: str, b: str) -> str:
     """
