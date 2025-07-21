@@ -257,12 +257,25 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str
 
     logger.info(f"Found {len(all_builds)} unique job/build combinations from filtered files")
 
-    # Step 4: Process each job/build combination
+    # Step 4: Process each job/build combination and deduplicate by Prow job URL
+    processed_urls = set()  # Track processed URLs to avoid duplicates
+    processed_count = 0
+
     for job_path, build_id in sorted(all_builds):
         # Extract OCP version for logging
         match = TEST_RESULT_PATH_REGEX.match(job_path)
         ocp_version = match.group("ocp_version")
         gpu_suffix = match.group("gpu_version")
+
+        # Create the job URL to check for duplicates
+        job_url = build_prow_job_url(pr_number, ocp_version, gpu_suffix, build_id)
+
+        # Skip if we've already processed this exact job URL
+        if job_url in processed_urls:
+            logger.debug(f"Skipping duplicate build {build_id} for {ocp_version} + {gpu_suffix}")
+            continue
+
+        processed_urls.add(job_url)
 
         logger.info(f"Processing build {build_id} for {ocp_version} + {gpu_suffix}")
 
@@ -272,8 +285,9 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str
 
         results_by_ocp.setdefault(ocp_version, []).append(result.to_dict())
         logger.info(f"Added result for build {build_id}: {result.test_status}")
+        processed_count += 1
 
-    logger.info(f"Successfully processed {len(all_builds)} builds using targeted filtering")
+    logger.info(f"Successfully processed {processed_count} unique builds using targeted filtering")
 
 def process_closed_prs(results_by_ocp: Dict[str, List[Dict[str, Any]]]) -> None:
     """Retrieve and store test results for all closed PRs against the main branch."""
