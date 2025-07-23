@@ -145,7 +145,6 @@ td:hover {
     transition: transform 0.1s ease;
     border: 1px solid #ccc;
     position: relative;
-    overflow: hidden;
     box-shadow: none;
 }
 
@@ -165,18 +164,21 @@ td:hover {
     background-color: #ffc107;
 }
 
-.history-square:hover::after {
-    content: attr(title);
+.history-square-tooltip {
+    visibility: hidden;
     position: absolute;
     background-color: #333;
     color: #fff;
     padding: 6px 10px;
     border-radius: 4px;
     font-size: 12px;
-    top: 28px;
     z-index: 10;
-    width: 160px;
-    text-align: center;
+    transform: translate(-50%, -120%);
+    white-space: nowrap;
+}
+
+.history-square:hover .history-square-tooltip {
+  visibility: visible;
 }
 
 @media screen and (max-width: 768px) {
