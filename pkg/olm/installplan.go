@@ -2,6 +2,7 @@ package olm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/msg"
@@ -156,7 +157,7 @@ func (builder *InstallPlanBuilder) validate() (bool, error) {
 	if builder.errorMsg != "" {
 		glog.V(100).Infof("The builder %s has error message: %w", resourceCRD, builder.errorMsg)
 
-		return false, fmt.Errorf(builder.errorMsg)
+		return false, errors.New(builder.errorMsg)
 	}
 
 	return true, nil

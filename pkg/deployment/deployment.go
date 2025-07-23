@@ -3,6 +3,7 @@ package deployment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -449,7 +450,7 @@ func (builder *Builder) CreateAndWaitUntilReady(timeout time.Duration) (*Builder
 		builder.Definition.Name, builder.Definition.Namespace)
 
 	if _, err := builder.Create(); err != nil {
-		return nil, fmt.Errorf(err.Error())
+		return nil, err
 	}
 
 	if builder.IsReady(timeout) {
@@ -587,7 +588,7 @@ func (builder *Builder) validate() (bool, error) {
 	if builder.Definition == nil {
 		glog.V(100).Infof("The %s is undefined", resourceCRD)
 
-		return false, fmt.Errorf(msg.UndefinedCrdObjectErrString(resourceCRD))
+		return false, errors.New(msg.UndefinedCrdObjectErrString(resourceCRD))
 	}
 
 	if builder.apiClient == nil {
@@ -599,7 +600,7 @@ func (builder *Builder) validate() (bool, error) {
 	if builder.errorMsg != "" {
 		glog.V(100).Infof("The %s builder has error message: %s", resourceCRD, builder.errorMsg)
 
-		return false, fmt.Errorf(builder.errorMsg)
+		return false, errors.New(builder.errorMsg)
 	}
 
 	return true, nil

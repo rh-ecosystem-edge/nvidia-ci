@@ -2,7 +2,9 @@ package nvidianetwork
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
 	nvidianetworkv1alpha1 "github.com/Mellanox/network-operator/api/v1alpha1"
 
 	"github.com/golang/glog"
@@ -114,7 +116,7 @@ func PullMacvlanNetwork(apiClient *clients.Settings, name string) (*MacvlanNetwo
 		glog.V(100).Infof("MacvlanNetwork name is empty")
 
 		builder.errorMsg = "MacvlanNetwork 'name' cannot be empty"
-		return nil, fmt.Errorf(builder.errorMsg)
+		return nil, errors.New(builder.errorMsg)
 	}
 
 	if !builder.Exists() {
@@ -154,7 +156,7 @@ func (builder *MacvlanNetworkBuilder) Delete() (*MacvlanNetworkBuilder, error) {
 	glog.V(100).Infof("Deleting MacvlanNetwork %s", builder.Definition.Name)
 
 	if !builder.Exists() {
-		return builder, fmt.Errorf("MacvlanNetwork cannot be deleted because it does not exist")
+		return builder, errors.New("MacvlanNetwork cannot be deleted because it does not exist")
 	}
 
 	err := builder.apiClient.Delete(context.TODO(), builder.Definition)
@@ -226,7 +228,7 @@ func getMacvlanNetworkFromAlmExample(almExample string) (*nvidianetworkv1alpha1.
 	MacvlanNetworkList := &nvidianetworkv1alpha1.MacvlanNetworkList{}
 
 	if almExample == "" {
-		return nil, fmt.Errorf("almExample is an empty string")
+		return nil, errors.New("almExample is an empty string")
 	}
 
 	err := json.Unmarshal([]byte(almExample), &MacvlanNetworkList.Items)
@@ -238,7 +240,7 @@ func getMacvlanNetworkFromAlmExample(almExample string) (*nvidianetworkv1alpha1.
 	}
 
 	if len(MacvlanNetworkList.Items) == 0 {
-		return nil, fmt.Errorf("failed to get alm examples")
+		return nil, errors.New("failed to get alm examples")
 	}
 
 	for i := range MacvlanNetworkList.Items {
@@ -247,7 +249,7 @@ func getMacvlanNetworkFromAlmExample(almExample string) (*nvidianetworkv1alpha1.
 		}
 	}
 
-	return nil, fmt.Errorf("MacvlanNetwork not found in alm examples")
+	return nil, errors.New("MacvlanNetwork not found in alm examples")
 }
 
 // validate will check that the builder and builder definition are properly initialized before
@@ -275,7 +277,7 @@ func (builder *MacvlanNetworkBuilder) validate() (bool, error) {
 	if builder.errorMsg != "" {
 		glog.V(100).Infof("The %s builder has error message: %s", resourceCRD, builder.errorMsg)
 
-		return false, fmt.Errorf(builder.errorMsg)
+		return false, errors.New(builder.errorMsg)
 	}
 
 	return true, nil

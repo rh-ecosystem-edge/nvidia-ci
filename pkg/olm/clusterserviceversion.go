@@ -2,6 +2,7 @@ package olm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -187,7 +188,7 @@ func (builder *ClusterServiceVersionBuilder) validate() (bool, error) {
 	if builder.errorMsg != "" {
 		glog.V(100).Infof("The %s builder has error message: %s", resourceCRD, builder.errorMsg)
 
-		return false, fmt.Errorf(builder.errorMsg)
+		return false, errors.New(builder.errorMsg)
 	}
 
 	return true, nil

@@ -3,6 +3,7 @@ package machine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -577,7 +578,7 @@ func (builder *SetBuilder) validate() (bool, error) {
 	if builder.errorMsg != "" {
 		glog.V(100).Infof("The %s builder has error message: %s", resourceCRD, builder.errorMsg)
 
-		return false, fmt.Errorf(builder.errorMsg)
+		return false, errors.New(builder.errorMsg)
 	}
 
 	return true, nil

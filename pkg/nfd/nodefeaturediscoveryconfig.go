@@ -3,7 +3,7 @@ package nfd
 import (
 	"log"
 
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // Config worker-config.

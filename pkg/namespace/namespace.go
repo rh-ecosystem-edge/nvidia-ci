@@ -2,7 +2,9 @@ package namespace
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/golang/glog"
@@ -15,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/utils/ptr"
-	"k8s.io/utils/strings/slices"
 )
 
 // Builder provides struct for namespace object containing connection to the cluster and the namespace definitions.
@@ -351,7 +352,7 @@ func (builder *Builder) validate() (bool, error) {
 	if builder.errorMsg != "" {
 		glog.V(100).Infof("The %s builder has error message: %s", resourceCRD, builder.errorMsg)
 
-		return false, fmt.Errorf(builder.errorMsg)
+		return false, errors.New(builder.errorMsg)
 	}
 
 	return true, nil

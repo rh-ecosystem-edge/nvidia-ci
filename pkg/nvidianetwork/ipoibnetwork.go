@@ -2,7 +2,9 @@ package nvidianetwork
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
 	nvidianetworkv1alpha1 "github.com/Mellanox/network-operator/api/v1alpha1"
 
 	"github.com/golang/glog"
@@ -114,7 +116,7 @@ func PullIPoIBNetwork(apiClient *clients.Settings, name string) (*IPoIBNetworkBu
 		glog.V(100).Infof("IPoIBNetwork name is empty")
 
 		builder.errorMsg = "IPoIBNetwork 'name' cannot be empty"
-		return nil, fmt.Errorf(builder.errorMsg)
+		return nil, errors.New(builder.errorMsg)
 	}
 
 	if !builder.Exists() {
@@ -275,7 +277,7 @@ func (builder *IPoIBNetworkBuilder) validate() (bool, error) {
 	if builder.errorMsg != "" {
 		glog.V(100).Infof("The %s builder has error message: %s", resourceCRD, builder.errorMsg)
 
-		return false, fmt.Errorf(builder.errorMsg)
+		return false, errors.New(builder.errorMsg)
 	}
 
 	return true, nil

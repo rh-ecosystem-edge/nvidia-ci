@@ -1,13 +1,13 @@
 package pod
 
 import (
-	"fmt"
+	"errors"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/strings/slices"
 )
 
 var (
@@ -382,7 +382,7 @@ func (builder *ContainerBuilder) GetContainerCfg() (*corev1.Container, error) {
 	if builder.errorMsg != "" {
 		glog.V(100).Infof("Failed to build container configuration due to %s", builder.errorMsg)
 
-		return nil, fmt.Errorf(builder.errorMsg)
+		return nil, errors.New(builder.errorMsg)
 	}
 
 	return builder.definition, nil

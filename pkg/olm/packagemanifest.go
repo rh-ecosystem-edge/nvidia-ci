@@ -2,7 +2,10 @@ package olm
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
+
 	"github.com/golang/glog"
 	pkgManifestV1 "github.com/operator-framework/operator-lifecycle-manager/pkg/package-server/apis/operators/v1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
@@ -10,7 +13,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"time"
 )
 
 // PackageManifestBuilder provides a struct for PackageManifest object from the cluster
@@ -227,7 +229,7 @@ func (builder *PackageManifestBuilder) validate() (bool, error) {
 	if builder.errorMsg != "" {
 		glog.V(100).Infof("The %s builder has error message: %s", resourceCRD, builder.errorMsg)
 
-		return false, fmt.Errorf(builder.errorMsg)
+		return false, errors.New(builder.errorMsg)
 	}
 
 	return true, nil

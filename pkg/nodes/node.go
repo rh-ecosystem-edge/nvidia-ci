@@ -3,6 +3,7 @@ package nodes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -289,7 +290,7 @@ func (builder *Builder) ExternalIPv4Network() (string, error) {
 	}
 
 	if builder.errorMsg != "" {
-		return "", fmt.Errorf(builder.errorMsg)
+		return "", errors.New(builder.errorMsg)
 	}
 
 	var extNetwork ExternalNetworks
@@ -422,7 +423,7 @@ func (builder *Builder) validate() (bool, error) {
 	if builder.errorMsg != "" {
 		glog.V(100).Infof("The %s builder has error message: %s", resourceCRD, builder.errorMsg)
 
-		return false, fmt.Errorf(builder.errorMsg)
+		return false, errors.New(builder.errorMsg)
 	}
 
 	return true, nil

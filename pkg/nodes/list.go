@@ -3,13 +3,13 @@ package nodes
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/utils/strings/slices"
 )
 
 const (

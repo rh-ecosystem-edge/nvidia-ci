@@ -5,7 +5,7 @@ import (
 	"flag"
 
 	"github.com/golang/glog"
-	"github.com/onsi/ginkgo/v2"
+	ginkgo "github.com/onsi/ginkgo/v2"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/config"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -1,6 +1,6 @@
 module github.com/rh-ecosystem-edge/nvidia-ci
 
-go 1.22.9
+go 1.24.4
 
 require (
 	github.com/Mellanox/network-operator v1.4.0

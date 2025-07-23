@@ -2,9 +2,11 @@ package olm
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/golang/glog"
 	oplmV1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
@@ -265,7 +267,7 @@ func (builder *CatalogSourceBuilder) validate() (bool, error) {
 	if builder.errorMsg != "" {
 		glog.V(100).Infof("The %s builder has error message: %s", resourceCRD, builder.errorMsg)
 
-		return false, fmt.Errorf(builder.errorMsg)
+		return false, errors.New(builder.errorMsg)
 	}
 
 	return true, nil
