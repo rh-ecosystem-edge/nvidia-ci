@@ -2,6 +2,7 @@ import json
 import os
 import argparse
 import semver
+import re
 
 from typing import Dict, List, Any
 from datetime import datetime, timezone
@@ -31,19 +32,17 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
     main_table_template = load_template("main_table.html")
     sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
     html_content += build_toc(sorted_ocp_keys)
+    master_pattern = re.compile(r'^.+\-e2e\-master\/\d+$')
     for ocp_key in sorted_ocp_keys:
         notes = ocp_data[ocp_key].get("notes")
         results = ocp_data[ocp_key]["tests"]
-        regular_results = [
-            r for r in results
-            if ("bundle" not in r["gpu_operator_version"].lower())
-               and ("master" not in r["gpu_operator_version"].lower())
-               and (r.get("test_status") == "SUCCESS")
-        ]
-        bundle_results = [
-            r for r in results
-            if r["gpu_operator_version"].lower().endswith("-master")
-        ]
+        regular_results = []
+        bundle_results = []   
+        for r in results:
+            if master_pattern.search(r.get("prow_job_url", "")):
+                bundle_results.append(r)
+            elif (r.get("test_status") == "SUCCESS"):
+                regular_results.append(r)
         notes_html = build_notes(notes)
         table_rows_html = build_catalog_table_rows(regular_results)
         bundle_info_html = build_bundle_info(bundle_results)
