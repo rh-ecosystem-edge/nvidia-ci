@@ -40,7 +40,10 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
                and ("master" not in r["gpu_operator_version"].lower())
                and (r.get("test_status") == "SUCCESS")
         ]
-        bundle_results = [r for r in results if r not in regular_results]
+        bundle_results = [
+            r for r in results
+            if r["gpu_operator_version"].lower().endswith("-master")
+        ]
         notes_html = build_notes(notes)
         table_rows_html = build_catalog_table_rows(regular_results)
         bundle_info_html = build_bundle_info(bundle_results)
