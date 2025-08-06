@@ -511,6 +511,13 @@
                 "test_status": "SUCCESS",
                 "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/259/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.12-stable-nvidia-gpu-operator-e2e-25-3-x/1951888372423200768",
                 "job_timestamp": 1754206805
+            },
+            {
+                "ocp_full_version": "4.12.79",
+                "gpu_operator_version": "25.3.2(bundle)",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/261/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.12-stable-nvidia-gpu-operator-e2e-master/1952971520196218880",
+                "job_timestamp": 1754464828
             }
         ]
     },
@@ -2243,6 +2250,20 @@
                 "test_status": "SUCCESS",
                 "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/259/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.19-stable-nvidia-gpu-operator-e2e-25-3-x/1951888372976848896",
                 "job_timestamp": 1754206923
+            },
+            {
+                "ocp_full_version": "4.19",
+                "gpu_operator_version": "master",
+                "test_status": "FAILURE",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/261/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.19-stable-nvidia-gpu-operator-e2e-master/1952971520246550528",
+                "job_timestamp": 1754463343
+            },
+            {
+                "ocp_full_version": "4.19.7",
+                "gpu_operator_version": "25.3.2(bundle)",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/261/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.19-stable-nvidia-gpu-operator-e2e-master/1952991356527841280",
+                "job_timestamp": 1754470560
             }
         ]
     }
