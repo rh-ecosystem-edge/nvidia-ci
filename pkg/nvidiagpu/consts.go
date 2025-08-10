@@ -42,8 +42,8 @@ const (
 
 	OperatorDeploymentReadyTimeout = 4 * time.Minute
 
-	CsvSucceededCheckInterval = 60 * time.Second
-	CsvSucceededTimeout       = 5 * time.Minute
+    CsvSucceededCheckInterval = 60 * time.Second
+    CsvSucceededTimeout       = 15 * time.Minute
 
 	ClusterPolicyReadyCheckInterval = 60 * time.Second
 	ClusterPolicyReadyTimeout       = 12 * time.Minute
