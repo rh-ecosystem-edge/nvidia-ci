@@ -1,0 +1,11 @@
+{
+  "warnings": [
+    {
+      "type": "incompatibility",
+      "severity": "warning",
+      "title": "OpenShift 4.18.22",
+      "message": "Currently not compatible with the NVIDIA GPU Operator",
+      "active": true
+    }
+  ]
+}

@@ -28,6 +28,8 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
       3. Reading the footer template and injecting the last-updated time.
     """
     header_template = load_template("header.html")
+    compatibility_warnings_html = build_compatibility_warnings()
+    header_template = header_template.replace("{compatibility_warnings}", compatibility_warnings_html)
     html_content = header_template
     main_table_template = load_template("main_table.html")
     sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
@@ -126,6 +128,39 @@ def build_notes(notes: List[str]) -> str:
     </ul>
   </div>
     """
+
+def load_compatibility_warnings() -> List[Dict[str, Any]]:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    warnings_path = os.path.join(script_dir, "compatibility_warnings.json")
+    
+    with open(warnings_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        return [w for w in data.get("warnings", []) if w.get("active", True)]
+
+
+def build_compatibility_warnings() -> str:
+    """
+    Build HTML for compatibility warnings and known issues from configuration.
+    """
+    warnings = load_compatibility_warnings()
+    if not warnings:
+        return ""
+    
+    warning_items = ""
+    for warning in warnings:
+        title = warning.get("title", "")
+        message = warning.get("message", "")
+        warning_items += f'<li><strong>{title}:</strong> {message}</li>\n'
+    
+    return f"""
+<div class="compatibility-warnings">
+    <div class="warning-header">Compatibility Notices</div>
+    <ul class="warning-list">
+        {warning_items.strip()}
+    </ul>
+</div>
+    """
+
 
 def build_toc(ocp_keys: List[str]) -> str:
     """
