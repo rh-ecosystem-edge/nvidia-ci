@@ -21,6 +21,7 @@ on:
 
 jobs:
   generate-microshift-dashboard:
+    if: github.event_name != 'schedule' || github.repository == 'rh-ecosystem-edge/nvidia-ci' || vars.MICROSHIFT_DASHBOARD_FLOW_ENABLE_SCHEDULED == 'true'
     runs-on: ubuntu-latest
     env:
       DASHBOARD_OUTPUT_DIR: 'workflows/test_matrix_dashboard/output'
