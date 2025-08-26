@@ -1,7 +1,7 @@
 from unittest import TestCase
 from datetime import datetime, timezone
 
-from generate_ci_dashboard import (
+from workflows.gpu_operator_dashboard.generate_ci_dashboard import (
     build_bundle_info, build_catalog_table_rows)
 
 
@@ -34,8 +34,10 @@ class TestBuildBundleInfo(TestCase):
         bundle_html = build_bundle_info(bundle_results)
 
         # The newest timestamp should be used for the "Last Bundle Job Date"
-        newest_date = datetime.fromtimestamp(1712200000, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        self.assertIn(f"Last Bundle Job Date:</strong> {newest_date}", bundle_html)
+        newest_date = datetime.fromtimestamp(
+            1712200000, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        self.assertIn(
+            f"Last Bundle Job Date:</strong> {newest_date}", bundle_html)
 
         # The order in the HTML should be newest to oldest
         # Check that the links appear in the correct order
@@ -65,11 +67,15 @@ class TestBuildBundleInfo(TestCase):
         bundle_html = build_bundle_info(bundle_results)
 
         # Check for required HTML elements and CSS classes
-        self.assertIn('<div class="history-bar"', bundle_html)
-        self.assertIn('<div class=\'history-square history-success\'', bundle_html)
-        self.assertIn('<div class=\'history-square history-failure\'', bundle_html)
-        self.assertIn('onclick=\'window.open("https://example.com/job1", "_blank")\'', bundle_html)
-        self.assertIn('onclick=\'window.open("https://example.com/job2", "_blank")\'', bundle_html)
+        self.assertIn('<div class="history-bar-inner history-bar-outer"', bundle_html)
+        self.assertIn(
+            '<div class=\'history-square history-success\'', bundle_html)
+        self.assertIn(
+            '<div class=\'history-square history-failure\'', bundle_html)
+        self.assertIn(
+            'onclick=\'window.open("https://example.com/job1", "_blank")\'', bundle_html)
+        self.assertIn(
+            'onclick=\'window.open("https://example.com/job2", "_blank")\'', bundle_html)
 
     def test_status_classes(self):
         """Test that different statuses get different CSS classes."""
@@ -96,7 +102,8 @@ class TestBuildBundleInfo(TestCase):
         # Verify CSS classes
         self.assertIn('history-square history-success', bundle_html)
         self.assertIn('history-square history-failure', bundle_html)
-        self.assertIn('history-square history-aborted', bundle_html)  # Unknown status uses aborted class
+        # Unknown status uses aborted class
+        self.assertIn('history-square history-aborted', bundle_html)
 
     def test_timestamp_formatting(self):
         """Test that timestamps are correctly formatted using the newest (leftmost) bundle."""
@@ -113,13 +120,17 @@ class TestBuildBundleInfo(TestCase):
             }
         ]
         # The newest (leftmost) bundle has job_timestamp 1712200000.
-        expected_date = datetime.fromtimestamp(1712200000, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        expected_date = datetime.fromtimestamp(
+            1712200000, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         bundle_html = build_bundle_info(bundle_results)
 
         # Verify that the "Last Bundle Job Date" is derived from the newest bundle.
-        self.assertIn(f'Last Bundle Job Date:</strong> {expected_date}', bundle_html)
-        # Also, check that the title attribute for the newest bundle is correctly formatted.
-        self.assertIn(f"title='Status: SUCCESS | Timestamp: {expected_date}'", bundle_html)
+        self.assertIn(
+            f'Last Bundle Job Date:</strong> {expected_date}', bundle_html)
+        # Also, check that the tooltip span for the newest bundle is correctly formatted.
+        self.assertIn('history-square-tooltip', bundle_html)
+        self.assertIn(
+            f"Status: SUCCESS | Timestamp: {expected_date}", bundle_html)
 
     def test_catalog_regular_table_integrity(self):
         """Test that the catalog-regular table:
@@ -159,7 +170,8 @@ class TestBuildBundleInfo(TestCase):
             },
         ]
         # Mimic the filtering done in the UI generation:
-        filtered_regular = [r for r in regular_results if r.get("test_status") == "SUCCESS"]
+        filtered_regular = [r for r in regular_results if r.get(
+            "test_status") == "SUCCESS"]
         html = build_catalog_table_rows(filtered_regular)
 
         # Ensure that each GPU version appears only once in the HTML.
@@ -172,4 +184,5 @@ class TestBuildBundleInfo(TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    from unittest import main
+    main()

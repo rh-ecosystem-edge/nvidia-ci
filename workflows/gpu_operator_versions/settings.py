@@ -12,4 +12,8 @@ class Settings:
         self.tests_to_trigger_file_path = os.getenv("TEST_TO_TRIGGER_FILE_PATH")
         self.request_timeout_sec = int(os.getenv("REQUEST_TIMEOUT_SECONDS", 30))
 
-settings = Settings()
+        if not self.version_file_path:
+            raise ValueError("VERSION_FILE_PATH must be specified")
+        if not self.tests_to_trigger_file_path:
+            raise ValueError("TEST_TO_TRIGGER_FILE_PATH must be specified")
+

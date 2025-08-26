@@ -25,10 +25,10 @@ jobs:
       - name: Update OCP Version
         id: read_tests
         run: |
-          pip install -r workflows/requirements.txt
+          pip install -r workflows/gpu_operator_versions/requirements.txt
           export GH_AUTH_TOKEN=$(echo ${{ secrets.GITHUB_TOKEN }} | base64)
           mkdir -p $(dirname ${TEST_TO_TRIGGER_FILE_PATH})
-          python workflows/update_versions.py
+          python -m workflows.gpu_operator_versions.update_versions
           {
            echo 'TEST_TRIGGERS<<EOF'
            cat ${TEST_TO_TRIGGER_FILE_PATH}
@@ -38,7 +38,7 @@ jobs:
         env:
           GH_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OCP_IGNORED_VERSIONS_REGEX: "^4.[0-9]$|^4.1[0-1]$|^4.19.0-rc.0$|^4.18.22$"
-          VERSION_FILE_PATH: "workflows/versions.json"
+          VERSION_FILE_PATH: "workflows/gpu_operator_versions/versions.json"
           TEST_TO_TRIGGER_FILE_PATH: "workflows/generated-files/tests_to_trigger.txt"
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7

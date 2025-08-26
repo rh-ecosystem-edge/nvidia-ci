@@ -1,6 +1,7 @@
 import copy
 import unittest
-from utils import calculate_diffs, create_tests_matrix
+
+from workflows.gpu_operator_versions.update_versions import calculate_diffs, create_tests_matrix
 
 base_versions = {
     'gpu-main-latest': 'A',

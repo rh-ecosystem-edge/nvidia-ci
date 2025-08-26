@@ -1,23 +1,13 @@
 import json
-import os
 import argparse
 import semver
 import re
 
 from typing import Dict, List, Any
 from datetime import datetime, timezone
-from utils import logger
 
-
-def load_template(filename: str) -> str:
-    """
-    Load and return the contents of a template file.
-    Uses an absolute path based on the script's location.
-    """
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(script_dir, "templates", filename)
-    with open(file_path, 'r', encoding='utf-8') as f:
-        return f.read()
+from workflows.common.utils import logger
+from workflows.common.templates import load_template
 
 
 def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
@@ -37,7 +27,7 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
         notes = ocp_data[ocp_key].get("notes")
         results = ocp_data[ocp_key]["tests"]
         regular_results = []
-        bundle_results = []   
+        bundle_results = []
         for r in results:
             if master_pattern.search(r.get("prow_job_url", "")):
                 bundle_results.append(r)
@@ -58,6 +48,7 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
     footer_template = footer_template.replace("{LAST_UPDATED}", now_str)
     html_content += footer_template
     return html_content
+
 
 def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
     """
@@ -91,7 +82,8 @@ def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
         deduped_rows = list(deduped.values())
         sorted_rows = sorted(
             deduped_rows,
-            key=lambda r: semver.VersionInfo.parse(r["gpu_operator_version"].split("(")[0]),
+            key=lambda r: semver.VersionInfo.parse(
+                r["gpu_operator_version"].split("(")[0]),
             reverse=True
         )
 
@@ -110,9 +102,10 @@ def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
 
     return rows_html
 
+
 def build_notes(notes: List[str]) -> str:
     """
-    Build a HTML snipped with manual notes for an OCP version
+    Build an HTML snipped with manual notes for an OCP version
     """
     if not notes:
         return ""
@@ -127,17 +120,20 @@ def build_notes(notes: List[str]) -> str:
   </div>
     """
 
+
 def build_toc(ocp_keys: List[str]) -> str:
     """
     Build a TOC of OpenShift versions
     """
-    toc_links = ", ".join(f'<a href="#ocp-{ocp_version}">{ocp_version}</a>' for ocp_version in ocp_keys)
+    toc_links = ", ".join(
+        f'<a href="#ocp-{ocp_version}">{ocp_version}</a>' for ocp_version in ocp_keys)
     return f"""
 <div class="toc">
     <div class="ocp-version-header">OpenShift Versions</div>
     {toc_links}
 </div>
     """
+
 
 def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
     """
@@ -146,9 +142,11 @@ def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
     """
     if not bundle_results:
         return ""
-    sorted_bundles = sorted(bundle_results, key=lambda r: r["job_timestamp"], reverse=True)
+    sorted_bundles = sorted(
+        bundle_results, key=lambda r: r["job_timestamp"], reverse=True)
     leftmost_bundle = sorted_bundles[0]
-    last_bundle_date = datetime.fromtimestamp(int(leftmost_bundle["job_timestamp"]), timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    last_bundle_date = datetime.fromtimestamp(int(
+        leftmost_bundle["job_timestamp"]), timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     bundle_html = f"""
   <div class="section-label">
     <strong>From main branch (OLM bundle)</strong>
@@ -166,7 +164,8 @@ def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
             status_class = "history-failure"
         else:
             status_class = "history-aborted"
-        bundle_timestamp = datetime.fromtimestamp(int(bundle["job_timestamp"]), timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        bundle_timestamp = datetime.fromtimestamp(
+            int(bundle["job_timestamp"]), timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         bundle_html += f"""
     <div class='history-square {status_class}'
          onclick='window.open("{bundle["prow_job_url"]}", "_blank")'>
@@ -188,13 +187,15 @@ def main():
     args = parser.parse_args()
     with open(args.dashboard_data_filepath, "r") as f:
         ocp_data = json.load(f)
-    logger.info(f"Loaded JSON data with keys: {list(ocp_data.keys())} from {args.dashboard_data_filepath}")
+    logger.info(
+        f"Loaded JSON data with keys: {list(ocp_data.keys())} from {args.dashboard_data_filepath}")
 
     html_content = generate_test_matrix(ocp_data)
 
     with open(args.dashboard_html_filepath, "w", encoding="utf-8") as f:
         f.write(html_content)
-        logger.info(f"Matrix dashboard generated: {args.dashboard_html_filepath}")
+        logger.info(
+            f"Matrix dashboard generated: {args.dashboard_html_filepath}")
 
 
 if __name__ == "__main__":

@@ -4,10 +4,11 @@ import tempfile
 import unittest
 from unittest import mock, TestCase
 
-from generate_ci_dashboard import merge_and_save_results
-
+from workflows.gpu_operator_dashboard.fetch_ci_data import merge_and_save_results
 
 # Testing final logic of generate_ci_dashboard.py which stores the JSON test data
+
+
 class TestSaveToJson(TestCase):
     def setUp(self):
         # Create a temporary directory for test files
@@ -34,13 +35,29 @@ class TestSaveToJson(TestCase):
         }
         existing_data = {}
 
-        merge_and_save_results(new_data, self.output_dir, self.test_file, existing_data)
+        data_file = os.path.join(self.output_dir, self.test_file)
+        merge_and_save_results(new_data, data_file, existing_data)
 
         # Read the saved file and verify its contents
-        with open(os.path.join(self.output_dir, self.test_file), 'r') as f:
+        with open(data_file, 'r') as f:
             saved_data = json.load(f)
 
-        self.assertEqual(saved_data, new_data)
+        # The saved data should have the "tests" wrapper structure
+        expected_data = {
+            "4.14": {
+                "notes": [],
+                "tests": [
+                    {
+                        "ocp_full_version": "4.14.1",
+                        "gpu_operator_version": "23.9.0",
+                        "test_status": "SUCCESS",
+                        "prow_job_url": "https://example.com/job1",
+                        "job_timestamp": "1712345678"
+                    }
+                ]
+            }
+        }
+        self.assertEqual(saved_data, expected_data)
 
     def test_merge_with_no_duplicates(self):
         """Test merging when no duplicates exist."""
@@ -56,27 +73,32 @@ class TestSaveToJson(TestCase):
             ]
         }
         existing_data = {
-            "4.14": [
-                {
-                    "ocp_full_version": "4.14.2",
-                    "gpu_operator_version": "24.3.0",
-                    "test_status": "SUCCESS",
-                    "prow_job_url": "https://example.com/job2",
-                    "job_timestamp": "1712345679"
+            "4.14":
+                {"tests": [
+                    {
+                        "ocp_full_version": "4.14.2",
+                        "gpu_operator_version": "24.3.0",
+                        "test_status": "SUCCESS",
+                        "prow_job_url": "https://example.com/job2",
+                        "job_timestamp": "1712345679"
+                    }
+                ]
                 }
-            ]
         }
 
-        merge_and_save_results(new_data, self.output_dir, self.test_file, existing_data)
+        data_file = os.path.join(self.output_dir, self.test_file)
+        merge_and_save_results(new_data, data_file, existing_data)
 
         # Read the saved file and verify its contents
-        with open(os.path.join(self.output_dir, self.test_file), 'r') as f:
+        with open(data_file, 'r') as f:
             saved_data = json.load(f)
 
         # Both entries should be present
-        self.assertEqual(len(saved_data["4.14"]), 2)
-        self.assertTrue(any(item["gpu_operator_version"] == "23.9.0" for item in saved_data["4.14"]))
-        self.assertTrue(any(item["gpu_operator_version"] == "24.3.0" for item in saved_data["4.14"]))
+        self.assertEqual(len(saved_data["4.14"]["tests"]), 2)
+        self.assertTrue(any(item["gpu_operator_version"]
+                        == "23.9.0" for item in saved_data["4.14"]["tests"]))
+        self.assertTrue(any(item["gpu_operator_version"]
+                        == "24.3.0" for item in saved_data["4.14"]["tests"]))
 
     def test_exact_duplicates(self):
         """Test handling of exact duplicates - they should not be added."""
@@ -89,51 +111,54 @@ class TestSaveToJson(TestCase):
         }
 
         new_data = {"4.14": [item]}
-        existing_data = {"4.14": [item.copy()]}
+        existing_data = {"4.14": {"tests": [item.copy()]}}
 
-        merge_and_save_results(new_data, self.output_dir, self.test_file, existing_data)
+        data_file = os.path.join(self.output_dir, self.test_file)
+        merge_and_save_results(new_data, data_file, existing_data)
 
-        with open(os.path.join(self.output_dir, self.test_file), 'r') as f:
+        with open(data_file, 'r') as f:
             saved_data = json.load(f)
 
         # Only one entry should be present (no duplicates)
-        self.assertEqual(len(saved_data["4.14"]), 1)
+        self.assertEqual(len(saved_data["4.14"]["tests"]), 1)
 
     def test_different_ocp_keys(self):
         """Test merging data with different OCP keys."""
         new_data = {
-            "4.14": [
-                {
-                    "ocp_full_version": "4.14.1",
-                    "gpu_operator_version": "23.9.0",
-                    "test_status": "SUCCESS",
-                    "prow_job_url": "https://example.com/job1",
-                    "job_timestamp": "1712345678"
-                }
-            ]
+            "4.14":[
+                    {
+                        "ocp_full_version": "4.14.1",
+                        "gpu_operator_version": "23.9.0",
+                        "test_status": "SUCCESS",
+                        "prow_job_url": "https://example.com/job1",
+                        "job_timestamp": "1712345678"
+                    }
+                ]
         }
         existing_data = {
-            "4.13": [
-                {
+            "4.13":
+                {"tests": [{
                     "ocp_full_version": "4.13.5",
                     "gpu_operator_version": "23.9.0",
                     "test_status": "SUCCESS",
                     "prow_job_url": "https://example.com/job2",
                     "job_timestamp": "1712345679"
                 }
-            ]
+                ]
+                }
         }
 
-        merge_and_save_results(new_data, self.output_dir, self.test_file, existing_data)
+        data_file = os.path.join(self.output_dir, self.test_file)
+        merge_and_save_results(new_data, data_file, existing_data)
 
-        with open(os.path.join(self.output_dir, self.test_file), 'r') as f:
+        with open(data_file, 'r') as f:
             saved_data = json.load(f)
 
         # Both OCP keys should be present
         self.assertIn("4.14", saved_data)
         self.assertIn("4.13", saved_data)
-        self.assertEqual(len(saved_data["4.14"]), 1)
-        self.assertEqual(len(saved_data["4.13"]), 1)
+        self.assertEqual(len(saved_data["4.14"]["tests"]), 1)
+        self.assertEqual(len(saved_data["4.13"]["tests"]), 1)
 
     def test_partial_duplicates(self):
         """Test handling items that match in some fields but not all."""
@@ -154,17 +179,20 @@ class TestSaveToJson(TestCase):
         }
 
         new_data = {"4.14": [new_item]}
-        existing_data = {"4.14": [existing_item]}
+        existing_data = {"4.14": {"tests": [existing_item]}}
 
-        merge_and_save_results(new_data, self.output_dir, self.test_file, existing_data)
+        data_file = os.path.join(self.output_dir, self.test_file)
+        merge_and_save_results(new_data, data_file, existing_data)
 
-        with open(os.path.join(self.output_dir, self.test_file), 'r') as f:
+        with open(data_file, 'r') as f:
             saved_data = json.load(f)
 
         # Both entries should be present as they differ in test_status
-        self.assertEqual(len(saved_data["4.14"]), 2)
-        self.assertTrue(any(item["test_status"] == "SUCCESS" for item in saved_data["4.14"]))
-        self.assertTrue(any(item["test_status"] == "FAILURE" for item in saved_data["4.14"]))
+        self.assertEqual(len(saved_data["4.14"]["tests"]), 2)
+        self.assertTrue(any(item["test_status"] ==
+                        "SUCCESS" for item in saved_data["4.14"]["tests"]))
+        self.assertTrue(any(item["test_status"] ==
+                        "FAILURE" for item in saved_data["4.14"]["tests"]))
 
     def test_json_not_overwritten(self):
         """Test that merging new data does not overwrite existing data fields.
@@ -185,27 +213,28 @@ class TestSaveToJson(TestCase):
             "job_timestamp": "1712345680"  # New job_timestamp
         }
         new_data = {"4.14": [new_item]}
-        existing_data = {"4.14": [existing_item]}
+        existing_data = {"4.14": {"tests": [existing_item]}}
 
-        merge_and_save_results(new_data, self.output_dir, self.test_file, existing_data)
+        data_file = os.path.join(self.output_dir, self.test_file)
+        merge_and_save_results(new_data, data_file, existing_data)
 
-        with open(os.path.join(self.output_dir, self.test_file), 'r') as f:
+        with open(data_file, 'r') as f:
             saved_data = json.load(f)
 
         # Verify that both the existing item and new item are present and not overwritten
-        self.assertEqual(len(saved_data["4.14"]), 2)
+        self.assertEqual(len(saved_data["4.14"]["tests"]), 2)
 
         # Check that the existing item's fields are preserved
         found_existing = any(
             item["test_status"] == "SUCCESS" and item["prow_job_url"] == "https://example.com/job1" and item["job_timestamp"] == "1712345678"
-            for item in saved_data["4.14"]
+            for item in saved_data["4.14"]["tests"]
         )
         self.assertTrue(found_existing)
 
         # Check that the new item's fields are saved
         found_new = any(
             item["test_status"] == "FAILURE" and item["prow_job_url"] == "https://example.com/job1-new" and item["job_timestamp"] == "1712345680"
-            for item in saved_data["4.14"]
+            for item in saved_data["4.14"]["tests"]
         )
         self.assertTrue(found_new)
 
@@ -225,7 +254,8 @@ class TestSaveToJson(TestCase):
             ]
         }
 
-        merge_and_save_results(new_data, self.output_dir, self.test_file, existing_data)
+        data_file = os.path.join(self.output_dir, self.test_file)
+        merge_and_save_results(new_data, data_file, existing_data)
 
         # Verify json.dump was called with the correct arguments
         mock_json_dump.assert_called_once()
