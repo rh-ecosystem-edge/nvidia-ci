@@ -1,45 +1,14 @@
 import json
-import logging
-from logging import Logger
-from semver import Version
-from typing import Any
-import re
+from workflows.common.utils import logger
 
+from workflows.gpu_operator_versions.settings import Settings
+from workflows.gpu_operator_versions.openshift import fetch_ocp_versions
+from workflows.gpu_operator_versions.version_utils import get_latest_versions, get_earliest_versions
+from workflows.gpu_operator_versions.nvidia_gpu_operator import get_operator_versions, get_sha
+
+# Constants
 test_command_template = "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}"
 
-GCS_API_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o"
-
-# Regular expression to match test result paths.
-TEST_RESULT_PATH_REGEX = re.compile(
-    r"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/\d+/pull-ci-rh-ecosystem-edge-nvidia-ci-main-"
-    r"(?P<ocp_version>\d+\.\d+)-stable-nvidia-gpu-operator-e2e-(?P<gpu_version>\d+-\d+-x|master)/"
-)
-
-def get_logger(name: str) -> Logger:
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
-    return logger
-
-logger = get_logger(__name__)
-
-
-
-
-def get_latest_versions(versions: list, count: int) -> list:
-    sorted_versions = get_sorted_versions(versions)
-    return sorted_versions[-count:] if len(sorted_versions) > count else sorted_versions
-
-def get_earliest_versions(versions: list, count: int) -> list:
-    sorted_versions = get_sorted_versions(versions)
-    return sorted_versions[:count] if len(sorted_versions) > count else sorted_versions
-
-def get_sorted_versions(versions: list) -> list:
-    return sorted(versions, key=lambda v: tuple(map(int, v.split('.'))))
 
 def save_tests_commands(tests_commands: set, file_path: str):
     with open(file_path, "w+") as f:
@@ -60,7 +29,7 @@ def create_tests_matrix(diffs: dict, ocp_releases: list, gpu_releases: list) -> 
     if "ocp" in diffs:
         for ocp_version in diffs["ocp"]:
             if ocp_version not in ocp_releases:
-                logger.warning(f'OpenShift version "{ocp_version}" is not in the list of releases: {ocp_releases}. '
+                logger.warning(f'OpenShift version "{ocp_version}" is not in the list of releases: {list(ocp_releases)}. '
                                f'This should not normally happen. Check if there was an update to an old version.')
             for gpu_version in gpu_releases:
                 tests.add((ocp_version, gpu_version))
@@ -68,7 +37,7 @@ def create_tests_matrix(diffs: dict, ocp_releases: list, gpu_releases: list) -> 
     if "gpu-operator" in diffs:
         for gpu_version in diffs["gpu-operator"]:
             if gpu_version not in gpu_releases:
-                logger.warning(f'GPU operator version "{gpu_version}" is not in the list of releases: {gpu_releases}. '
+                logger.warning(f'GPU operator version "{gpu_version}" is not in the list of releases: {list(gpu_releases)}. '
                                f'This should not normally happen. Check if there was an update to an old version.')
                 continue
             for ocp_version in ocp_releases:
@@ -105,10 +74,29 @@ def calculate_diffs(old_versions: dict, new_versions: dict) -> dict:
 def version2suffix(v: str):
     return v if v == 'master' else f'{v.replace(".", "-")}-x'
 
+def main():
+    settings = Settings()
+    sha = get_sha(settings)
+    gpu_versions = get_operator_versions(settings)
+    ocp_versions = fetch_ocp_versions(settings)
 
-def max_version(a: str, b: str) -> str:
-    """
-    Parse and compare two semver versions.
-    Return the higher of them.
-    """
-    return str(max(map(Version.parse, (a, b))))
+    new_versions = {
+        "gpu-main-latest": sha,
+        "gpu-operator": gpu_versions,
+        "ocp": ocp_versions
+    }
+
+    with open(settings.version_file_path, "r+") as json_f:
+        old_versions = json.load(json_f)
+        json_f.seek(0)
+        json.dump(new_versions, json_f, indent=4)
+        json_f.truncate()
+
+    diffs = calculate_diffs(old_versions, new_versions)
+    ocp_releases = ocp_versions.keys()
+    gpu_releases = get_latest_versions(gpu_versions.keys(), 2)
+    tests_commands = create_tests_commands(diffs, ocp_releases, gpu_releases)
+    save_tests_commands(tests_commands, settings.tests_to_trigger_file_path)
+
+if __name__ == '__main__':
+    main()

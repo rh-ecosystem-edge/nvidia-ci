@@ -66,12 +66,12 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install -r workflows/dashboard_requirements.txt
+          pip install -r workflows/gpu_operator_dashboard/requirements.txt
 
       - name: Fetch CI Data
         run: |
           echo "Processing PR: ${{ steps.determine_pr.outputs.PR_NUMBER }}"
-          python workflows/fetch_ci_data.py \
+          python -m workflows.gpu_operator_dashboard.fetch_ci_data \
             --pr_number "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
             --baseline_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
             --merged_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}"
@@ -84,7 +84,7 @@ jobs:
             echo "no changes"
           else
             cd "${{ github.workspace }}"
-            python workflows/generate_ci_dashboard.py \
+            python -m workflows.gpu_operator_dashboard.generate_ci_dashboard \
               --dashboard_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
               --dashboard_html_filepath "${{ env.DASHBOARD_HTML_FILEPATH }}"
           fi

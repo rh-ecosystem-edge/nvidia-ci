@@ -9,9 +9,8 @@ import json
 import urllib
 import requests
 
-
-from utils import logger
-from generate_ci_dashboard import load_template
+from workflows.common.utils import logger
+from workflows.common.templates import load_template
 
 # For MicroShift versions 4.19+ we are reusing AI Model Serving job which performs basic validation
 # of the device plugin and more. For older versions we have dedicated
@@ -28,8 +27,10 @@ VERSION_JOB_NAME = {
 
 GCP_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o/"
 
+
 def gcp_list_dir(path: str) -> List[str]:
-    resp = requests.get(url=GCP_BASE_URL, params={"alt":"json", "delimiter":"/", "prefix":f"{path}"}, timeout=60)
+    resp = requests.get(url=GCP_BASE_URL, params={
+                        "alt": "json", "delimiter": "/", "prefix": f"{path}"}, timeout=60)
     content = json.loads(resp.content.decode("UTF-8"))
     if 'prefixes' not in content:
         return []
@@ -37,7 +38,8 @@ def gcp_list_dir(path: str) -> List[str]:
 
 
 def gcp_get_file(path: str) -> Tuple[bool, str]:
-    resp = requests.get(url=GCP_BASE_URL + urllib.parse.quote_plus(path), params={"alt":"media"}, timeout=60)
+    resp = requests.get(url=GCP_BASE_URL + urllib.parse.quote_plus(path),
+                        params={"alt": "media"}, timeout=60)
     return resp.status_code == 200, resp.content.decode("UTF-8").strip()
 
 
@@ -47,9 +49,10 @@ def get_job_runs_for_version(version: str, job_limit: int) -> List[Dict[str, Any
     Is it obtained by making an API requests to GCP to get list of subdirs inside 'logs/{job_name}/' dir.
     The subdir list is oldest-first, so we're taking 'job_limit' jobs from the end.
     """
-    job_name = f"periodic-ci-openshift-microshift-release-{version}-" + VERSION_JOB_NAME.get(version, DEFAULT_VERSION_JOB_NAME)
+    job_name = f"periodic-ci-openshift-microshift-release-{version}-" + VERSION_JOB_NAME.get(
+        version, DEFAULT_VERSION_JOB_NAME)
     prefixes = gcp_list_dir(f"logs/{job_name}/")
-    return [ {"path": path, "num": int(path.split("/")[2]) } for path in prefixes[-job_limit:] ]
+    return [{"path": path, "num": int(path.split("/")[2])} for path in prefixes[-job_limit:]]
 
 
 def get_job_microshift_version(job_path: str) -> str:
@@ -58,11 +61,18 @@ def get_job_microshift_version(job_path: str) -> str:
     which is expected to be in the format 'logs/{job_name}/{job_run_number}/'.
     """
     # Each branch uses slightly different job name: find subdir starting with e2e-.
-    # There should be only one.
+    # There should be only one. Failed runs might not have any.
     files = gcp_list_dir(f"{job_path}artifacts/e2e-")
-    if len(files) != 1:
-        raise Exception(f"Expected only one file starting with 'e2e-' for {job_path=}, got {files}")
-    found, content = gcp_get_file(f"{files[0]}openshift-microshift-e2e-bare-metal-tests/artifacts/microshift-version.txt")
+    if len(files) > 1:
+        raise Exception(
+            f"Expected only one file starting with 'e2e-' for {job_path=}, got {files}")
+    elif len(files) == 0:
+        logger.warning(
+            f"{job_path} does not contain artifacts that start with 'e2e-'")
+        return ""
+
+    found, content = gcp_get_file(
+        f"{files[0]}openshift-microshift-e2e-bare-metal-tests/artifacts/microshift-version.txt")
     # Some jobs don't have the file yet
     if not found:
         return ""
@@ -87,12 +97,12 @@ def get_job_result(job_run: Dict[str, Any]) -> Dict[str, Any]:
     finished = get_job_finished_json(job_run['path'])
     version = get_job_microshift_version(job_run['path'])
     return {
-            "num": job_run['num'],
-            "timestamp": finished['timestamp'],
-            "status": finished['result'],
-            "url": f"https://prow.ci.openshift.org/view/gs/test-platform-results/{job_run['path']}",
-            "microshift_version": version,
-        }
+        "num": job_run['num'],
+        "timestamp": finished['timestamp'],
+        "status": finished['result'],
+        "url": f"https://prow.ci.openshift.org/view/gs/test-platform-results/{job_run['path']}",
+        "microshift_version": version,
+    }
 
 
 def get_all_results(job_limit: int) -> Dict[str, List[Dict[str, Any]]]:
@@ -111,7 +121,8 @@ def get_all_results(job_limit: int) -> Dict[str, List[Dict[str, Any]]]:
         logger.info(f"Found {len(runs)} job runs for version {version}")
 
         if len(runs) == 0:
-            logger.info(f"Assuming that {version} is not being developed yet - stopping collecting the results")
+            logger.info(
+                f"Assuming that {version} is not being developed yet - stopping collecting the results")
             break
 
         results = [get_job_result(run) for run in runs]
@@ -137,9 +148,11 @@ def build_microshift_table_row(version: str, results: List[Dict[str, Any]]) -> s
     if len(results) == 0:
         return ""
 
-    sorted_results = sorted(results, key=lambda r: r["timestamp"], reverse=True)
+    sorted_results = sorted(
+        results, key=lambda r: r["timestamp"], reverse=True)
     latest_result = sorted_results[0]
-    latest_result_date = datetime.datetime.fromtimestamp(int(latest_result["timestamp"]), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    latest_result_date = datetime.datetime.fromtimestamp(int(
+        latest_result["timestamp"]), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     output = f"""
         <tr>
@@ -159,7 +172,8 @@ def build_microshift_table_row(version: str, results: List[Dict[str, Any]]) -> s
             status_class = "history-failure"
         else:
             status_class = "history-aborted"
-        result_date = datetime.datetime.fromtimestamp(int(result["timestamp"]), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        result_date = datetime.datetime.fromtimestamp(
+            int(result["timestamp"]), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         microshift_version = result["microshift_version"] or version
         output += f"""
               <div class='history-square {status_class}'
@@ -189,22 +203,30 @@ def generate_microshift_dashboard(fin_results: Dict[str, List[Dict[str, Any]]]) 
     table_rows = build_microshift_table_rows(fin_results)
     template = template.replace("{TABLE_ROWS}", table_rows)
 
-    now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    now_str = datetime.datetime.now(
+        datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     template = template.replace("{LAST_UPDATED}", now_str)
     return template
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Microshift x NVIDIA Device Plugin CI Dashboard")
+    parser = argparse.ArgumentParser(
+        description="Microshift x NVIDIA Device Plugin CI Dashboard")
     subparsers = parser.add_subparsers(dest="command")
 
-    parser_fetch = subparsers.add_parser("fetch-data", help="Fetch the job results")
-    parser_fetch.add_argument("--job-limit", type=int, default=15, help="Amount of the latest job results to fetch")
-    parser_fetch.add_argument("--output-data", help="Path to save the results file", required=True)
+    parser_fetch = subparsers.add_parser(
+        "fetch-data", help="Fetch the job results")
+    parser_fetch.add_argument("--job-limit", type=int, default=15,
+                              help="Amount of the latest job results to fetch")
+    parser_fetch.add_argument(
+        "--output-data", help="Path to save the results file", required=True)
 
-    parser_generate = subparsers.add_parser("generate-dashboard", help="Generate the dashboard")
-    parser_generate.add_argument("--input-data", help="Path to the results file", required=True)
-    parser_generate.add_argument("--output-dashboard", help="Path to save the dashboard HTML file", required=True)
+    parser_generate = subparsers.add_parser(
+        "generate-dashboard", help="Generate the dashboard")
+    parser_generate.add_argument(
+        "--input-data", help="Path to the results file", required=True)
+    parser_generate.add_argument(
+        "--output-dashboard", help="Path to save the dashboard HTML file", required=True)
 
     args = parser.parse_args()
 
@@ -224,6 +246,7 @@ def main() -> None:
 
     else:
         parser.print_help()
+
 
 if __name__ == "__main__":
     main()

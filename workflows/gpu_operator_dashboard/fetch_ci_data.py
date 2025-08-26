@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import json
+import re
 import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
@@ -8,12 +9,20 @@ from typing import Any, Dict, List, Tuple
 import requests
 from pydantic import BaseModel
 
-from utils import logger, GCS_API_BASE_URL, TEST_RESULT_PATH_REGEX, version2suffix
+from workflows.common.utils import logger
 
 
 # =============================================================================
 # Constants
 # =============================================================================
+
+GCS_API_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o"
+
+# Regular expression to match test result paths.
+TEST_RESULT_PATH_REGEX = re.compile(
+    r"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/\d+/pull-ci-rh-ecosystem-edge-nvidia-ci-main-"
+    r"(?P<ocp_version>\d+\.\d+)-stable-nvidia-gpu-operator-e2e-(?P<gpu_version>\d+-\d+-x|master)/"
+)
 
 # Expected number of slashes for top-level GPU operator E2E finished.json paths
 # Format: pr-logs/pull/org/pr/job/build/finished.json (6 slashes)
@@ -33,6 +42,7 @@ def http_get_json(url: str, params: Dict[str, Any] = None, headers: Dict[str, st
     response.raise_for_status()
     return response.json()
 
+
 def fetch_gcs_file_content(file_path: str) -> str:
     """Fetch the raw text content from a file in GCS."""
     logger.info(f"Fetching file content for {file_path}")
@@ -43,6 +53,7 @@ def fetch_gcs_file_content(file_path: str) -> str:
     response.raise_for_status()
     return response.content.decode("UTF-8")
 
+
 def build_prow_job_url(pr_number: str, ocp_minor: str, gpu_suffix: str, job_id: str) -> str:
     """Build the Prow job URL for the given PR, OCP version, GPU suffix, and job ID."""
     return (
@@ -52,8 +63,8 @@ def build_prow_job_url(pr_number: str, ocp_minor: str, gpu_suffix: str, job_id: 
     )
 
 
-
 # --- Pydantic Model and Domain Model for Test Results ---
+
 
 class TestResultKey(BaseModel):
     ocp_full_version: str
@@ -61,8 +72,10 @@ class TestResultKey(BaseModel):
     test_status: str
     prow_job_url: str
     job_timestamp: str
+
     class Config:
         frozen = True
+
 
 @dataclass(frozen=True)
 class TestResult:
@@ -92,7 +105,6 @@ class TestResult:
         )
 
 
-
 def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, Any]]:
     """Fetch files matching a specific glob pattern for a PR."""
     logger.info(f"Fetching files matching pattern: {glob_pattern}")
@@ -114,7 +126,8 @@ def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, An
         if next_page_token:
             params["pageToken"] = next_page_token
 
-        response_data = http_get_json(GCS_API_BASE_URL, params=params, headers=headers)
+        response_data = http_get_json(
+            GCS_API_BASE_URL, params=params, headers=headers)
         items = response_data.get("items", [])
         all_items.extend(items)
 
@@ -125,16 +138,20 @@ def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, An
     logger.info(f"Found {len(all_items)} files matching {glob_pattern}")
     return all_items
 
+
 def fetch_pr_files(pr_number: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Fetch all required file types for a PR using targeted filtering."""
     logger.info(f"Fetching files for PR #{pr_number}")
 
     # Fetch the 3 file types we need using glob patterns
     all_finished_files = fetch_filtered_files(pr_number, "**/finished.json")
-    ocp_version_files = fetch_filtered_files(pr_number, "**/gpu-operator-e2e/artifacts/ocp.version")
-    gpu_version_files = fetch_filtered_files(pr_number, "**/gpu-operator-e2e/artifacts/operator.version")
+    ocp_version_files = fetch_filtered_files(
+        pr_number, "**/gpu-operator-e2e/artifacts/ocp.version")
+    gpu_version_files = fetch_filtered_files(
+        pr_number, "**/gpu-operator-e2e/artifacts/operator.version")
 
     return all_finished_files, ocp_version_files, gpu_version_files
+
 
 def filter_gpu_finished_files(all_finished_files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Filter to get only top-level finished.json files from GPU operator E2E builds."""
@@ -144,9 +161,10 @@ def filter_gpu_finished_files(all_finished_files: List[Dict[str, Any]]) -> List[
         # Must be a GPU operator E2E test and a top-level finished.json (not nested in artifacts)
         if ("nvidia-gpu-operator-e2e" in path and
             path.count('/') == EXPECTED_FINISHED_JSON_SLASH_COUNT and
-            path.endswith('/finished.json')):
+                path.endswith('/finished.json')):
             finished_files.append(file_item)
     return finished_files
+
 
 def build_single_file_lookup(
     file_items: List[Dict[str, Any]],
@@ -184,6 +202,7 @@ def build_single_file_lookup(
 
     return lookup
 
+
 def build_file_lookups(
     finished_files: List[Dict[str, Any]],
     ocp_version_files: List[Dict[str, Any]],
@@ -193,10 +212,13 @@ def build_file_lookups(
     all_builds = set()
 
     finished_lookup = build_single_file_lookup(finished_files, all_builds)
-    ocp_version_lookup = build_single_file_lookup(ocp_version_files, all_builds)
-    gpu_version_lookup = build_single_file_lookup(gpu_version_files, all_builds)
+    ocp_version_lookup = build_single_file_lookup(
+        ocp_version_files, all_builds)
+    gpu_version_lookup = build_single_file_lookup(
+        gpu_version_files, all_builds)
 
     return finished_lookup, ocp_version_lookup, gpu_version_lookup, all_builds
+
 
 def process_single_build(
     pr_number: str,
@@ -233,20 +255,26 @@ def process_single_build(
 
     if status == "SUCCESS" and ocp_version_file and gpu_version_file:
         exact_ocp = fetch_gcs_file_content(ocp_version_file['name']).strip()
-        exact_gpu_version = fetch_gcs_file_content(gpu_version_file['name']).strip()
-        result = TestResult(exact_ocp, exact_gpu_version, status, job_url, timestamp)
+        exact_gpu_version = fetch_gcs_file_content(
+            gpu_version_file['name']).strip()
+        result = TestResult(exact_ocp, exact_gpu_version,
+                            status, job_url, timestamp)
     else:
         # Use base versions
-        result = TestResult(ocp_version, gpu_suffix, status, job_url, timestamp)
+        result = TestResult(ocp_version, gpu_suffix,
+                            status, job_url, timestamp)
 
     return result
 
+
 def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str, Any]]]) -> None:
     """Retrieve and store test results for all jobs under a single PR using targeted file filtering."""
-    logger.info(f"Fetching targeted test data for PR #{pr_number} using filtered requests")
+    logger.info(
+        f"Fetching targeted test data for PR #{pr_number} using filtered requests")
 
     # Step 1: Fetch all required files
-    all_finished_files, ocp_version_files, gpu_version_files = fetch_pr_files(pr_number)
+    all_finished_files, ocp_version_files, gpu_version_files = fetch_pr_files(
+        pr_number)
 
     # Step 2: Filter to get only GPU operator E2E finished.json files
     finished_files = filter_gpu_finished_files(all_finished_files)
@@ -255,7 +283,8 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str
     finished_lookup, ocp_version_lookup, gpu_version_lookup, all_builds = build_file_lookups(
         finished_files, ocp_version_files, gpu_version_files)
 
-    logger.info(f"Found {len(all_builds)} unique job/build combinations from filtered files")
+    logger.info(
+        f"Found {len(all_builds)} unique job/build combinations from filtered files")
 
     # Step 4: Process each job/build combination and deduplicate by Prow job URL
     processed_urls = set()  # Track processed URLs to avoid duplicates
@@ -268,16 +297,19 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str
         gpu_suffix = match.group("gpu_version")
 
         # Create the job URL to check for duplicates
-        job_url = build_prow_job_url(pr_number, ocp_version, gpu_suffix, build_id)
+        job_url = build_prow_job_url(
+            pr_number, ocp_version, gpu_suffix, build_id)
 
         # Skip if we've already processed this exact job URL
         if job_url in processed_urls:
-            logger.debug(f"Skipping duplicate build {build_id} for {ocp_version} + {gpu_suffix}")
+            logger.debug(
+                f"Skipping duplicate build {build_id} for {ocp_version} + {gpu_suffix}")
             continue
 
         processed_urls.add(job_url)
 
-        logger.info(f"Processing build {build_id} for {ocp_version} + {gpu_suffix}")
+        logger.info(
+            f"Processing build {build_id} for {ocp_version} + {gpu_suffix}")
 
         result = process_single_build(
             pr_number, job_path, build_id,
@@ -287,13 +319,16 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str
         logger.info(f"Added result for build {build_id}: {result.test_status}")
         processed_count += 1
 
-    logger.info(f"Successfully processed {processed_count} unique builds using targeted filtering")
+    logger.info(
+        f"Successfully processed {processed_count} unique builds using targeted filtering")
+
 
 def process_closed_prs(results_by_ocp: Dict[str, List[Dict[str, Any]]]) -> None:
     """Retrieve and store test results for all closed PRs against the main branch."""
     logger.info("Retrieving PR history...")
     url = "https://api.github.com/repos/rh-ecosystem-edge/nvidia-ci/pulls"
-    params = {"state": "closed", "base": "main", "per_page": "100", "page": "1"}
+    params = {"state": "closed", "base": "main",
+              "per_page": "100", "page": "1"}
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28"
@@ -303,6 +338,7 @@ def process_closed_prs(results_by_ocp: Dict[str, List[Dict[str, Any]]]) -> None:
         pr_number = str(pr["number"])
         logger.info(f"Processing PR #{pr_number}")
         process_tests_for_pr(pr_number, results_by_ocp)
+
 
 def merge_and_save_results(
     new_results: Dict[str, List[Dict[str, Any]]],
@@ -315,7 +351,8 @@ def merge_and_save_results(
     for key, new_values in new_results.items():
         merged_results.setdefault(key, {"notes": [], "tests": []})
         merged_results[key].setdefault("tests", [])
-        seen_keys = set(TestResult(**item).composite_key() for item in merged_results[key]["tests"])
+        seen_keys = set(TestResult(**item).composite_key()
+                        for item in merged_results[key]["tests"])
         for item in new_values:
             key_instance = TestResult(**item).composite_key()
             if key_instance not in seen_keys:
@@ -328,6 +365,7 @@ def merge_and_save_results(
 # =============================================================================
 # Main Workflow: Update JSON
 # =============================================================================
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Test Matrix Utility")
@@ -342,14 +380,17 @@ def main() -> None:
     # Update JSON data.
     with open(args.baseline_data_filepath, "r") as f:
         existing_results: Dict[str, Dict[str, Any]] = json.load(f)
-    logger.info(f"Loaded baseline data from: {args.baseline_data_filepath} with keys: {list(existing_results.keys())}")
+    logger.info(
+        f"Loaded baseline data from: {args.baseline_data_filepath} with keys: {list(existing_results.keys())}")
 
     local_results: Dict[str, List[Dict[str, Any]]] = {}
     if args.pr_number.lower() == "all":
         process_closed_prs(local_results)
     else:
         process_tests_for_pr(args.pr_number, local_results)
-    merge_and_save_results(local_results, args.merged_data_filepath, existing_results=existing_results)
+    merge_and_save_results(
+        local_results, args.merged_data_filepath, existing_results=existing_results)
+
 
 if __name__ == "__main__":
     main()

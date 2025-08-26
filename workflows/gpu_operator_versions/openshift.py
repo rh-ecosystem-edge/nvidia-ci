@@ -4,15 +4,14 @@ import re
 import requests
 import semver
 
-from settings import settings
+from workflows.gpu_operator_versions.settings import Settings
 from typing import Pattern, AnyStr
-from utils import get_logger, max_version
-
-logger = get_logger(__name__)
+from workflows.common.utils import logger
+from workflows.gpu_operator_versions.version_utils import max_version
 
 RELEASE_URL_API = 'https://amd64.ocp.releases.ci.openshift.org/api/v1/releasestreams/accepted'
 
-def fetch_ocp_versions() -> dict:
+def fetch_ocp_versions(settings: Settings) -> dict[str, str]:
     """
     Fetches accepted OpenShift versions from the release API.
 

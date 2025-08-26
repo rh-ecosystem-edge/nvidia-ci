@@ -49,11 +49,13 @@ jobs:
           python-version: 3.13
       - name: Install Dependencies
         run: |
-          pip install -r workflows/microshift_requirements.txt
+          pip install -r workflows/microshift_dashboard/requirements.txt
 
       - name: Fetch MicroShift job results
         run: |
-          python workflows/microshift.py fetch-data --output-data "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift_results.json"
+          python -m workflows.microshift_dashboard.microshift \
+            fetch-data \
+              --output-data "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift_results.json"
 
       - name: Generate MicroShift dashboard
         run: |
@@ -62,7 +64,7 @@ jobs:
             echo "No changes to MicroShift results file"
           else
             cd "${{ github.workspace }}"
-            python workflows/microshift.py \
+            python -m workflows.microshift_dashboard.microshift \
               generate-dashboard \
                 --input-data "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift_results.json" \
                 --output-dashboard "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift.html"
