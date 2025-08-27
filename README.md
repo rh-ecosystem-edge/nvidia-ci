@@ -211,13 +211,16 @@ $ export NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redha
 $ make run-tests
 ```
 
-Example running the end-to-end Network Operator test case, with the rdma testcase.  Note both TEST_LABELS "nno,rdma' are specified in examples below:
+Example running the end-to-end Network Operator test case, with the Legacy SRIOV RDMA testcase.  
+Note: both TEST_LABELS "deploy || rdma-legacy-sriov' are specified in examples below:
 ```
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-nno-ci-logs-dir
 $ export TEST_FEATURES="nvidianetwork"
-$ export TEST_LABELS='nno,rdma'
+# To run the NNO deploy testcase followed by RDMA Shared Device testcase,
+# set: export TEST_LABELS="deploy || rdma-shared-dev"
+$ export TEST_LABELS="deploy || rdma-legacy-sriov"
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIANETWORK_CATALOGSOURCE="certified-operators"
@@ -246,5 +249,5 @@ $ export NVIDIANETWORK_RDMA_NETWORK_TYPE=sriov
 $ make run-tests
 Executing nvidiagpu test-runner script
 scripts/test-runner.sh
-ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nno,rdma" ./tests/nvidianetwork
+ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="deploy || rdma-legacy-sriov" ./tests/nvidianetwork
 ```
