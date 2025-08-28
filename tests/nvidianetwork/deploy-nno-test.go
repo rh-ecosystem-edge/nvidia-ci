@@ -526,7 +526,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 		})
 
-		It("Deploy NVIDIA Network Operator with DTK", Label("nno"), func() {
+		It("Deploy NVIDIA Network Operator with DTK", Label("deploy"), func() {
 
 			nfdcheck.CheckNfdInstallation(inittools.APIClient, nfd.OSLabel, nfd.GetAllowedOSLabels(),
 				inittools.GeneralConfig.WorkerLabelMap, networkparams.LogLevel)
