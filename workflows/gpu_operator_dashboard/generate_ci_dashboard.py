@@ -8,6 +8,39 @@ from datetime import datetime, timezone
 
 from workflows.common.utils import logger
 from workflows.common.templates import load_template
+from workflows.gpu_operator_dashboard.fetch_ci_data import (
+    OCP_FULL_VERSION, GPU_OPERATOR_VERSION)
+
+
+def has_valid_semantic_versions(result: Dict[str, Any]) -> bool:
+    """
+    Check if both ocp_full_version and gpu_operator_version contain valid semantic versions.
+
+    Args:
+        result: Test result dictionary containing version fields
+
+    Returns:
+        True if both versions are valid semantic versions, False otherwise
+    """
+    try:
+        ocp_version = result.get(OCP_FULL_VERSION, "")
+        gpu_version = result.get(GPU_OPERATOR_VERSION, "")
+
+        if not ocp_version or not gpu_version:
+            return False
+
+        # Parse OCP version (should be like "4.14.1")
+        semver.VersionInfo.parse(ocp_version)
+
+        # Parse GPU operator version (may have suffix like "23.9.0(bundle)" - extract version part)
+        gpu_version_clean = gpu_version.split("(")[0].strip()
+        semver.VersionInfo.parse(gpu_version_clean)
+
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid semantic version in result: ocp={result.get(OCP_FULL_VERSION)}, gpu={result.get(GPU_OPERATOR_VERSION)}")
+        return False
+    else:
+        return True
 
 
 def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
@@ -22,7 +55,7 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
     main_table_template = load_template("main_table.html")
     sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
     html_content += build_toc(sorted_ocp_keys)
-    master_pattern = re.compile(r'^.+\-e2e\-master\/\d+$')
+    master_pattern = re.compile(r'-e2e-master/')
     for ocp_key in sorted_ocp_keys:
         notes = ocp_data[ocp_key].get("notes")
         results = ocp_data[ocp_key]["tests"]
@@ -31,8 +64,12 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
         for r in results:
             if master_pattern.search(r.get("prow_job_url", "")):
                 bundle_results.append(r)
-            elif (r.get("test_status") == "SUCCESS"):
-                regular_results.append(r)
+            else:
+                # Include both SUCCESS and FAILURE for stable versions (non-bundle)
+                # Only include entries with valid semantic versions
+                # Ignore ABORTED results for regular (non-bundle) results
+                if has_valid_semantic_versions(r) and r.get("test_status") != "ABORTED":
+                    regular_results.append(r)
         notes_html = build_notes(notes)
         table_rows_html = build_catalog_table_rows(regular_results)
         bundle_info_html = build_bundle_info(bundle_results)
@@ -53,13 +90,15 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
 def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
     """
     Build the <tr> rows for the table, grouped by the full OCP version.
-    For each OCP version group, deduplicate by GPU version (keeping only the entry with the latest timestamp)
-    and create clickable GPU version links, sorting semantic versions correctly.
+    For each OCP version group, determine the final status for each GPU version combination:
+    - If there are any successful results for a combination, mark as successful
+    - If there are only failed results for a combination, mark as failed
+    Display failed combinations with different styling.
     """
     # Group results by full OCP version
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for result in regular_results:
-        ocp_full = result["ocp_full_version"]
+        ocp_full = result[OCP_FULL_VERSION]
         grouped.setdefault(ocp_full, []).append(result)
 
     rows_html = ""
@@ -71,32 +110,55 @@ def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
     ):
         rows = grouped[ocp_full]
 
-        # Deduplicate by GPU version, keeping latest timestamp
-        deduped: Dict[str, Dict[str, Any]] = {}
+        # Group by GPU version to analyze all results for each combination
+        gpu_groups: Dict[str, List[Dict[str, Any]]] = {}
         for row in rows:
-            gpu = row["gpu_operator_version"]
-            if gpu not in deduped or row["job_timestamp"] > deduped[gpu]["job_timestamp"]:
-                deduped[gpu] = row
+            gpu = row[GPU_OPERATOR_VERSION]
+            gpu_groups.setdefault(gpu, []).append(row)
+
+        # Determine final status for each GPU version and keep latest result
+        final_results: Dict[str, Dict[str, Any]] = {}
+        for gpu, gpu_results in gpu_groups.items():
+            # Check if there are any successful results for this GPU version
+            has_success = any(r["test_status"] == "SUCCESS" for r in gpu_results)
+
+            # Get the latest result for this GPU version
+            latest_result = max(gpu_results, key=lambda r: int(r["job_timestamp"]))
+
+            # If we have any successful result, use a successful one (latest successful)
+            # Otherwise, use the latest result (which will be failed)
+            if has_success:
+                successful_results = [r for r in gpu_results if r["test_status"] == "SUCCESS"]
+                chosen = max(successful_results, key=lambda r: int(r["job_timestamp"]))
+                final_result = {**chosen, "final_status": "SUCCESS"}
+            else:
+                final_result = {**latest_result, "final_status": "FAILURE"}
+
+            final_results[gpu] = final_result
 
         # Sort GPU Operator versions semantically
-        deduped_rows = list(deduped.values())
-        sorted_rows = sorted(
-            deduped_rows,
+        sorted_results = sorted(
+            final_results.values(),
             key=lambda r: semver.VersionInfo.parse(
-                r["gpu_operator_version"].split("(")[0]),
+                r[GPU_OPERATOR_VERSION].split("(")[0]),
             reverse=True
         )
 
-        # Build clickable links for GPU versions
-        gpu_links = ", ".join(
-            f'<a href="{r["prow_job_url"]}" target="_blank">{r["gpu_operator_version"]}</a>'
-            for r in sorted_rows
-        )
+        # Build clickable links for GPU versions with appropriate styling
+        gpu_links = []
+        for r in sorted_results:
+            if r["final_status"] == "SUCCESS":
+                link = f'<a href="{r["prow_job_url"]}" target="_blank" class="success-link">{r[GPU_OPERATOR_VERSION]}</a>'
+            else:
+                link = f'<a href="{r["prow_job_url"]}" target="_blank" class="failed-link">{r[GPU_OPERATOR_VERSION]} (Failed)</a>'
+            gpu_links.append(link)
+
+        gpu_links_html = ", ".join(gpu_links)
 
         rows_html += f"""
         <tr>
           <td class="version-cell">{ocp_full}</td>
-          <td>{gpu_links}</td>
+          <td>{gpu_links_html}</td>
         </tr>
         """
 
