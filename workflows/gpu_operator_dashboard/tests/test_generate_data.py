@@ -4,7 +4,8 @@ import tempfile
 import unittest
 from unittest import mock, TestCase
 
-from workflows.gpu_operator_dashboard.fetch_ci_data import merge_and_save_results
+from workflows.gpu_operator_dashboard.fetch_ci_data import (
+    merge_and_save_results, OCP_FULL_VERSION, GPU_OPERATOR_VERSION)
 
 # Testing final logic of generate_ci_dashboard.py which stores the JSON test data
 
@@ -25,10 +26,10 @@ class TestSaveToJson(TestCase):
         new_data = {
             "4.14": [
                 {
-                    "ocp_full_version": "4.14.1",
-                    "gpu_operator_version": "23.9.0",
+                    OCP_FULL_VERSION: "4.14.1",
+                    GPU_OPERATOR_VERSION: "23.9.0",
                     "test_status": "SUCCESS",
-                    "prow_job_url": "https://example.com/job1",
+                    "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/123/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/456",
                     "job_timestamp": "1712345678"
                 }
             ]
@@ -48,10 +49,10 @@ class TestSaveToJson(TestCase):
                 "notes": [],
                 "tests": [
                     {
-                        "ocp_full_version": "4.14.1",
-                        "gpu_operator_version": "23.9.0",
+                        OCP_FULL_VERSION: "4.14.1",
+                        GPU_OPERATOR_VERSION: "23.9.0",
                         "test_status": "SUCCESS",
-                        "prow_job_url": "https://example.com/job1",
+                        "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/123/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/456",
                         "job_timestamp": "1712345678"
                     }
                 ]
@@ -64,10 +65,10 @@ class TestSaveToJson(TestCase):
         new_data = {
             "4.14": [
                 {
-                    "ocp_full_version": "4.14.1",
-                    "gpu_operator_version": "23.9.0",
+                    OCP_FULL_VERSION: "4.14.1",
+                    GPU_OPERATOR_VERSION: "23.9.0",
                     "test_status": "SUCCESS",
-                    "prow_job_url": "https://example.com/job1",
+                    "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/123/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/456",
                     "job_timestamp": "1712345678"
                 }
             ]
@@ -76,10 +77,10 @@ class TestSaveToJson(TestCase):
             "4.14":
                 {"tests": [
                     {
-                        "ocp_full_version": "4.14.2",
-                        "gpu_operator_version": "24.3.0",
+                        OCP_FULL_VERSION: "4.14.2",
+                        GPU_OPERATOR_VERSION: "24.3.0",
                         "test_status": "SUCCESS",
-                        "prow_job_url": "https://example.com/job2",
+                        "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/124/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.13-stable-nvidia-gpu-operator-e2e-23-9-x/457",
                         "job_timestamp": "1712345679"
                     }
                 ]
@@ -95,18 +96,18 @@ class TestSaveToJson(TestCase):
 
         # Both entries should be present
         self.assertEqual(len(saved_data["4.14"]["tests"]), 2)
-        self.assertTrue(any(item["gpu_operator_version"]
+        self.assertTrue(any(item[GPU_OPERATOR_VERSION]
                         == "23.9.0" for item in saved_data["4.14"]["tests"]))
-        self.assertTrue(any(item["gpu_operator_version"]
+        self.assertTrue(any(item[GPU_OPERATOR_VERSION]
                         == "24.3.0" for item in saved_data["4.14"]["tests"]))
 
     def test_exact_duplicates(self):
         """Test handling of exact duplicates - they should not be added."""
         item = {
-            "ocp_full_version": "4.14.1",
-            "gpu_operator_version": "23.9.0",
+            OCP_FULL_VERSION: "4.14.1",
+            GPU_OPERATOR_VERSION: "23.9.0",
             "test_status": "SUCCESS",
-            "prow_job_url": "https://example.com/job1",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/123/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/456",
             "job_timestamp": "1712345678"
         }
 
@@ -127,10 +128,10 @@ class TestSaveToJson(TestCase):
         new_data = {
             "4.14":[
                     {
-                        "ocp_full_version": "4.14.1",
-                        "gpu_operator_version": "23.9.0",
+                        OCP_FULL_VERSION: "4.14.1",
+                        GPU_OPERATOR_VERSION: "23.9.0",
                         "test_status": "SUCCESS",
-                        "prow_job_url": "https://example.com/job1",
+                        "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/123/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/456",
                         "job_timestamp": "1712345678"
                     }
                 ]
@@ -138,10 +139,10 @@ class TestSaveToJson(TestCase):
         existing_data = {
             "4.13":
                 {"tests": [{
-                    "ocp_full_version": "4.13.5",
-                    "gpu_operator_version": "23.9.0",
+                    OCP_FULL_VERSION: "4.13.5",
+                    GPU_OPERATOR_VERSION: "23.9.0",
                     "test_status": "SUCCESS",
-                    "prow_job_url": "https://example.com/job2",
+                    "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/124/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.13-stable-nvidia-gpu-operator-e2e-23-9-x/457",
                     "job_timestamp": "1712345679"
                 }
                 ]
@@ -161,20 +162,20 @@ class TestSaveToJson(TestCase):
         self.assertEqual(len(saved_data["4.13"]["tests"]), 1)
 
     def test_partial_duplicates(self):
-        """Test handling items that match in some fields but not all."""
+        """Test handling items from the same build but different status - SUCCESS should be preferred."""
         new_item = {
-            "ocp_full_version": "4.14.1",
-            "gpu_operator_version": "23.9.0",
+            OCP_FULL_VERSION: "4.14.1",
+            GPU_OPERATOR_VERSION: "23.9.0",
             "test_status": "SUCCESS",
-            "prow_job_url": "https://example.com/job1",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/123/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/456",
             "job_timestamp": "1712345678"
         }
 
         existing_item = {
-            "ocp_full_version": "4.14.1",
-            "gpu_operator_version": "23.9.0",
+            OCP_FULL_VERSION: "4.14.1",
+            GPU_OPERATOR_VERSION: "23.9.0",
             "test_status": "FAILURE",  # Different test_status
-            "prow_job_url": "https://example.com/job1",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/123/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/456",
             "job_timestamp": "1712345678"
         }
 
@@ -187,29 +188,26 @@ class TestSaveToJson(TestCase):
         with open(data_file, 'r') as f:
             saved_data = json.load(f)
 
-        # Both entries should be present as they differ in test_status
-        self.assertEqual(len(saved_data["4.14"]["tests"]), 2)
-        self.assertTrue(any(item["test_status"] ==
-                        "SUCCESS" for item in saved_data["4.14"]["tests"]))
-        self.assertTrue(any(item["test_status"] ==
-                        "FAILURE" for item in saved_data["4.14"]["tests"]))
+        # Only one entry should remain (SUCCESS should be preferred over FAILURE)
+        self.assertEqual(len(saved_data["4.14"]["tests"]), 1)
+        self.assertEqual(saved_data["4.14"]["tests"][0]["test_status"], "SUCCESS")
 
     def test_json_not_overwritten(self):
         """Test that merging new data does not overwrite existing data fields.
            Each field from the existing data should be preserved and new data should be appended.
         """
         existing_item = {
-            "ocp_full_version": "4.14.1",
-            "gpu_operator_version": "23.9.0",
+            OCP_FULL_VERSION: "4.14.1",
+            GPU_OPERATOR_VERSION: "23.9.0",
             "test_status": "SUCCESS",
-            "prow_job_url": "https://example.com/job1",
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/123/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/456",
             "job_timestamp": "1712345678"
         }
         new_item = {
-            "ocp_full_version": "4.14.1",  # Same OCP version key
-            "gpu_operator_version": "23.9.0",
+            OCP_FULL_VERSION: "4.14.1",  # Same OCP version key
+            GPU_OPERATOR_VERSION: "23.9.0",
             "test_status": "FAILURE",  # New test_status, different from the existing item
-            "prow_job_url": "https://example.com/job1-new",  # New prow_job_url
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/125/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/458",  # New prow_job_url
             "job_timestamp": "1712345680"  # New job_timestamp
         }
         new_data = {"4.14": [new_item]}
@@ -226,14 +224,14 @@ class TestSaveToJson(TestCase):
 
         # Check that the existing item's fields are preserved
         found_existing = any(
-            item["test_status"] == "SUCCESS" and item["prow_job_url"] == "https://example.com/job1" and item["job_timestamp"] == "1712345678"
+            item["test_status"] == "SUCCESS" and item["prow_job_url"] == "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/123/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/456" and item["job_timestamp"] == "1712345678"
             for item in saved_data["4.14"]["tests"]
         )
         self.assertTrue(found_existing)
 
         # Check that the new item's fields are saved
         found_new = any(
-            item["test_status"] == "FAILURE" and item["prow_job_url"] == "https://example.com/job1-new" and item["job_timestamp"] == "1712345680"
+            item["test_status"] == "FAILURE" and item["prow_job_url"] == "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/125/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/458" and item["job_timestamp"] == "1712345680"
             for item in saved_data["4.14"]["tests"]
         )
         self.assertTrue(found_new)
@@ -245,10 +243,10 @@ class TestSaveToJson(TestCase):
         existing_data = {
             "4.14": [
                 {
-                    "ocp_full_version": "4.14.1",
-                    "gpu_operator_version": "23.9.0",
+                    OCP_FULL_VERSION: "4.14.1",
+                    GPU_OPERATOR_VERSION: "23.9.0",
                     "test_status": "SUCCESS",
-                    "prow_job_url": "https://example.com/job1",
+                    "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/123/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.14-stable-nvidia-gpu-operator-e2e-23-9-x/456",
                     "job_timestamp": "1712345678"
                 }
             ]

@@ -4,12 +4,18 @@ import json
 import re
 import urllib.parse
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Set
 
 import requests
 from pydantic import BaseModel
+import semver
 
 from workflows.common.utils import logger
+
+
+# Constants for version field names
+OCP_FULL_VERSION = "ocp_full_version"
+GPU_OPERATOR_VERSION = "gpu_operator_version"
 
 
 # =============================================================================
@@ -20,13 +26,11 @@ GCS_API_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-re
 
 # Regular expression to match test result paths.
 TEST_RESULT_PATH_REGEX = re.compile(
-    r"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/\d+/pull-ci-rh-ecosystem-edge-nvidia-ci-main-"
-    r"(?P<ocp_version>\d+\.\d+)-stable-nvidia-gpu-operator-e2e-(?P<gpu_version>\d+-\d+-x|master)/"
+    r"pr-logs/pull/(?P<repo>[^/]+)/(?P<pr_number>\d+)/"
+    r"(?P<job_name>(?:rehearse-\d+-)?pull-ci-rh-ecosystem-edge-nvidia-ci-main-"
+    r"(?P<ocp_version>\d+\.\d+)-stable-nvidia-gpu-operator-e2e-(?P<gpu_version>\d+-\d+-x|master))/"
+    r"(?P<build_id>[^/]+)"
 )
-
-# Expected number of slashes for top-level GPU operator E2E finished.json paths
-# Format: pr-logs/pull/org/pr/job/build/finished.json (6 slashes)
-EXPECTED_FINISHED_JSON_SLASH_COUNT = 6
 
 # Maximum number of results per GCS API request for pagination
 GCS_MAX_RESULTS_PER_REQUEST = 1000
@@ -38,7 +42,7 @@ GCS_MAX_RESULTS_PER_REQUEST = 1000
 
 def http_get_json(url: str, params: Dict[str, Any] = None, headers: Dict[str, str] = None) -> Dict[str, Any]:
     """Send an HTTP GET request and return the JSON response."""
-    response = requests.get(url, params=params, headers=headers)
+    response = requests.get(url, params=params, headers=headers, timeout=30)
     response.raise_for_status()
     return response.json()
 
@@ -49,18 +53,15 @@ def fetch_gcs_file_content(file_path: str) -> str:
     response = requests.get(
         url=f"{GCS_API_BASE_URL}/{urllib.parse.quote_plus(file_path)}",
         params={"alt": "media"},
+        timeout=30,
     )
     response.raise_for_status()
     return response.content.decode("UTF-8")
 
 
-def build_prow_job_url(pr_number: str, ocp_minor: str, gpu_suffix: str, job_id: str) -> str:
-    """Build the Prow job URL for the given PR, OCP version, GPU suffix, and job ID."""
-    return (
-        f"https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/"
-        f"pull/rh-ecosystem-edge_nvidia-ci/{pr_number}/pull-ci-rh-ecosystem-edge-nvidia-ci-main-"
-        f"{ocp_minor}-stable-nvidia-gpu-operator-e2e-{gpu_suffix}/{job_id}"
-    )
+def build_prow_job_url(finished_json_path: str) -> str:
+    directory_path = finished_json_path[:-len('/finished.json')]
+    return f"https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/{directory_path}"
 
 
 # --- Pydantic Model and Domain Model for Test Results ---
@@ -70,8 +71,9 @@ class TestResultKey(BaseModel):
     ocp_full_version: str
     gpu_operator_version: str
     test_status: str
-    prow_job_url: str
-    job_timestamp: str
+    pr_number: str
+    job_name: str
+    build_id: str
 
     class Config:
         frozen = True
@@ -88,21 +90,40 @@ class TestResult:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "ocp_full_version": self.ocp_full_version,
-            "gpu_operator_version": self.gpu_operator_version,
+            OCP_FULL_VERSION: self.ocp_full_version,
+            GPU_OPERATOR_VERSION: self.gpu_operator_version,
             "test_status": self.test_status,
             "prow_job_url": self.prow_job_url,
             "job_timestamp": self.job_timestamp,
         }
 
     def composite_key(self) -> TestResultKey:
+        repo, pr_number, job_name, build_id = extract_build_components(self.prow_job_url)
         return TestResultKey(
             ocp_full_version=self.ocp_full_version,
             gpu_operator_version=self.gpu_operator_version,
             test_status=self.test_status,
-            prow_job_url=self.prow_job_url,
-            job_timestamp=str(self.job_timestamp)
+            pr_number=pr_number,
+            job_name=job_name,
+            build_id=build_id
         )
+
+    def build_key(self) -> Tuple[str, str, str]:
+        """Get the PR number, job name and build ID for deduplication purposes."""
+        repo, pr_number, job_name, build_id = extract_build_components(self.prow_job_url)
+        return (pr_number, job_name, build_id)
+
+    def has_exact_versions(self) -> bool:
+        """Check if this result has exact semantic versions (not base versions from URL)."""
+        try:
+            ocp = self.ocp_full_version
+            gpu = self.gpu_operator_version.split("(")[0].strip()
+            semver.VersionInfo.parse(ocp)
+            semver.VersionInfo.parse(gpu)
+        except (ValueError, TypeError):
+            return False
+        else:
+            return True
 
 
 def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, Any]]:
@@ -153,107 +174,201 @@ def fetch_pr_files(pr_number: str) -> Tuple[List[Dict[str, Any]], List[Dict[str,
     return all_finished_files, ocp_version_files, gpu_version_files
 
 
-def filter_gpu_finished_files(all_finished_files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Filter to get only top-level finished.json files from GPU operator E2E builds."""
-    finished_files = []
-    for file_item in all_finished_files:
-        path = file_item.get("name", "")
-        # Must be a GPU operator E2E test and a top-level finished.json (not nested in artifacts)
-        if ("nvidia-gpu-operator-e2e" in path and
-            path.count('/') == EXPECTED_FINISHED_JSON_SLASH_COUNT and
-                path.endswith('/finished.json')):
-            finished_files.append(file_item)
-    return finished_files
-
-
-def build_single_file_lookup(
-    file_items: List[Dict[str, Any]],
-    all_builds: set
-) -> Dict[Tuple[str, str], Dict[str, Any]]:
-    """Build a lookup dictionary for a single file type.
+def extract_build_components(path: str) -> Tuple[str, str, str, str]:
+    """Extract build components (repo, pr_number, job_name, build_id) from URL or file path.
 
     Args:
-        file_items: List of file items from GCS API
-        all_builds: Set that will be populated with (job_path, build_id) tuples as a side effect
+        path: File path or URL (e.g., "pr-logs/.../build-id/..." or "pr-logs/.../build-id/artifacts/...")
 
     Returns:
-        Dictionary mapping (job_path, build_id) to file item
+        Tuple of (repo, pr_number, job_name, build_id)
+
+    Raises:
+        ValueError: If path doesn't match expected pattern
     """
-    lookup = {}
+    # For nested files, get base path by removing everything after build_id
+    original_path = path
+    if '/artifacts/' in path:
+        path = path.split('/artifacts/')[0] + '/'
 
-    for file_item in file_items:
+    # Search for our pattern (works with both paths and full URLs)
+    match = TEST_RESULT_PATH_REGEX.search(path)
+    if not match:
+        msg = "GPU operator path regex mismatch" if "nvidia-gpu-operator-e2e" in original_path else "Unexpected path format"
+        raise ValueError(msg)
+
+    # Extract values directly from regex groups
+    repo = match.group("repo")
+    pr_number = match.group("pr_number")
+    job_name = match.group("job_name")
+    build_id = match.group("build_id")
+
+    return (repo, pr_number, job_name, build_id)
+
+
+def filter_gpu_finished_files(all_finished_files: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[Tuple[str, str, str], Dict[str, Dict[str, Any]]]]:
+    """Filter GPU operator E2E finished.json files, preferring nested when available.
+
+    For each build, returns the preferred finished.json file:
+    - If nested finished.json exists (artifacts/nvidia-gpu-operator-e2e-{gpu_suffix}/gpu-operator-e2e/finished.json), use it
+    - Otherwise, use top-level finished.json
+
+    The prow job URL is derived directly from the returned file path, eliminating the need for separate metadata.
+
+    Returns:
+        Tuple of (preferred_files, dual_builds_info)
+        - preferred_files: List of preferred finished.json file items for each build
+        - dual_builds_info: Dict mapping build_key to {'nested': file_item, 'top_level': file_item}
+                           for builds that have both nested and top-level finished.json files
+    """
+    preferred_files = {}  # {build_key: (file_item, is_nested)}
+    all_build_files = {}  # {build_key: {'nested': file_item, 'top_level': file_item}}
+
+    for file_item in all_finished_files:
         path = file_item.get("name", "")
-        match = TEST_RESULT_PATH_REGEX.match(path)
-        if not match:
+
+        # Check if it's a GPU operator E2E finished.json file
+        if not ("nvidia-gpu-operator-e2e" in path and path.endswith('/finished.json')):
             continue
 
-        path_parts = path.split('/')
-        if len(path_parts) < 6:
+        # Determine file type and extract build key
+        is_nested = '/artifacts/nvidia-gpu-operator-e2e-' in path and '/gpu-operator-e2e/finished.json' in path
+        is_top_level = not is_nested and '/artifacts/' not in path
+
+        if not (is_nested or is_top_level):
             continue
 
-        build_id = path_parts[5]
-        if build_id in ['latest-build.txt', 'latest-build']:
+        try:
+            repo, pr_number, job_name, build_id = extract_build_components(path)
+            build_key = (pr_number, job_name, build_id)
+        except ValueError:
             continue
 
-        job_path = '/'.join(path_parts[:5]) + '/'
-        key = (job_path, build_id)
-        lookup[key] = file_item
-        all_builds.add(key)
+        # Track all files for each build
+        if build_key not in all_build_files:
+            all_build_files[build_key] = {}
 
-    return lookup
+        if is_nested:
+            all_build_files[build_key]['nested'] = file_item
+        else:
+            all_build_files[build_key]['top_level'] = file_item
+
+        # Store file, preferring nested over top-level
+        if build_key not in preferred_files or is_nested:
+            preferred_files[build_key] = (file_item, is_nested)
+
+    # Extract file items and find builds with both nested and top-level files
+    result = [file_item for file_item, _ in preferred_files.values()]
+    dual_builds = {k: v for k, v in all_build_files.items()
+                   if 'nested' in v and 'top_level' in v}
+
+    return result, dual_builds
 
 
-def build_file_lookups(
+def build_files_lookup(
     finished_files: List[Dict[str, Any]],
     ocp_version_files: List[Dict[str, Any]],
     gpu_version_files: List[Dict[str, Any]]
-) -> Tuple[Dict[Tuple[str, str], Dict[str, Any]], Dict[Tuple[str, str], Dict[str, Any]], Dict[Tuple[str, str], Dict[str, Any]], set]:
-    """Build lookup dictionaries for fast file access by (job_path, build_id)."""
+) -> Tuple[Dict[Tuple[str, str, str], Dict[str, Dict[str, Any]]], Set[Tuple[str, str, str]]]:
+    """Build a single lookup dictionary mapping build keys to all their related files.
+
+    Returns a dictionary where each key (pr_number, job_name, build_id) maps to a structure containing
+    all related files: {finished: file, ocp: file, gpu: file}
+
+    Much cleaner than maintaining three separate lookup dictionaries.
+    """
+    build_files = {}  # {(pr_number, job_name, build_id): {finished: file, ocp: file, gpu: file}}
     all_builds = set()
 
-    finished_lookup = build_single_file_lookup(finished_files, all_builds)
-    ocp_version_lookup = build_single_file_lookup(
-        ocp_version_files, all_builds)
-    gpu_version_lookup = build_single_file_lookup(
-        gpu_version_files, all_builds)
+    # Combine all files into a single list with their file type
+    all_files_with_type = []
+    for file_item in finished_files:
+        all_files_with_type.append((file_item, 'finished'))
+    for file_item in ocp_version_files:
+        all_files_with_type.append((file_item, 'ocp'))
+    for file_item in gpu_version_files:
+        all_files_with_type.append((file_item, 'gpu'))
 
-    return finished_lookup, ocp_version_lookup, gpu_version_lookup, all_builds
+    # Process all files in a single pass - parse each path only once
+    for file_item, file_type in all_files_with_type:
+        path = file_item.get("name", "")
+
+        # Skip non-GPU operator paths early
+        try:
+            repo, pr_number, job_name, build_id = extract_build_components(path)
+        except ValueError:
+            continue
+
+        if build_id in ['latest-build.txt', 'latest-build']:
+            continue
+
+        # Build key from extracted components
+        key = (pr_number, job_name, build_id)
+
+        # Ensure the build entry exists
+        if key not in build_files:
+            build_files[key] = {}
+
+        # Store file in the appropriate slot
+        build_files[key][file_type] = file_item
+        all_builds.add(key)
+
+    return build_files, all_builds
 
 
 def process_single_build(
-    pr_number: str,
-    job_path: str,
+    pr_number_arg: str,
+    job_name: str,
     build_id: str,
-    finished_lookup: Dict[Tuple[str, str], Dict[str, Any]],
-    ocp_version_lookup: Dict[Tuple[str, str], Dict[str, Any]],
-    gpu_version_lookup: Dict[Tuple[str, str], Dict[str, Any]]
+    ocp_version: str,
+    gpu_suffix: str,
+    build_files: Dict[Tuple[str, str, str], Dict[str, Dict[str, Any]]],
+    dual_builds_info: Optional[Dict[Tuple[str, str, str], Dict[str, Dict[str, Any]]]] = None
 ) -> TestResult:
     """Process a single build and return its test result."""
-    # Extract OCP and GPU versions from job path
-    match = TEST_RESULT_PATH_REGEX.match(job_path)
-    if not match:
-        raise ValueError(f"Invalid job path format: {job_path}")
+    # No need to reconstruct path - versions already extracted by caller
 
-    ocp_version = match.group("ocp_version")
-    gpu_suffix = match.group("gpu_version")
+    # Get all files for this build
+    key = (pr_number_arg, job_name, build_id)
+    build_file_set = build_files[key]
 
     # Get build status and timestamp from finished.json
-    key = (job_path, build_id)
-    finished_file = finished_lookup[key]
-
+    finished_file = build_file_set['finished']
     finished_content = fetch_gcs_file_content(finished_file['name'])
     finished_data = json.loads(finished_content)
     status = finished_data["result"]
     timestamp = finished_data["timestamp"]
 
-    # Build prow job URL
-    job_url = build_prow_job_url(pr_number, ocp_version, gpu_suffix, build_id)
+    # Check for mismatch between nested GPU operator test and top-level build result
+    if dual_builds_info and key in dual_builds_info:
+        dual_files = dual_builds_info[key]
+        if 'nested' in dual_files and 'top_level' in dual_files:
+            # Fetch both statuses for comparison
+            nested_content = fetch_gcs_file_content(dual_files['nested']['name'])
+            nested_data = json.loads(nested_content)
+            nested_status = nested_data["result"]
 
-    # Get exact versions if SUCCESS and files exist
-    ocp_version_file = ocp_version_lookup.get(key)
-    gpu_version_file = gpu_version_lookup.get(key)
+            top_level_content = fetch_gcs_file_content(dual_files['top_level']['name'])
+            top_level_data = json.loads(top_level_content)
+            top_level_status = top_level_data["result"]
 
-    if status == "SUCCESS" and ocp_version_file and gpu_version_file:
+            # Warn if GPU operator succeeded but overall build failed
+            if nested_status == "SUCCESS" and top_level_status == "FAILURE":
+                logger.warning(
+                    f"Build {build_id}: GPU operator tests SUCCEEDED but overall build FAILED. "
+                    f"This indicates GPU tests passed but the full CI pipeline (i.e. post-steps) failed."
+                )
+
+    # Build prow job URL directly from the finished.json file path
+    job_url = build_prow_job_url(finished_file['name'])
+
+    logger.info(f"Built prow job URL for build {build_id} from path {finished_file['name']}: {job_url}")
+
+    # Get exact versions if files exist (regardless of build status)
+    ocp_version_file = build_file_set.get('ocp')
+    gpu_version_file = build_file_set.get('gpu')
+
+    if ocp_version_file and gpu_version_file:
         exact_ocp = fetch_gcs_file_content(ocp_version_file['name']).strip()
         exact_gpu_version = fetch_gcs_file_content(
             gpu_version_file['name']).strip()
@@ -276,44 +391,41 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str
     all_finished_files, ocp_version_files, gpu_version_files = fetch_pr_files(
         pr_number)
 
-    # Step 2: Filter to get only GPU operator E2E finished.json files
-    finished_files = filter_gpu_finished_files(all_finished_files)
+    # Step 2: Filter to get the preferred finished.json files (nested when available, otherwise top-level)
+    finished_files, dual_builds_info = filter_gpu_finished_files(all_finished_files)
 
-    # Step 3: Build lookup dictionaries for fast access
-    finished_lookup, ocp_version_lookup, gpu_version_lookup, all_builds = build_file_lookups(
+    # Step 3: Build single unified lookup for all file types
+    build_files, all_builds = build_files_lookup(
         finished_files, ocp_version_files, gpu_version_files)
 
     logger.info(
         f"Found {len(all_builds)} unique job/build combinations from filtered files")
 
-    # Step 4: Process each job/build combination and deduplicate by Prow job URL
-    processed_urls = set()  # Track processed URLs to avoid duplicates
+    # Step 4: Process each job/build combination (already unique from all_builds set)
     processed_count = 0
 
-    for job_path, build_id in sorted(all_builds):
+    for pr_num, job_name, build_id in sorted(all_builds):
+        # Determine repository from job name pattern
+        if job_name.startswith("rehearse-"):
+            repo = "openshift_release"
+        else:
+            repo = "rh-ecosystem-edge_nvidia-ci"
+
         # Extract OCP version for logging
-        match = TEST_RESULT_PATH_REGEX.match(job_path)
+        job_path = f"pr-logs/pull/{repo}/{pr_num}/{job_name}/"
+        full_path = f"{job_path}{build_id}"
+        match = TEST_RESULT_PATH_REGEX.search(full_path)
+        if not match:
+            logger.warning(f"Could not parse versions from components: {pr_num}, {job_name}, {build_id}")
+            continue
         ocp_version = match.group("ocp_version")
         gpu_suffix = match.group("gpu_version")
-
-        # Create the job URL to check for duplicates
-        job_url = build_prow_job_url(
-            pr_number, ocp_version, gpu_suffix, build_id)
-
-        # Skip if we've already processed this exact job URL
-        if job_url in processed_urls:
-            logger.debug(
-                f"Skipping duplicate build {build_id} for {ocp_version} + {gpu_suffix}")
-            continue
-
-        processed_urls.add(job_url)
 
         logger.info(
             f"Processing build {build_id} for {ocp_version} + {gpu_suffix}")
 
         result = process_single_build(
-            pr_number, job_path, build_id,
-            finished_lookup, ocp_version_lookup, gpu_version_lookup)
+            pr_num, job_name, build_id, ocp_version, gpu_suffix, build_files, dual_builds_info)
 
         results_by_ocp.setdefault(ocp_version, []).append(result.to_dict())
         logger.info(f"Added result for build {build_id}: {result.test_status}")
@@ -348,19 +460,68 @@ def merge_and_save_results(
     file_path = output_file
     logger.info(f"Saving JSON to {file_path}")
     merged_results = existing_results.copy() if existing_results else {}
+
     for key, new_values in new_results.items():
         merged_results.setdefault(key, {"notes": [], "tests": []})
         merged_results[key].setdefault("tests", [])
-        seen_keys = set(TestResult(**item).composite_key()
-                        for item in merged_results[key]["tests"])
+
+        # Build a map of existing entries by build key (pr_number, job_name, build_id)
+        existing_by_build = {}
+        for item in merged_results[key]["tests"]:
+            result = TestResult(**item)
+            build_key = result.build_key()
+            existing_by_build[build_key] = item
+
+        # Process new values and merge with existing
         for item in new_values:
-            key_instance = TestResult(**item).composite_key()
-            if key_instance not in seen_keys:
-                merged_results[key]["tests"].append(item)
-                seen_keys.add(key_instance)
+            result = TestResult(**item)
+            build_key = result.build_key()
+
+            if build_key in existing_by_build:
+                # Choose the better entry between existing and new
+                existing_result = TestResult(**existing_by_build[build_key])
+                better_entry = _choose_better_entry(existing_result, result)
+                existing_by_build[build_key] = better_entry.to_dict()
+            else:
+                existing_by_build[build_key] = item
+
+        # Update the tests list with deduplicated entries
+        merged_results[key]["tests"] = list(existing_by_build.values())
+
     with open(file_path, "w") as f:
         json.dump(merged_results, f, indent=4)
     logger.info(f"Data successfully saved to {file_path}")
+
+
+def _choose_better_entry(existing: TestResult, new: TestResult) -> TestResult:
+    """Choose the better entry between two results for the same build.
+
+    Priority order:
+    1. Entry with exact versions over base versions
+    2. Entry with SUCCESS status over FAILURE
+    3. Entry with later timestamp
+    """
+    existing_has_exact = existing.has_exact_versions()
+    new_has_exact = new.has_exact_versions()
+
+    # Prefer exact versions over base versions
+    if new_has_exact and not existing_has_exact:
+        return new
+    elif existing_has_exact and not new_has_exact:
+        return existing
+
+    # If both have same version quality, prefer SUCCESS over FAILURE
+    if existing.test_status != new.test_status:
+        if new.test_status == "SUCCESS":
+            return new
+        elif existing.test_status == "SUCCESS":
+            return existing
+
+    # If same status, prefer later timestamp
+    if int(new.job_timestamp) > int(existing.job_timestamp):
+        return new
+
+    return existing
 
 # =============================================================================
 # Main Workflow: Update JSON
