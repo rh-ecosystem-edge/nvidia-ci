@@ -17,6 +17,11 @@ from workflows.common.utils import logger
 OCP_FULL_VERSION = "ocp_full_version"
 GPU_OPERATOR_VERSION = "gpu_operator_version"
 
+# Constants for job statuses
+STATUS_SUCCESS = "SUCCESS"
+STATUS_FAILURE = "FAILURE"
+STATUS_ABORTED = "ABORTED"
+
 
 # =============================================================================
 # Constants
@@ -353,10 +358,9 @@ def process_single_build(
             top_level_status = top_level_data["result"]
 
             # Warn if GPU operator succeeded but overall build failed
-            if nested_status == "SUCCESS" and top_level_status == "FAILURE":
+            if nested_status == STATUS_SUCCESS and top_level_status != STATUS_SUCCESS:
                 logger.warning(
-                    f"Build {build_id}: GPU operator tests SUCCEEDED but overall build FAILED. "
-                    f"This indicates GPU tests passed but the full CI pipeline (i.e. post-steps) failed."
+                    f"Build {build_id}: GPU operator tests SUCCEEDED but overall build has finished with status {top_level_status}."
                 )
 
     # Build prow job URL directly from the finished.json file path
@@ -382,10 +386,12 @@ def process_single_build(
     return result
 
 
-def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str, Any]]]) -> None:
-    """Retrieve and store test results for all jobs under a single PR using targeted file filtering."""
-    logger.info(
-        f"Fetching targeted test data for PR #{pr_number} using filtered requests")
+def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any]]) -> None:
+    """Retrieve and store test results for all jobs under a single PR using targeted file filtering.
+
+    Results are separated into bundle_tests and release_tests at fetch time for efficiency.
+    """
+    logger.info(f"Fetching test data for PR #{pr_number}")
 
     # Step 1: Fetch all required files
     all_finished_files, ocp_version_files, gpu_version_files = fetch_pr_files(
@@ -398,8 +404,7 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str
     build_files, all_builds = build_files_lookup(
         finished_files, ocp_version_files, gpu_version_files)
 
-    logger.info(
-        f"Found {len(all_builds)} unique job/build combinations from filtered files")
+    logger.info(f"Found {len(all_builds)} builds to process")
 
     # Step 4: Process each job/build combination (already unique from all_builds set)
     processed_count = 0
@@ -427,15 +432,29 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, List[Dict[str
         result = process_single_build(
             pr_num, job_name, build_id, ocp_version, gpu_suffix, build_files, dual_builds_info)
 
-        results_by_ocp.setdefault(ocp_version, []).append(result.to_dict())
-        logger.info(f"Added result for build {build_id}: {result.test_status}")
+        # Initialize the OCP version structure if it doesn't exist
+        results_by_ocp.setdefault(ocp_version, {"bundle_tests": [], "release_tests": [], "job_history_links": set()})
+
+        # Add job history link for this job name
+        job_history_url = f"https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/{job_name}"
+        results_by_ocp[ocp_version]["job_history_links"].add(job_history_url)
+
+        # Determine if this is a bundle test (job ends with '-master') or release test
+        if job_name.endswith('-master'):
+            results_by_ocp[ocp_version]["bundle_tests"].append(result.to_dict())
+        else:
+            # Only include in release tests if it has exact semantic versions and is not ABORTED
+            if result.has_exact_versions() and result.test_status != STATUS_ABORTED:
+                results_by_ocp[ocp_version]["release_tests"].append(result.to_dict())
+            else:
+                logger.debug(f"Excluded release test for build {build_id}: status={result.test_status}, exact_versions={result.has_exact_versions()}")
+
         processed_count += 1
 
-    logger.info(
-        f"Successfully processed {processed_count} unique builds using targeted filtering")
+    logger.info(f"Processed {processed_count} builds for PR #{pr_number}")
 
 
-def process_closed_prs(results_by_ocp: Dict[str, List[Dict[str, Any]]]) -> None:
+def process_closed_prs(results_by_ocp: Dict[str, Dict[str, List[Dict[str, Any]]]]) -> None:
     """Retrieve and store test results for all closed PRs against the main branch."""
     logger.info("Retrieving PR history...")
     url = "https://api.github.com/repos/rh-ecosystem-edge/nvidia-ci/pulls"
@@ -452,80 +471,176 @@ def process_closed_prs(results_by_ocp: Dict[str, List[Dict[str, Any]]]) -> None:
         process_tests_for_pr(pr_number, results_by_ocp)
 
 
+def merge_bundle_tests(
+    new_tests: List[Dict[str, Any]],
+    existing_tests: List[Dict[str, Any]],
+    limit: Optional[int] = None
+) -> List[Dict[str, Any]]:
+    """Merge bundle tests with existing bundle tests and apply limit while keeping the most recent results.
+
+    """
+    # Build a map of all entries by build key for deduplication
+    all_tests_by_build = {}
+
+    # Add existing tests first
+    for item in existing_tests:
+        result = TestResult(**item)
+        build_key = result.build_key()
+        all_tests_by_build[build_key] = item
+
+    # Add new tests (will overwrite duplicates - newer data takes precedence)
+    for item in new_tests:
+        result = TestResult(**item)
+        build_key = result.build_key()
+        all_tests_by_build[build_key] = item
+
+    # Sort by timestamp (newest first) and apply limit
+    all_tests = list(all_tests_by_build.values())
+    all_tests.sort(key=lambda x: int(x.get('job_timestamp', '0')), reverse=True)
+
+    if limit is not None:
+        return all_tests[:limit]
+
+    return all_tests
+
+
+def get_version_key(result: TestResult) -> Tuple[str, str]:
+    """Get the version combination key (OCP, GPU operator) for grouping."""
+    return (result.ocp_full_version, result.gpu_operator_version.split("(")[0].strip())
+
+
+def merge_release_tests(
+    new_tests: List[Dict[str, Any]],
+    existing_tests: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Merge release tests keeping one result per version combination.
+
+    Groups by (OCP version, GPU operator version) and keeps the best result
+    for each combination. Prefers SUCCESS over other statuses, then latest timestamp.
+
+    Note: Both inputs are filtered to exclude ABORTED and non-exact semantic versions.
+    """
+    # Group all results by version combination
+    results_by_version = {}  # {(ocp_version, gpu_version): [results]}
+
+    # Process existing results (apply filtering to clean up legacy data)
+    for item in existing_tests:
+        result = TestResult(**item)
+        version_key = get_version_key(result)
+        results_by_version.setdefault(version_key, []).append(result)
+
+    # Process new results (should already be filtered, but apply for safety)
+    for item in new_tests:
+        result = TestResult(**item)
+        # Filter: only include results with exact semantic versions and not ABORTED
+        if result.has_exact_versions() and result.test_status != STATUS_ABORTED:
+            version_key = get_version_key(result)
+            results_by_version.setdefault(version_key, []).append(result)
+
+    # Keep exactly one result per version key
+    final_results = []
+    for version_results in results_by_version.values():
+        # Separate by status
+        success_results = [r for r in version_results if r.test_status == STATUS_SUCCESS]
+        other_results = [r for r in version_results if r.test_status != STATUS_SUCCESS]
+
+        # Select single best result for this version key
+        selected_result = None
+        if success_results:
+            # Prefer latest SUCCESS result
+            success_results.sort(key=lambda x: int(x.job_timestamp), reverse=True)
+            selected_result = success_results[0]
+        elif other_results:
+            # Otherwise, use latest non-SUCCESS result
+            other_results.sort(key=lambda x: int(x.job_timestamp), reverse=True)
+            selected_result = other_results[0]
+
+        # Add exactly one result for this version key
+        if selected_result:
+            final_results.append(selected_result.to_dict())
+
+    # Sort final results by timestamp (newest first)
+    final_results.sort(key=lambda x: int(x.get('job_timestamp', '0')), reverse=True)
+
+    return final_results
+
+
+def merge_ocp_version_results(
+    new_version_data: Dict[str, List[Dict[str, Any]]],
+    existing_version_data: Dict[str, Any],
+    bundle_result_limit: Optional[int] = None
+) -> Dict[str, Any]:
+    """Merge results for a single OCP version."""
+    # Initialize the structure
+    merged_version_data = {"notes": [], "bundle_tests": [], "release_tests": [], "job_history_links": []}
+    merged_version_data.update(existing_version_data)
+
+    # Merge bundle tests with limit
+    new_bundle_tests = new_version_data.get("bundle_tests", [])
+    existing_bundle_tests = merged_version_data.get("bundle_tests", [])
+    merged_version_data["bundle_tests"] = merge_bundle_tests(
+        new_bundle_tests, existing_bundle_tests, bundle_result_limit
+    )
+
+    # Merge release tests without limit
+    new_release_tests = new_version_data.get("release_tests", [])
+    existing_release_tests = merged_version_data.get("release_tests", [])
+    merged_version_data["release_tests"] = merge_release_tests(
+        new_release_tests, existing_release_tests
+    )
+
+    # Merge job history links - combine and deduplicate
+    new_job_history_links = new_version_data.get("job_history_links", set())
+    existing_job_history_links = merged_version_data.get("job_history_links", [])
+
+    # Convert existing list back to set, then merge with new set
+    all_job_history_links = set(existing_job_history_links)
+    all_job_history_links.update(new_job_history_links)
+    # Convert back to sorted list for JSON serialization
+    merged_version_data["job_history_links"] = sorted(list(all_job_history_links))
+
+    return merged_version_data
+
+
 def merge_and_save_results(
-    new_results: Dict[str, List[Dict[str, Any]]],
+    new_results: Dict[str, Dict[str, List[Dict[str, Any]]]],
     output_file: str,
-    existing_results: Dict[str, Dict[str, Any]] = None
+    existing_results: Dict[str, Dict[str, Any]] = None,
+    bundle_result_limit: Optional[int] = None
 ) -> None:
-    file_path = output_file
-    logger.info(f"Saving JSON to {file_path}")
+    """Merge and save test results with separated bundle and release test keys.
+
+    Args:
+        new_results: Dict with OCP versions as keys, each containing {'bundle_tests': [], 'release_tests': [], 'job_history_links': set()}
+        bundle_result_limit: Maximum number of bundle results to keep per version.
+    """
     merged_results = existing_results.copy() if existing_results else {}
 
-    for key, new_values in new_results.items():
-        merged_results.setdefault(key, {"notes": [], "tests": []})
-        merged_results[key].setdefault("tests", [])
+    for ocp_version, version_data in new_results.items():
+        existing_version_data = merged_results.get(ocp_version, {})
+        merged_version_data = merge_ocp_version_results(
+            version_data, existing_version_data, bundle_result_limit
+        )
+        merged_results[ocp_version] = merged_version_data
 
-        # Build a map of existing entries by build key (pr_number, job_name, build_id)
-        existing_by_build = {}
-        for item in merged_results[key]["tests"]:
-            result = TestResult(**item)
-            build_key = result.build_key()
-            existing_by_build[build_key] = item
-
-        # Process new values and merge with existing
-        for item in new_values:
-            result = TestResult(**item)
-            build_key = result.build_key()
-
-            if build_key in existing_by_build:
-                # Choose the better entry between existing and new
-                existing_result = TestResult(**existing_by_build[build_key])
-                better_entry = _choose_better_entry(existing_result, result)
-                existing_by_build[build_key] = better_entry.to_dict()
-            else:
-                existing_by_build[build_key] = item
-
-        # Update the tests list with deduplicated entries
-        merged_results[key]["tests"] = list(existing_by_build.values())
-
-    with open(file_path, "w") as f:
+    with open(output_file, "w") as f:
         json.dump(merged_results, f, indent=4)
-    logger.info(f"Data successfully saved to {file_path}")
+
+    logger.info(f"Results saved to {output_file}")
 
 
-def _choose_better_entry(existing: TestResult, new: TestResult) -> TestResult:
-    """Choose the better entry between two results for the same build.
-
-    Priority order:
-    1. Entry with exact versions over base versions
-    2. Entry with SUCCESS status over FAILURE
-    3. Entry with later timestamp
-    """
-    existing_has_exact = existing.has_exact_versions()
-    new_has_exact = new.has_exact_versions()
-
-    # Prefer exact versions over base versions
-    if new_has_exact and not existing_has_exact:
-        return new
-    elif existing_has_exact and not new_has_exact:
-        return existing
-
-    # If both have same version quality, prefer SUCCESS over FAILURE
-    if existing.test_status != new.test_status:
-        if new.test_status == "SUCCESS":
-            return new
-        elif existing.test_status == "SUCCESS":
-            return existing
-
-    # If same status, prefer later timestamp
-    if int(new.job_timestamp) > int(existing.job_timestamp):
-        return new
-
-    return existing
 
 # =============================================================================
 # Main Workflow: Update JSON
 # =============================================================================
+
+def int_or_none(value: Optional[str]) -> Optional[int]:
+    """Convert string to int or None for unlimited."""
+    if value is None:
+        return None
+    if value.lower() in ('none', 'unlimited'):
+        return None
+    return int(value)
 
 
 def main() -> None:
@@ -536,21 +651,22 @@ def main() -> None:
                         help="Path to the baseline data file")
     parser.add_argument("--merged_data_filepath", required=True,
                         help="Path to the updated (merged) data file")
+    parser.add_argument("--bundle_result_limit", type=int_or_none, default=None,
+                        help="Number of latest bundle results (jobs ending with '-master') to keep per version. Non-bundle results are kept without limit. Omit or use 'unlimited' for no limit. (default: unlimited)")
     args = parser.parse_args()
 
     # Update JSON data.
     with open(args.baseline_data_filepath, "r") as f:
         existing_results: Dict[str, Dict[str, Any]] = json.load(f)
-    logger.info(
-        f"Loaded baseline data from: {args.baseline_data_filepath} with keys: {list(existing_results.keys())}")
+    logger.info(f"Loaded baseline data with {len(existing_results)} OCP versions")
 
-    local_results: Dict[str, List[Dict[str, Any]]] = {}
+    local_results: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
     if args.pr_number.lower() == "all":
         process_closed_prs(local_results)
     else:
         process_tests_for_pr(args.pr_number, local_results)
     merge_and_save_results(
-        local_results, args.merged_data_filepath, existing_results=existing_results)
+        local_results, args.merged_data_filepath, existing_results=existing_results, bundle_result_limit=args.bundle_result_limit)
 
 
 if __name__ == "__main__":

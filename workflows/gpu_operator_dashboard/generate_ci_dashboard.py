@@ -1,7 +1,7 @@
+import html
 import json
 import argparse
 import semver
-import re
 
 from typing import Dict, List, Any
 from datetime import datetime, timezone
@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from workflows.common.utils import logger
 from workflows.common.templates import load_template
 from workflows.gpu_operator_dashboard.fetch_ci_data import (
-    OCP_FULL_VERSION, GPU_OPERATOR_VERSION)
+    OCP_FULL_VERSION, GPU_OPERATOR_VERSION, STATUS_ABORTED)
 
 
 def has_valid_semantic_versions(result: Dict[str, Any]) -> bool:
@@ -43,7 +43,7 @@ def has_valid_semantic_versions(result: Dict[str, Any]) -> bool:
         return True
 
 
-def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
+def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]]) -> str:
     """
     Build the final HTML report by:
       1. Reading the header template,
@@ -55,21 +55,20 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
     main_table_template = load_template("main_table.html")
     sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
     html_content += build_toc(sorted_ocp_keys)
-    master_pattern = re.compile(r'-e2e-master/')
+
     for ocp_key in sorted_ocp_keys:
-        notes = ocp_data[ocp_key].get("notes")
-        results = ocp_data[ocp_key]["tests"]
+        notes = ocp_data[ocp_key].get("notes", [])
+        bundle_results = ocp_data[ocp_key].get("bundle_tests", [])
+        release_results = ocp_data[ocp_key].get("release_tests", [])
+
+        # Apply additional filtering for release results (defensive programming)
+        # Note: release_tests should already be pre-filtered, but we keep this for safety
         regular_results = []
-        bundle_results = []
-        for r in results:
-            if master_pattern.search(r.get("prow_job_url", "")):
-                bundle_results.append(r)
-            else:
-                # Include both SUCCESS and FAILURE for stable versions (non-bundle)
-                # Only include entries with valid semantic versions
-                # Ignore ABORTED results for regular (non-bundle) results
-                if has_valid_semantic_versions(r) and r.get("test_status") != "ABORTED":
-                    regular_results.append(r)
+        for r in release_results:
+            # Only include entries with valid semantic versions
+            # Ignore ABORTED results for regular (non-bundle) results
+            if has_valid_semantic_versions(r) and r.get("test_status") != STATUS_ABORTED:
+                regular_results.append(r)
         notes_html = build_notes(notes)
         table_rows_html = build_catalog_table_rows(regular_results)
         bundle_info_html = build_bundle_info(bundle_results)
@@ -90,6 +89,11 @@ def generate_test_matrix(ocp_data: Dict[str, List[Dict[str, Any]]]) -> str:
 def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
     """
     Build the <tr> rows for the table, grouped by the full OCP version.
+
+    Note: regular_results should already be pre-processed (one result per version combination),
+    but we still need to group by exact OCP version for display purposes and handle cases
+    where multiple OCP patch versions exist for the same GPU version.
+
     For each OCP version group, determine the final status for each GPU version combination:
     - If there are any successful results for a combination, mark as successful
     - If there are only failed results for a combination, mark as failed
@@ -172,7 +176,7 @@ def build_notes(notes: List[str]) -> str:
     if not notes:
         return ""
 
-    items = "\n".join(f'<li class="note-item">{n}</li>' for n in notes)
+    items = "\n".join(f'<li class="note-item">{html.escape(n)}</li>' for n in notes)
     return f"""
   <div class="section-label">Notes</div>
   <div class="note-items">
@@ -205,7 +209,7 @@ def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
     if not bundle_results:
         return ""
     sorted_bundles = sorted(
-        bundle_results, key=lambda r: r["job_timestamp"], reverse=True)
+        bundle_results, key=lambda r: int(r["job_timestamp"]), reverse=True)
     leftmost_bundle = sorted_bundles[0]
     last_bundle_date = datetime.fromtimestamp(int(
         leftmost_bundle["job_timestamp"]), timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")

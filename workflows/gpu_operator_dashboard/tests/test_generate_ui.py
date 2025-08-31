@@ -1,10 +1,11 @@
 from unittest import TestCase
+from unittest.mock import patch
 from datetime import datetime, timezone
 
 from workflows.gpu_operator_dashboard.generate_ci_dashboard import (
-    build_bundle_info, build_catalog_table_rows, has_valid_semantic_versions)
+    build_bundle_info, build_catalog_table_rows, has_valid_semantic_versions, generate_test_matrix)
 from workflows.gpu_operator_dashboard.fetch_ci_data import (
-    OCP_FULL_VERSION, GPU_OPERATOR_VERSION)
+    OCP_FULL_VERSION, GPU_OPERATOR_VERSION, STATUS_ABORTED, STATUS_SUCCESS, STATUS_FAILURE)
 
 
 class TestBuildBundleInfo(TestCase):
@@ -17,17 +18,17 @@ class TestBuildBundleInfo(TestCase):
         """Test that bundles are sorted by timestamp (newest first)."""
         bundle_results = [
             {
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "job_timestamp": 1712000000,  # Oldest
                 "prow_job_url": "https://example.com/job1"
             },
             {
-                "test_status": "FAILURE",
+                "test_status": STATUS_FAILURE,
                 "job_timestamp": 1712100000,  # Middle
                 "prow_job_url": "https://example.com/job2"
             },
             {
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "job_timestamp": 1712200000,  # Newest
                 "prow_job_url": "https://example.com/job3"
             }
@@ -55,12 +56,12 @@ class TestBuildBundleInfo(TestCase):
         """Test the overall HTML structure and CSS classes."""
         bundle_results = [
             {
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "job_timestamp": 1712200000,
                 "prow_job_url": "https://example.com/job1"
             },
             {
-                "test_status": "FAILURE",
+                "test_status": STATUS_FAILURE,
                 "job_timestamp": 1712100000,
                 "prow_job_url": "https://example.com/job2"
             }
@@ -83,12 +84,12 @@ class TestBuildBundleInfo(TestCase):
         """Test that different statuses get different CSS classes."""
         bundle_results = [
             {
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "job_timestamp": 1712200000,
                 "prow_job_url": "https://example.com/job1"
             },
             {
-                "test_status": "FAILURE",
+                "test_status": STATUS_FAILURE,
                 "job_timestamp": 1712100000,
                 "prow_job_url": "https://example.com/job2"
             },
@@ -111,12 +112,12 @@ class TestBuildBundleInfo(TestCase):
         """Test that timestamps are correctly formatted using the newest (leftmost) bundle."""
         bundle_results = [
             {
-                "test_status": "FAILURE",
+                "test_status": STATUS_FAILURE,
                 "job_timestamp": 1712100000,
                 "prow_job_url": "https://example.com/job2"
             },
             {
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "job_timestamp": 1712200000,
                 "prow_job_url": "https://example.com/job1"
             }
@@ -145,28 +146,28 @@ class TestBuildBundleInfo(TestCase):
             {
                 OCP_FULL_VERSION: "4.14.48",
                 GPU_OPERATOR_VERSION: "24.6.2",
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "prow_job_url": "https://example.com/1",
                 "job_timestamp": 100
             },
             {
                 OCP_FULL_VERSION: "4.14.48",
                 GPU_OPERATOR_VERSION: "24.6.2",
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "prow_job_url": "https://example.com/1-dup",
                 "job_timestamp": 200  # Latest for this GPU
             },
             {
                 OCP_FULL_VERSION: "4.14.48",
                 GPU_OPERATOR_VERSION: "24.9.2",
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "prow_job_url": "https://example.com/2",
                 "job_timestamp": 150
             },
             {
                 OCP_FULL_VERSION: "4.14.48",
                 GPU_OPERATOR_VERSION: "25.0.0",
-                "test_status": "FAILURE",  # Not SUCCESS, should be excluded
+                "test_status": STATUS_FAILURE,  # Not SUCCESS, should be excluded
                 "prow_job_url": "https://example.com/3-fail",
                 "job_timestamp": 300
             },
@@ -191,14 +192,14 @@ class TestBuildBundleInfo(TestCase):
             {
                 OCP_FULL_VERSION: "4.14.1",
                 GPU_OPERATOR_VERSION: "23.9.0",
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "prow_job_url": "https://example.com/job1-success",
                 "job_timestamp": "1712345678"
             },
             {
                 OCP_FULL_VERSION: "4.14.1",
                 GPU_OPERATOR_VERSION: "23.9.0",
-                "test_status": "FAILURE",
+                "test_status": STATUS_FAILURE,
                 "prow_job_url": "https://example.com/job1-failure",
                 "job_timestamp": "1712345679"
             },
@@ -206,14 +207,14 @@ class TestBuildBundleInfo(TestCase):
             {
                 OCP_FULL_VERSION: "4.14.1",
                 GPU_OPERATOR_VERSION: "23.8.0",
-                "test_status": "FAILURE",
+                "test_status": STATUS_FAILURE,
                 "prow_job_url": "https://example.com/job2-failure1",
                 "job_timestamp": "1712345680"
             },
             {
                 OCP_FULL_VERSION: "4.14.1",
                 GPU_OPERATOR_VERSION: "23.8.0",
-                "test_status": "FAILURE",
+                "test_status": STATUS_FAILURE,
                 "prow_job_url": "https://example.com/job2-failure2",
                 "job_timestamp": "1712345681"
             }
@@ -242,7 +243,7 @@ class TestBuildBundleInfo(TestCase):
             {
                 OCP_FULL_VERSION: "4.13.5",
                 GPU_OPERATOR_VERSION: "23.9.0",
-                "test_status": "FAILURE",
+                "test_status": STATUS_FAILURE,
                 "prow_job_url": "https://example.com/old-failure",
                 "job_timestamp": "1712345600"
             },
@@ -250,7 +251,7 @@ class TestBuildBundleInfo(TestCase):
             {
                 OCP_FULL_VERSION: "4.13.5",
                 GPU_OPERATOR_VERSION: "23.9.0",
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "prow_job_url": "https://example.com/new-success",
                 "job_timestamp": "1712345700"
             },
@@ -258,7 +259,7 @@ class TestBuildBundleInfo(TestCase):
             {
                 OCP_FULL_VERSION: "4.13.5",
                 GPU_OPERATOR_VERSION: "23.9.0",
-                "test_status": "FAILURE",
+                "test_status": STATUS_FAILURE,
                 "prow_job_url": "https://example.com/newer-failure",
                 "job_timestamp": "1712345800"
             }
@@ -283,7 +284,7 @@ class TestSemanticVersionValidation(TestCase):
         valid_result = {
             OCP_FULL_VERSION: "4.14.1",
             GPU_OPERATOR_VERSION: "23.9.0",
-            "test_status": "SUCCESS",
+            "test_status": STATUS_SUCCESS,
             "prow_job_url": "https://example.com/job1",
             "job_timestamp": "1712345678"
         }
@@ -295,7 +296,7 @@ class TestSemanticVersionValidation(TestCase):
         result_with_suffix = {
             OCP_FULL_VERSION: "4.13.5",
             GPU_OPERATOR_VERSION: "23.9.0(bundle)",
-            "test_status": "SUCCESS",
+            "test_status": STATUS_SUCCESS,
             "prow_job_url": "https://example.com/job1",
             "job_timestamp": "1712345678"
         }
@@ -307,7 +308,7 @@ class TestSemanticVersionValidation(TestCase):
         invalid_ocp_result = {
             OCP_FULL_VERSION: "4.14.invalid",
             GPU_OPERATOR_VERSION: "23.9.0",
-            "test_status": "SUCCESS",
+            "test_status": STATUS_SUCCESS,
             "prow_job_url": "https://example.com/job1",
             "job_timestamp": "1712345678"
         }
@@ -319,7 +320,7 @@ class TestSemanticVersionValidation(TestCase):
         invalid_gpu_result = {
             OCP_FULL_VERSION: "4.14.1",
             GPU_OPERATOR_VERSION: "invalid.version",
-            "test_status": "SUCCESS",
+            "test_status": STATUS_SUCCESS,
             "prow_job_url": "https://example.com/job1",
             "job_timestamp": "1712345678"
         }
@@ -331,7 +332,7 @@ class TestSemanticVersionValidation(TestCase):
         # Missing OCP version
         missing_ocp = {
             GPU_OPERATOR_VERSION: "23.9.0",
-            "test_status": "SUCCESS",
+            "test_status": STATUS_SUCCESS,
             "prow_job_url": "https://example.com/job1",
             "job_timestamp": "1712345678"
         }
@@ -340,7 +341,7 @@ class TestSemanticVersionValidation(TestCase):
         # Missing GPU version
         missing_gpu = {
             OCP_FULL_VERSION: "4.14.1",
-            "test_status": "SUCCESS",
+            "test_status": STATUS_SUCCESS,
             "prow_job_url": "https://example.com/job1",
             "job_timestamp": "1712345678"
         }
@@ -351,7 +352,7 @@ class TestSemanticVersionValidation(TestCase):
         empty_versions = {
             OCP_FULL_VERSION: "",
             GPU_OPERATOR_VERSION: "",
-            "test_status": "SUCCESS",
+            "test_status": STATUS_SUCCESS,
             "prow_job_url": "https://example.com/job1",
             "job_timestamp": "1712345678"
         }
@@ -363,7 +364,7 @@ class TestSemanticVersionValidation(TestCase):
         master_version = {
             OCP_FULL_VERSION: "4.14.1",
             GPU_OPERATOR_VERSION: "master",
-            "test_status": "SUCCESS",
+            "test_status": STATUS_SUCCESS,
             "prow_job_url": "https://example.com/job1",
             "job_timestamp": "1712345678"
         }
@@ -379,7 +380,7 @@ class TestSemanticVersionValidation(TestCase):
             {
                 OCP_FULL_VERSION: "4.14.1",
                 GPU_OPERATOR_VERSION: "23.9.0",
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "prow_job_url": "https://example.com/valid",
                 "job_timestamp": "1712345678"
             },
@@ -387,7 +388,7 @@ class TestSemanticVersionValidation(TestCase):
             {
                 OCP_FULL_VERSION: "invalid.ocp",
                 GPU_OPERATOR_VERSION: "23.9.0",
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "prow_job_url": "https://example.com/invalid-ocp",
                 "job_timestamp": "1712345679"
             },
@@ -395,7 +396,7 @@ class TestSemanticVersionValidation(TestCase):
             {
                 OCP_FULL_VERSION: "4.14.1",
                 GPU_OPERATOR_VERSION: "invalid.gpu",
-                "test_status": "SUCCESS",
+                "test_status": STATUS_SUCCESS,
                 "prow_job_url": "https://example.com/invalid-gpu",
                 "job_timestamp": "1712345680"
             }
@@ -419,6 +420,199 @@ class TestSemanticVersionValidation(TestCase):
         # Should not contain the invalid entries
         self.assertNotIn("invalid-ocp", html)
         self.assertNotIn("invalid-gpu", html)
+
+
+class TestGenerateTestMatrix(TestCase):
+    """Test cases for the main generate_test_matrix function with separated data structure."""
+
+    @patch('workflows.gpu_operator_dashboard.generate_ci_dashboard.load_template')
+    def test_generate_test_matrix_with_separated_structure(self, mock_load_template):
+        """Test that generate_test_matrix works with the new separated bundle_tests and release_tests structure."""
+        # Mock templates
+        mock_load_template.side_effect = [
+            '<html><head><title>Test Matrix</title></head><body>',  # header.html
+            '<div id="ocp-{ocp_key}"><h2>{ocp_key}</h2>{notes}{table_rows}{bundle_info}</div>',  # main_table.html
+            '<div class="footer">Last updated: {LAST_UPDATED}</div></body></html>'  # footer.html
+        ]
+
+        # Test data with new separated structure
+        ocp_data = {
+            '4.14': {
+                'notes': ['Test note for 4.14'],
+                'bundle_tests': [
+                    {
+                        OCP_FULL_VERSION: '4.14.1',
+                        GPU_OPERATOR_VERSION: 'master',
+                        'test_status': STATUS_SUCCESS,
+                        'prow_job_url': 'https://example.com/bundle-job1',
+                        'job_timestamp': '1712345678'
+                    },
+                    {
+                        OCP_FULL_VERSION: '4.14.1',
+                        GPU_OPERATOR_VERSION: 'master',
+                        'test_status': STATUS_FAILURE,
+                        'prow_job_url': 'https://example.com/bundle-job2',
+                        'job_timestamp': '1712345680'
+                    }
+                ],
+                'release_tests': [
+                    {
+                        OCP_FULL_VERSION: '4.14.1',
+                        GPU_OPERATOR_VERSION: '23.9.0',
+                        'test_status': STATUS_SUCCESS,
+                        'prow_job_url': 'https://example.com/release-job1',
+                        'job_timestamp': '1712345679'
+                    },
+                    {
+                        OCP_FULL_VERSION: '4.14.2',
+                        GPU_OPERATOR_VERSION: '24.3.0',
+                        'test_status': STATUS_SUCCESS,
+                        'prow_job_url': 'https://example.com/release-job2',
+                        'job_timestamp': '1712345681'
+                    }
+                ]
+            },
+            '4.13': {
+                'notes': [],
+                'bundle_tests': [],
+                'release_tests': [
+                    {
+                        OCP_FULL_VERSION: '4.13.5',
+                        GPU_OPERATOR_VERSION: '23.6.0',
+                        'test_status': STATUS_SUCCESS,
+                        'prow_job_url': 'https://example.com/release-job3',
+                        'job_timestamp': '1712345682'
+                    }
+                ]
+            }
+        }
+
+        # Generate HTML
+        html_result = generate_test_matrix(ocp_data)
+
+        # Verify that the function ran without errors and generated HTML
+        self.assertIsInstance(html_result, str)
+        self.assertGreater(len(html_result), 100)  # Should generate substantial HTML
+
+        # Verify basic HTML structure
+        self.assertIn('<html>', html_result)
+        self.assertIn('</html>', html_result)
+        self.assertIn('<title>Test Matrix</title>', html_result)
+
+        # Verify OCP versions are processed (sorted in reverse order)
+        self.assertIn('4.14', html_result)
+        self.assertIn('4.13', html_result)
+
+        # Verify release test results appear in the table
+        self.assertIn('23.9.0', html_result)
+        self.assertIn('24.3.0', html_result)
+        self.assertIn('23.6.0', html_result)
+
+        # Verify bundle test results appear in bundle info section
+        self.assertIn('https://example.com/bundle-job1', html_result)
+        self.assertIn('https://example.com/bundle-job2', html_result)
+
+        # Verify release test URLs appear
+        self.assertIn('https://example.com/release-job1', html_result)
+        self.assertIn('https://example.com/release-job2', html_result)
+        self.assertIn('https://example.com/release-job3', html_result)
+
+        # Verify notes appear
+        self.assertIn('Test note for 4.14', html_result)
+
+        # Verify last updated timestamp is added
+        self.assertIn('Last updated:', html_result)
+
+    @patch('workflows.gpu_operator_dashboard.generate_ci_dashboard.load_template')
+    def test_generate_test_matrix_with_empty_sections(self, mock_load_template):
+        """Test generate_test_matrix with empty bundle_tests and release_tests sections."""
+        # Mock templates
+        mock_load_template.side_effect = [
+            '<html><body>',  # header.html
+            '<div id="ocp-{ocp_key}">{table_rows}{bundle_info}</div>',  # main_table.html
+            '</body></html>'  # footer.html
+        ]
+
+        # Test data with empty sections
+        ocp_data = {
+            '4.15': {
+                'notes': [],
+                'bundle_tests': [],  # Empty
+                'release_tests': []  # Empty
+            }
+        }
+
+        # Should not raise an error
+        html_result = generate_test_matrix(ocp_data)
+
+        # Should generate basic HTML structure even with no data
+        self.assertIsInstance(html_result, str)
+        self.assertIn('<html>', html_result)
+        self.assertIn('4.15', html_result)
+
+    @patch('workflows.gpu_operator_dashboard.generate_ci_dashboard.load_template')
+    def test_generate_test_matrix_filters_invalid_versions(self, mock_load_template):
+        """Test that generate_test_matrix properly filters out invalid semantic versions from release tests."""
+        # Mock templates
+        mock_load_template.side_effect = [
+            '<html><body>',  # header.html
+            '<div>{table_rows}</div>',  # main_table.html
+            '</body></html>'  # footer.html
+        ]
+
+        # Test data with invalid versions that should be filtered out
+        ocp_data = {
+            '4.14': {
+                'notes': [],
+                'bundle_tests': [],
+                'release_tests': [
+                    # Valid entry - should appear
+                    {
+                        OCP_FULL_VERSION: '4.14.1',
+                        GPU_OPERATOR_VERSION: '23.9.0',
+                        'test_status': STATUS_SUCCESS,
+                        'prow_job_url': 'https://example.com/valid-job',
+                        'job_timestamp': '1712345678'
+                    },
+                    # Invalid OCP version - should be filtered out
+                    {
+                        OCP_FULL_VERSION: 'invalid.ocp',
+                        GPU_OPERATOR_VERSION: '23.9.0',
+                        'test_status': STATUS_SUCCESS,
+                        'prow_job_url': 'https://example.com/invalid-ocp-job',
+                        'job_timestamp': '1712345679'
+                    },
+                    # Invalid GPU version - should be filtered out
+                    {
+                        OCP_FULL_VERSION: '4.14.1',
+                        GPU_OPERATOR_VERSION: 'invalid.gpu',
+                        'test_status': STATUS_SUCCESS,
+                        'prow_job_url': 'https://example.com/invalid-gpu-job',
+                        'job_timestamp': '1712345680'
+                    },
+                    # ABORTED status - should be filtered out
+                    {
+                        OCP_FULL_VERSION: '4.14.1',
+                        GPU_OPERATOR_VERSION: '23.8.0',
+                        'test_status': STATUS_ABORTED,
+                        'prow_job_url': 'https://example.com/aborted-job',
+                        'job_timestamp': '1712345681'
+                    }
+                ]
+            }
+        }
+
+        html_result = generate_test_matrix(ocp_data)
+
+        # Should contain the valid entry
+        self.assertIn('23.9.0', html_result)
+        self.assertIn('https://example.com/valid-job', html_result)
+
+        # Should not contain the invalid entries
+        self.assertNotIn('invalid-ocp-job', html_result)
+        self.assertNotIn('invalid-gpu-job', html_result)
+        self.assertNotIn('aborted-job', html_result)
+        self.assertNotIn('23.8.0', html_result)
 
 
 if __name__ == '__main__':
