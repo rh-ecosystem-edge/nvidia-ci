@@ -63,14 +63,48 @@ h2 {
     text-align: left;
 }
 
+/* Enhanced notes styling to make them stand out */
+.note-items {
+    background-color: #fff9e6;
+    border: 1px solid #ffd54f;
+    border-left: 4px solid #ff9800;
+    border-radius: 6px;
+    padding: 15px 20px;
+    margin: 10px 0 20px 0;
+    box-shadow: 0 2px 4px rgba(255, 152, 0, 0.1);
+}
+
+.note-items ul {
+    margin: 0;
+    padding: 0;
+}
+
 .note-item {
     list-style: none;
+    margin-bottom: 8px;
+    padding: 5px 0;
+    font-weight: 500;
+    color: #e65100;
+    transition: background-color 0.2s ease;
+}
+
+.note-item:last-child {
+    margin-bottom: 0;
 }
 
 .note-item::before {
-    content: "\0025BA";
-    padding-right: 8px;
-    color: #009688;
+    content: "\0026A0";  /* Warning triangle symbol */
+    padding-right: 10px;
+    color: #ff9800;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+.note-item:hover {
+    background-color: rgba(255, 152, 0, 0.05);
+    border-radius: 3px;
+    padding-left: 5px;
+    padding-right: 5px;
 }
 
 table {
