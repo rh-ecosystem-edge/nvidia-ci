@@ -3,6 +3,7 @@ package inittools
 import (
 	"context"
 	"flag"
+	"fmt"
 
 	"github.com/golang/glog"
 	ginkgo "github.com/onsi/ginkgo/v2"
@@ -49,18 +50,20 @@ func GetOpenShiftVersion() (string, error) {
 		return "", err
 	}
 
-	var ocpVersion *utilversion.Version = nil
 	for _, condition := range clusterVersion.Status.History {
 		if condition.State != "Completed" {
 			continue
 		}
 
-		ocpVersion, err = utilversion.ParseGeneric(condition.Version)
+		// Parse as semantic version to preserve prerelease identifiers
+		parsedVersion, err := utilversion.ParseSemantic(condition.Version)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("invalid semantic version format '%s': %w", condition.Version, err)
 		}
-		break
+
+		// Return the parsed version string which preserves prerelease identifiers like "-rc.0"
+		return parsedVersion.String(), nil
 	}
 
-	return ocpVersion.String(), nil
+	return "", fmt.Errorf("no completed version found in cluster version history")
 }
