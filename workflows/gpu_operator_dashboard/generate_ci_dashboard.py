@@ -176,7 +176,7 @@ def build_notes(notes: List[str]) -> str:
     if not notes:
         return ""
 
-    items = "\n".join(f'<li class="note-item">{html.escape(n)}</li>' for n in notes)
+    items = "\n".join(f'<li class="note-item">{n}</li>' for n in notes)
     return f"""
   <div class="section-label">Notes</div>
   <div class="note-items">
