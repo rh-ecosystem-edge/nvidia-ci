@@ -25,7 +25,7 @@ permissions:
   contents: write
 jobs:
   generate-matrix:
-    if: github.event_name != 'pull_request_target' || (github.repository == 'rh-ecosystem-edge/nvidia-ci' && github.event.pull_request.merged == true)
+    if: github.event_name != 'pull_request_target' || github.repository == 'rh-ecosystem-edge/nvidia-ci'
     runs-on: ubuntu-latest
     env:
       DASHBOARD_OUTPUT_DIR: 'workflows/test_matrix_dashboard/output'
