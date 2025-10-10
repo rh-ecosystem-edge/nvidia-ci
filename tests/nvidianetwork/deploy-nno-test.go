@@ -1272,9 +1272,22 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			By("Create ib_write_bw server workload pod")
 			glog.V(networkparams.LogLevel).Infof("Create ib_write_bw server workload pod '%s'", rdmaServerPodName)
 
+			// need to set the network name ipoibNetworkName or  macvlanNetworkName
+			var workloadPodNetworkName string = UndefinedValue
+
+			if rdmaLinkType == "infiniband" {
+				glog.V(networkparams.LogLevel).Infof("rdmaLinkType is set to infiniband, setting workload "+
+					"pod network name to ipoibnetwork cr name: '%s'", ipoibNetworkName)
+				workloadPodNetworkName = ipoibNetworkName
+			} else if rdmaLinkType == "ethernet" {
+				glog.V(networkparams.LogLevel).Infof("rdmaLinkType is set to 'ethernet', setting workload "+
+					"pod network name to macvlanNetworkName cr name: '%s'", macvlanNetworkName)
+				workloadPodNetworkName = macvlanNetworkName
+			}
+
 			rdmaServerPod := rdmatest.CreateRdmaWorkloadPod(rdmaServerPodName,
 				rdmaWorkloadNamespace, withCuda, "server", rdmaServerHostname, rdmaMlxDevice,
-				macvlanNetworkName, rdmaTestImage, rdmaLinkType, "none", rdmaNetworkType)
+				workloadPodNetworkName, rdmaTestImage, rdmaLinkType, "none", rdmaNetworkType)
 
 			createdRdmaServerPod, err := inittools.APIClient.Pods(rdmaServerPod.Namespace).Create(context.TODO(),
 				rdmaServerPod, metav1.CreateOptions{})
@@ -1312,7 +1325,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				"passing server ip address '%s'", rdmaClientPodName, net1IntIpAddrServer)
 
 			rdmaClientPod := rdmatest.CreateRdmaWorkloadPod(rdmaClientPodName, rdmaWorkloadNamespace, withCuda,
-				"client", rdmaClientHostname, rdmaMlxDevice, macvlanNetworkName, rdmaTestImage,
+				"client", rdmaClientHostname, rdmaMlxDevice, workloadPodNetworkName, rdmaTestImage,
 				rdmaLinkType, net1IntIpAddrServer, rdmaNetworkType)
 
 			createdRdmaClientPod, err := inittools.APIClient.Pods(rdmaClientPod.Namespace).Create(context.TODO(),
