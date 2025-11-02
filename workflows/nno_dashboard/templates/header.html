@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Matrix: NVIDIA Network Operator on Red Hat OpenShift</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <h2>Test Matrix: NVIDIA Network Operator on Red Hat OpenShift</h2>
+
+  <script>
+    function sortTable(column, tableId) {
+      var table = document.getElementById(tableId);
+      var rows = Array.from(table.rows);
+      var isAscending = table.rows[0].cells[column].classList.contains('asc');
+      rows = rows.slice(1);
+      rows.sort(function(rowA, rowB) {
+        var cellA = rowA.cells[column].innerText;
+        var cellB = rowB.cells[column].innerText;
+        if (!isNaN(cellA) && !isNaN(cellB)) {
+          return isAscending ? cellA - cellB : cellB - cellA;
+        } else {
+          return isAscending ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+        }
+      });
+      rows.forEach(function(row) {
+        table.appendChild(row);
+      });
+      var header = table.rows[0].cells[column];
+      header.classList.toggle('asc', !isAscending);
+      header.classList.toggle('desc', isAscending);
+    }
+  </script>
+
