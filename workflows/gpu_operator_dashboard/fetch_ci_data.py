@@ -571,8 +571,15 @@ def merge_ocp_version_results(
     bundle_result_limit: Optional[int] = None
 ) -> Dict[str, Any]:
     """Merge results for a single OCP version."""
-    # Initialize the structure
-    merged_version_data = {"notes": [], "bundle_tests": [], "release_tests": [], "job_history_links": []}
+    # Initialize the structure with all possible fields
+    merged_version_data = {
+        "notes": [],
+        "bundle_tests": [],
+        "release_tests": [],
+        "job_history_links": [],
+        "test_flavors": {}
+    }
+    # Update with existing data (preserves any additional fields)
     merged_version_data.update(existing_version_data)
 
     # Merge bundle tests with limit
@@ -598,6 +605,31 @@ def merge_ocp_version_results(
     all_job_history_links.update(new_job_history_links)
     # Convert back to sorted list for JSON serialization
     merged_version_data["job_history_links"] = sorted(list(all_job_history_links))
+
+    # Merge test_flavors (NNO-specific) if present
+    new_test_flavors = new_version_data.get("test_flavors", {})
+    existing_test_flavors = merged_version_data.get("test_flavors", {})
+    
+    # Merge test flavors by combining results for each flavor
+    for flavor_name, flavor_data in new_test_flavors.items():
+        if flavor_name not in existing_test_flavors:
+            existing_test_flavors[flavor_name] = {"results": [], "job_history_links": set()}
+        
+        # Merge results for this flavor (using same logic as release_tests)
+        new_flavor_results = flavor_data.get("results", [])
+        existing_flavor_results = existing_test_flavors[flavor_name].get("results", [])
+        existing_test_flavors[flavor_name]["results"] = merge_release_tests(
+            new_flavor_results, existing_flavor_results
+        )
+        
+        # Merge job history links for this flavor
+        new_flavor_links = flavor_data.get("job_history_links", set())
+        existing_flavor_links = existing_test_flavors[flavor_name].get("job_history_links", set())
+        all_flavor_links = set(existing_flavor_links if isinstance(existing_flavor_links, (set, list)) else [])
+        all_flavor_links.update(new_flavor_links)
+        existing_test_flavors[flavor_name]["job_history_links"] = sorted(list(all_flavor_links))
+    
+    merged_version_data["test_flavors"] = existing_test_flavors
 
     return merged_version_data
 
