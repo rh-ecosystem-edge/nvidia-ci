@@ -92,15 +92,20 @@ class TestResult:
     test_status: str
     prow_job_url: str
     job_timestamp: str
+    test_flavor: Optional[str] = None  # NNO-specific: test configuration flavor
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             OCP_FULL_VERSION: self.ocp_full_version,
             GPU_OPERATOR_VERSION: self.gpu_operator_version,
             "test_status": self.test_status,
             "prow_job_url": self.prow_job_url,
             "job_timestamp": self.job_timestamp,
         }
+        # Include test_flavor only if it's set (NNO-specific)
+        if self.test_flavor is not None:
+            result["test_flavor"] = self.test_flavor
+        return result
 
     def composite_key(self) -> TestResultKey:
         repo, pr_number, job_name, build_id = extract_build_components(self.prow_job_url)
