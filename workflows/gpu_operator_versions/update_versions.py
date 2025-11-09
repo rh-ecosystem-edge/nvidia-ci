@@ -99,7 +99,7 @@ def handle_ocp_version_changes(diffs: dict, ocp_releases: list, gpu_releases: li
             # Maintenance versions: test only with pinned GPU operators
             pinned_gpus = normalize_pinned_gpu_operator(ocp_config.get(CONFIG_PINNED_GPU_OPERATOR))
             for pinned_gpu in pinned_gpus:
-                if not pinned_gpu in gpu_releases:
+                if pinned_gpu not in gpu_releases:
                     logger.warning(
                         f'Maintenance OCP version "{ocp_version}" has pinned GPU operator "{pinned_gpu}" '
                         f'which is not in the list of supported releases.'
