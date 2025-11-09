@@ -280,6 +280,7 @@
     },
     "4.12": {
         "notes": [
+            "Red Hat OpenShift 4.12 is no longer receiving updates of the NVIDIA GPU operator. The last available version is 25.3.2.",
             "On Red Hat OpenShift 4.12, starting with the NVIDIA GPU operator v25.3.1, a user must explicitly define a driver image in ClusterPolicy. The default driver image will not work."
         ],
         "bundle_tests": [
@@ -2262,7 +2263,9 @@
         ]
     },
     "4.13": {
-        "notes": [],
+        "notes": [
+            "Red Hat OpenShift 4.13 is no longer receiving updates of the NVIDIA GPU operator. The last available version is 25.3.2."
+        ],
         "bundle_tests": [
             {
                 "ocp_full_version": "4.13.61",
