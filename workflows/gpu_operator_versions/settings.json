@@ -1,0 +1,19 @@
+{
+  "openshift_support": {
+    "4.12": {
+      "status": "maintenance",
+      "pinned_gpu_operator": ["25.3"]
+    },
+    "4.13": {
+      "status": "maintenance",
+      "pinned_gpu_operator": ["25.3"]
+    }
+  },
+  "defaults": {
+    "unlisted_versions": {
+      "status": "active"
+    }
+  },
+  "ignored_versions_regex": "^4.[0-9]$|^4.1[0-1]$"
+}
+
