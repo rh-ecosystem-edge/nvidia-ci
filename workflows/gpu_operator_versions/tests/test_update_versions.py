@@ -15,6 +15,15 @@ base_versions = {
     }
 }
 
+default_support_matrix = {
+    "openshift_support": {},
+    "defaults": {
+        "unlisted_versions": {
+            "status": "active"
+        }
+    }
+}
+
 
 class TestCalculateDiffs(unittest.TestCase):
 
@@ -91,33 +100,106 @@ class TestCreateTestsMatrix(unittest.TestCase):
     def test_bundle_changed(self):
         diff = {'gpu-main-latest': 'B'}
         tests = create_tests_matrix(
-            diff, ['4.14', '4.10', '4.11', '4.13'], ['21.3', '22.3'])
+            diff, ['4.14', '4.10', '4.11', '4.13'], ['21.3', '22.3'], default_support_matrix)
         self.assertEqual(tests, {('4.14', 'master'), ('4.10', 'master')})
 
-    def test_gpu_version_changed(self):
+    def test_bundle_changed_with_maintenance(self):
+        """Master should only test with active OCP versions."""
+        diff = {'gpu-main-latest': 'B'}
+        support_matrix = {
+            "openshift_support": {
+                "4.10": {"status": "maintenance", "pinned_gpu_operator": ["21.3"]},
+                "4.11": {"status": "active"}
+            },
+            "defaults": {"unlisted_versions": {"status": "active"}}
+        }
+        tests = create_tests_matrix(
+            diff, ['4.14', '4.10', '4.11', '4.13'], ['21.3', '22.3'], support_matrix)
+        # Should only test with active versions: 4.14 (newest), 4.11 (oldest active)
+        self.assertEqual(tests, {('4.14', 'master'), ('4.11', 'master')})
+
+    def test_gpu_version_changed_existing(self):
+        """When existing GPU version is updated, test only with active OCP versions."""
         diff = {'gpu-operator': {'25.1': '25.1.1'}}
-        tests = create_tests_matrix(diff, ['4.11', '4.13'], ['24.3', '25.1'])
+        tests = create_tests_matrix(
+            diff, ['4.11', '4.13'], ['24.3', '25.1'], default_support_matrix)
+        # Should test with both OCP versions since both are active and use latest 2 GPU versions
         self.assertEqual(tests, {('4.11', '25.1'), ('4.13', '25.1')})
 
-    def test_gpu_version_added(self):
-        diff = {'gpu-operator': {'25.3': '25.3.0'}}
-        tests = create_tests_matrix(diff, ['4.11', '4.13'], ['25.1', '25.3'])
-        self.assertEqual(tests, {('4.11', '25.3'), ('4.13', '25.3')})
+    def test_gpu_version_changed_with_maintenance(self):
+        """When existing GPU version is updated, maintenance OCP versions should NOT test it."""
+        diff = {'gpu-operator': {'25.1': '25.1.1'}}
+        support_matrix = {
+            "openshift_support": {
+                "4.11": {"status": "maintenance", "pinned_gpu_operator": ["25.1"]}
+            },
+            "defaults": {"unlisted_versions": {"status": "active"}}
+        }
+        tests = create_tests_matrix(
+            diff, ['4.11', '4.13'], ['25.1', '25.3'], support_matrix)
+        # Should only test with active OCP (4.13), NOT maintenance (4.11) even though 25.1 is pinned
+        self.assertEqual(tests, {('4.13', '25.1')})
 
-    def test_ocp_version_changed(self):
+    def test_gpu_version_added_new(self):
+        """When new GPU version is added, test with active OCP versions only."""
+        diff = {'gpu-operator': {'25.3': '25.3.0'}}
+        support_matrix = {
+            "openshift_support": {
+                "4.11": {"status": "maintenance", "pinned_gpu_operator": ["25.1"]}
+            },
+            "defaults": {"unlisted_versions": {"status": "active"}}
+        }
+        tests = create_tests_matrix(
+            diff, ['4.11', '4.13'], ['25.1', '25.3'], support_matrix)
+        # Should only test with active OCP (4.13), not maintenance (4.11)
+        self.assertEqual(tests, {('4.13', '25.3')})
+
+    def test_ocp_version_changed_active(self):
+        """When active OCP version gets patch, test with latest 2 GPU versions."""
         diff = {'ocp': {'4.12': '4.12.2'}}
-        tests = create_tests_matrix(diff, ['4.12', '4.13'], ['24.4', '25.3'])
+        tests = create_tests_matrix(
+            diff, ['4.12', '4.13'], ['24.4', '25.3'], default_support_matrix)
         self.assertEqual(tests, {('4.12', '24.4'), ('4.12', '25.3')})
 
-    def test_ocp_version_added(self):
+    def test_ocp_version_changed_maintenance(self):
+        """When maintenance OCP version gets patch, test only with pinned GPU."""
+        diff = {'ocp': {'4.12': '4.12.2'}}
+        support_matrix = {
+            "openshift_support": {
+                "4.12": {"status": "maintenance", "pinned_gpu_operator": ["25.3"]}
+            },
+            "defaults": {"unlisted_versions": {"status": "active"}}
+        }
+        tests = create_tests_matrix(
+            diff, ['4.12', '4.13'], ['24.4', '25.3'], support_matrix)
+        # Should only test with pinned version
+        self.assertEqual(tests, {('4.12', '25.3')})
+
+    def test_ocp_version_changed_maintenance_multiple_pins(self):
+        """Test maintenance OCP with multiple pinned GPU versions."""
+        diff = {'ocp': {'4.12': '4.12.2'}}
+        support_matrix = {
+            "openshift_support": {
+                "4.12": {"status": "maintenance", "pinned_gpu_operator": ["24.4", "25.3"]}
+            },
+            "defaults": {"unlisted_versions": {"status": "active"}}
+        }
+        tests = create_tests_matrix(
+            diff, ['4.12', '4.13'], ['24.4', '25.3'], support_matrix)
+        # Should test with both pinned versions
+        self.assertEqual(tests, {('4.12', '24.4'), ('4.12', '25.3')})
+
+    def test_ocp_version_added_new(self):
+        """New OCP version defaults to active, tests with latest 2 GPU."""
         diff = {'ocp': {'4.15': '4.15.0'}}
         tests = create_tests_matrix(
-            diff, ['4.12', '4.13', '4.15'], ['24.4', '25.3'])
+            diff, ['4.12', '4.13', '4.15'], ['24.4', '25.3'], default_support_matrix)
         self.assertEqual(tests, {('4.15', '24.4'), ('4.15', '25.3')})
 
     def test_no_changes(self):
         diff = {}
-        tests = create_tests_matrix(diff, ['4.11', '4.13'], ['25.1', '25.3'])
+        tests = create_tests_matrix(
+            diff, ['4.11', '4.13'], ['25.1', '25.3'], default_support_matrix)
         self.assertEqual(tests, set())
 
 
