@@ -36,6 +36,36 @@ from workflows.nno_dashboard.fetch_ci_data import (
 # The functions just reference the field name, they don't care about the actual operator type.
 
 
+def is_valid_ocp_version(version_key: str) -> bool:
+    """
+    Check if a version key is a valid OpenShift version.
+    
+    Valid: "4.17.16", "4.16", "4.15.0"
+    Invalid: "doca4", "bare-metal", "hosted", "Unknown"
+    """
+    # Filter out known infrastructure types
+    invalid_keys = ["doca4", "bare-metal", "hosted", "unknown"]
+    if version_key.lower() in invalid_keys:
+        return False
+    
+    # Valid OCP versions start with a digit and contain dots
+    if not version_key or not version_key[0].isdigit():
+        return False
+    
+    # Check if it looks like a semantic version (X.Y or X.Y.Z)
+    parts = version_key.split('.')
+    if len(parts) < 2:
+        return False
+    
+    try:
+        # Try to parse first two parts as numbers
+        int(parts[0])
+        int(parts[1])
+        return True
+    except (ValueError, IndexError):
+        return False
+
+
 def build_test_flavors_sections(ocp_key: str, test_flavors: Dict[str, Dict[str, Any]], templates_dir: str) -> str:
     """
     Build HTML sections for each test flavor.
@@ -96,7 +126,16 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]]) -> str:
     header_template = load_template("header.html", templates_dir)
     html_content = header_template
     main_table_template = load_template("main_table.html", templates_dir)
-    sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
+    
+    # Filter to only valid OCP versions (exclude infrastructure types like "doca4", "bare-metal")
+    valid_ocp_keys = [key for key in ocp_data.keys() if is_valid_ocp_version(key)]
+    sorted_ocp_keys = sorted(valid_ocp_keys, reverse=True)
+    
+    logger.info(f"Valid OCP versions found: {sorted_ocp_keys}")
+    if len(valid_ocp_keys) != len(ocp_data.keys()):
+        filtered_keys = set(ocp_data.keys()) - set(valid_ocp_keys)
+        logger.warning(f"Filtered out non-OCP version keys: {filtered_keys}")
+    
     html_content += build_toc(sorted_ocp_keys)
 
     for ocp_key in sorted_ocp_keys:
