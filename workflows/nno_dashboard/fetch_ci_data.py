@@ -304,45 +304,81 @@ def extract_test_flavor_from_job_name(job_name: str) -> str:
     """
     Extract the test flavor/configuration from the job name.
     
+    NNO Test Flavors:
+    - RDMA with GPU / without GPU
+    - SR-IOV (legacy) / Shared Device
+    - Hosted / Bare Metal / DOCA4
+    
     Examples:
-        - "rehearse-...-doca4-nvidia-network-operator-legacy-sriov-rdma" -> "DOCA4 - Legacy SR-IOV RDMA"
-        - "rehearse-...-bare-metal-nvidia-network-operator-bare-metal-e2e-doca4-latest" -> "Bare Metal - E2E"
-        - "pull-ci-...-4.17-nvidia-network-operator-e2e" -> "E2E"
+        - "...-doca4-nvidia-network-operator-legacy-sriov-rdma" -> "DOCA4 - RDMA Legacy SR-IOV"
+        - "...-doca4-nvidia-network-operator-shared-device-rdma" -> "DOCA4 - RDMA Shared Device"
+        - "...-hosted-nvidia-network-operator-rdma-gpu" -> "Hosted - RDMA with GPU"
+        - "...-bare-metal-nvidia-network-operator-bare-metal-e2e-doca4-latest" -> "Bare Metal - E2E"
     
     Returns:
         String describing the test flavor
     """
-    # Extract infrastructure type (doca4, bare-metal, hosted, etc.)
+    job_lower = job_name.lower()
+    
+    # Extract infrastructure type
     infrastructure = None
-    if "doca4" in job_name and "bare-metal" not in job_name:
+    if "doca4" in job_lower and "bare-metal" not in job_lower:
         infrastructure = "DOCA4"
-    elif "bare-metal" in job_name:
+    elif "bare-metal" in job_lower:
         infrastructure = "Bare Metal"
-    elif "hosted" in job_name:
+    elif "hosted" in job_lower:
         infrastructure = "Hosted"
     
-    # Extract test type
+    # Extract RDMA type (most specific first)
+    rdma_type = None
+    if "legacy-sriov-rdma" in job_lower or "rdma-legacy-sriov" in job_lower:
+        rdma_type = "RDMA Legacy SR-IOV"
+    elif "shared-device-rdma" in job_lower or "rdma-shared-dev" in job_lower:
+        rdma_type = "RDMA Shared Device"
+    elif "sriov" in job_lower and "rdma" in job_lower:
+        rdma_type = "RDMA SR-IOV"
+    elif "rdma" in job_lower:
+        rdma_type = "RDMA"
+    
+    # Extract test type (if not RDMA)
     test_type = None
-    if "legacy-sriov-rdma" in job_name:
-        test_type = "Legacy SR-IOV RDMA"
-    elif "bare-metal-e2e" in job_name:
-        test_type = "E2E"
-    elif "nvidia-network-operator-e2e" in job_name:
-        test_type = "E2E"
+    if not rdma_type:
+        if "bare-metal-e2e" in job_lower:
+            test_type = "E2E"
+        elif "nvidia-network-operator-e2e" in job_lower or "-e2e" in job_lower:
+            test_type = "E2E"
     
     # Check for GPU involvement
-    has_gpu = "gpu" in job_name.lower() and "gpudirect" not in job_name.lower()
+    has_gpu = False
+    if "gpu" in job_lower or "gpudirect" in job_lower:
+        has_gpu = True
     
     # Build the flavor description
     parts = []
+    
+    # Add infrastructure
     if infrastructure:
         parts.append(infrastructure)
-    if test_type:
-        parts.append(test_type)
-    if has_gpu:
+    
+    # Add test type or RDMA type (with GPU qualifier if applicable)
+    if rdma_type:
+        if has_gpu:
+            parts.append(f"{rdma_type} with GPU")
+        else:
+            parts.append(rdma_type)
+    elif test_type:
+        if has_gpu:
+            parts.append(f"{test_type} with GPU")
+        else:
+            parts.append(test_type)
+    elif has_gpu:
+        # GPU mentioned but no specific test type
         parts.append("with GPU")
     
+    # If nothing was identified, return a generic label
     if not parts:
+        if infrastructure:
+            return infrastructure
         return "Standard"
     
     return " - ".join(parts)
