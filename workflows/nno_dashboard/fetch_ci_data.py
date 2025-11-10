@@ -24,7 +24,7 @@ from workflows.gpu_operator_dashboard.fetch_ci_data import (
     TestResultKey,
     TestResult,
    
-    process_closed_prs,
+   
     merge_bundle_tests,
     merge_release_tests,
     merge_ocp_version_results,
@@ -42,6 +42,22 @@ TEST_RESULT_PATH_REGEX = re.compile(
     r"(?P<build_id>[^/]+)"
 )
 
+def process_closed_prs(results_by_ocp: Dict[str, Dict[str, List[Dict[str, Any]]]]) -> None:
+    """Retrieve and store test results for all closed PRs against the main branch."""
+    logger.info("Retrieving PR history...")
+    url = "https://api.github.com/repos/rh-ecosystem-edge/nvidia-ci/pulls"
+    params = {"state": "closed", "base": "main",
+              "per_page": "100", "page": "1"}
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    response_data = http_get_json(url, params=params, headers=headers)
+    for pr in response_data:
+        pr_number = str(pr["number"])
+        logger.info(f"Processing PR #{pr_number}")
+        process_tests_for_pr(pr_number, results_by_ocp)
+
 def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, Any]]:
     """Fetch files matching a specific glob pattern for a PR.
     
@@ -49,7 +65,7 @@ def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, An
     since rehearse jobs for network operator are often stored in openshift_release.
     """
     logger.info(f"Fetching files matching pattern: {glob_pattern}")
-
+    
     all_items = []
     
     repositories = [
@@ -301,23 +317,7 @@ def filter_network_finished_files(all_finished_files: List[Dict[str, Any]]) -> t
 
 
 def extract_test_flavor_from_job_name(job_name: str) -> str:
-    """
-    Extract the test flavor/configuration from the job name.
-    
-    NNO Test Flavors:
-    - RDMA with GPU / without GPU
-    - SR-IOV (legacy) / Shared Device
-    - Hosted / Bare Metal / DOCA4
-    
-    Examples:
-        - "...-doca4-nvidia-network-operator-legacy-sriov-rdma" -> "DOCA4 - RDMA Legacy SR-IOV"
-        - "...-doca4-nvidia-network-operator-shared-device-rdma" -> "DOCA4 - RDMA Shared Device"
-        - "...-hosted-nvidia-network-operator-rdma-gpu" -> "Hosted - RDMA with GPU"
-        - "...-bare-metal-nvidia-network-operator-bare-metal-e2e-doca4-latest" -> "Bare Metal - E2E"
-    
-    Returns:
-        String describing the test flavor
-    """
+   
     job_lower = job_name.lower()
     
     # Extract infrastructure type
@@ -406,7 +406,7 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
 
     
     processed_count = 0
-
+    
     for pr_num, job_name, build_id in sorted(all_builds):
         
         if job_name.startswith("rehearse-"):
@@ -432,23 +432,33 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
 
         # Extract test flavor from job name
         test_flavor = extract_test_flavor_from_job_name(job_name)
-        
-        # Use actual OCP version from the result if available, otherwise use from job name
-        actual_ocp_version = result.ocp_full_version if result.has_exact_versions() else ocp_version
-        
+       
+       
+        actual_ocp_version = result.ocp_full_version if result.has_exact_versions() else None
+        if not actual_ocp_version:
+            continue
         # Convert infrastructure types like "doca4", "bare-metal" to actual OCP version if they were used as version
         # This handles legacy data where infrastructure type was mistakenly used as OCP version
         if actual_ocp_version in ["doca4", "bare-metal", "hosted"]:
-            logger.warning(f"Found infrastructure type '{actual_ocp_version}' as OCP version, using actual OCP version from result")
+            logger.warning(f"Found infrastructure type '{actual_ocp_version}' as OCP version in job {job_name}")
             # Try to get it from the result's ocp_full_version
             if hasattr(result, 'ocp_full_version') and result.ocp_full_version and result.ocp_full_version not in ["doca4", "bare-metal", "hosted"]:
                 actual_ocp_version = result.ocp_full_version
+                logger.info(f"  -> Resolved to OCP version: {actual_ocp_version}")
             else:
                 # Use the version from job name if it's not an infrastructure type
                 if ocp_version not in ["doca4", "bare-metal", "hosted"]:
                     actual_ocp_version = ocp_version
+                    logger.info(f"  -> Using OCP version from path: {actual_ocp_version}")
                 else:
-                    actual_ocp_version = "Unknown"
+                    # Skip this result if we can't determine a valid OCP version
+                    logger.warning(f"  -> Skipping result - cannot determine valid OCP version for job {job_name}")
+                    continue
+        
+        # Validate that we have a proper OCP version (should start with digit and contain dots)
+        if not actual_ocp_version or not actual_ocp_version[0].isdigit() or '.' not in actual_ocp_version:
+            logger.warning(f"Invalid OCP version '{actual_ocp_version}' for job {job_name}, skipping")
+            continue
         
         # Initialize OCP version entry if needed
         results_by_ocp.setdefault(actual_ocp_version, {
