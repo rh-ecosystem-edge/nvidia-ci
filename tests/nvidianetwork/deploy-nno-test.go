@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
+	"strings"
 	"time"
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
@@ -800,34 +801,44 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			Expect(err).ToNot(HaveOccurred(), "Error getting list of CSVs in Network operator "+
 				"namespace: '%v'", err)
 
-			// Need to handle cae where there are more than one CSV in nvidia-network-operator namespace,
+			// Need to handle case where there are more than one CSV in nvidia-network-operator namespace,
 			// such as in RHOAI environment
-			// nnoCSVName = "nvidia-network-operator.v25.4.0-rc.3"
-			// var nnoCSVName string = ""
-			// var nnoCSVVersion = "v25.4.0"
-			// var nnoCSVNamePrefix = "nvidia-network-operator"
+			var nnoCSVName string = ""
+			var nnoCSVBuilder *olm.ClusterServiceVersionBuilder = nil
 
-			// nnoCSVName := nnoCSVNamePrefix + "." + nnoCSVVersion
+			for _, csvBuilder := range csvBuilderList {
+				if strings.HasPrefix(csvBuilder.Object.Name, "nvidia-network-operator") {
+					// Found the matching CSV
+					nnoCSVName = csvBuilder.Object.Name
+					nnoCSVBuilder = csvBuilder
+					glog.V(networkparams.LogLevel).Infof("Found nvidia-network-operator CSV '%s' in namespace '%s'",
+						nnoCSVName, nnoNamespace)
+					break
+				}
+			}
 
-			// Not always guaranteed to be first in list but on DOCA1, need to grep on match on nvidia-network-operator prefix
-			csvBuilder := csvBuilderList[0]
+			Expect(nnoCSVName).To(Not(BeEmpty()), "nvidia-network-operator CSV not found in the list of CSVs in namespace '%s'", nnoNamespace)
+
+			// 11-04-2025
 			/*
 				oc get csv -n nvidia-network-operator
-				NAME                              DISPLAY                        VERSION   REPLACES                      PHASE
-				nvidia-network-operator.v25.1.0   NVIDIA Network Operator        25.1.0                                  Succeeded
-				rhods-operator.2.19.0             Red Hat OpenShift AI           2.19.0    rhods-operator.2.16.2         Succeeded
-				serverless-operator.v1.35.1       Red Hat OpenShift Serverless   1.35.1    serverless-operator.v1.35.0   Succeeded
-				trident-operator.v25.2.1          NetApp Trident                 25.2.1    trident-operator.v25.2.0      Succeeded
+				NAME                                      DISPLAY                            VERSION          REPLACES                              PHASE
+				authorino-operator.v0.16.0                Authorino Operator                 0.16.0           authorino-operator.v0.15.1            Succeeded
+				cert-manager.v1.16.5                      cert-manager                       1.16.5           cert-manager.v1.16.1                  Succeeded
+				devworkspace-operator.v0.37.0             DevWorkspace Operator              0.37.0           devworkspace-operator.v0.36.0         Succeeded
+				nvidia-network-operator.v25.10.0-beta.2   NVIDIA Network Operator            25.10.0-beta.2                                         Succeeded
+				rhods-operator.2.25.0                     Red Hat OpenShift AI               2.25.0           rhods-operator.2.22.2                 Succeeded
+				serverless-operator.v1.36.1               Red Hat OpenShift Serverless       1.36.1           serverless-operator.v1.36.0           Succeeded
+				servicemeshoperator.v2.6.11               Red Hat OpenShift Service Mesh 2   2.6.11-0         servicemeshoperator.v2.6.10           Succeeded
+				web-terminal.v1.13.0                      Web Terminal                       1.13.0           web-terminal.v1.12.1-0.1745393748.p   Succeeded
+
 			*/
 
-			nnoCurrentCSV := csvBuilder.Definition.Name
-			// nnoCurrentCSVVersion := csvBuilder.Definition.Spec.Version
-			// glog.V(networkparams.LogLevel).Infof("Deployed ClusterServiceVersion version: '%s",
-			// 	nnoCurrentCSVVersion)
+			nnoCurrentCSV := nnoCSVBuilder.Definition.Name
 
-			glog.V(networkparams.LogLevel).Infof("Deployed ClusterServiceVersion is: '%s", nnoCurrentCSV)
+			glog.V(networkparams.LogLevel).Infof("Deployed ClusterServiceVersion is: '%s'", nnoCurrentCSV)
 
-			nnoCurrentCSVVersion := csvBuilder.Definition.Spec.Version.String()
+			nnoCurrentCSVVersion := nnoCSVBuilder.Definition.Spec.Version.String()
 			csvVersionString := nnoCurrentCSVVersion
 
 			glog.V(networkparams.LogLevel).Infof("ClusterServiceVersion version to be written in the operator "+
@@ -842,8 +853,10 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				nnoCurrentCSV)
 			err = wait.CSVSucceeded(inittools.APIClient, nnoCurrentCSV, nnoNamespace, 60*time.Second,
 				5*time.Minute)
-			glog.V(networkparams.LogLevel).Info("error waiting for ClusterServiceVersion '%s' to be "+
-				"in Succeeded phase:  %v ", nnoCurrentCSV, err)
+			if err != nil {
+				glog.V(networkparams.LogLevel).Infof("error waiting for ClusterServiceVersion '%s' to be "+
+					"in Succeeded phase:  %v ", nnoCurrentCSV, err)
+			}
 			Expect(err).ToNot(HaveOccurred(), "error waiting for ClusterServiceVersion to be "+
 				"in Succeeded phase: ", err)
 
