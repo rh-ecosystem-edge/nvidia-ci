@@ -26,7 +26,6 @@ jobs:
         id: read_tests
         run: |
           pip install -r workflows/gpu_operator_versions/requirements.txt
-          export GH_AUTH_TOKEN=$(echo ${{ secrets.GITHUB_TOKEN }} | base64)
           mkdir -p $(dirname ${TEST_TO_TRIGGER_FILE_PATH})
           python -m workflows.gpu_operator_versions.update_versions
           {
@@ -36,7 +35,6 @@ jobs:
           } >> $GITHUB_OUTPUT
 
         env:
-          GH_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION_FILE_PATH: "workflows/gpu_operator_versions/versions.json"
           SETTINGS_FILE_PATH: "workflows/gpu_operator_versions/settings.json"
           TEST_TO_TRIGGER_FILE_PATH: "workflows/generated-files/tests_to_trigger.txt"
