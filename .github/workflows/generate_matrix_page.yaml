@@ -23,6 +23,7 @@ on:
         type: string
 permissions:
   contents: write
+  issues: write
 jobs:
   generate-matrix:
     if: github.event_name != 'pull_request_target' || github.repository == 'rh-ecosystem-edge/nvidia-ci'
@@ -96,3 +97,10 @@ jobs:
           folder: ${{ env.DASHBOARD_OUTPUT_DIR }}
           clean: false
           force: false
+
+      - name: Notify on failure
+        if: failure()
+        uses: ./.github/actions/notify-failure
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
