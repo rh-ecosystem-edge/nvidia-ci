@@ -9,6 +9,12 @@ on:
         default: 'main'
         required: false
         type: string
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
 jobs:
   ocp-version:
     if: github.event_name != 'schedule' || github.repository == 'rh-ecosystem-edge/nvidia-ci' || vars.VERSION_UPDATE_FLOW_ENABLE_SCHEDULED == 'true'
@@ -58,3 +64,10 @@ jobs:
             ${{ vars.VERSION_UPDATE_FLOW_NOTIFY_USERS }}
           delete-branch: true
           assignees: ${{ vars.VERSION_UPDATE_FLOW_ASSIGNEES }}
+
+      - name: Notify on failure
+        if: failure()
+        uses: ./.github/actions/notify-failure
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
