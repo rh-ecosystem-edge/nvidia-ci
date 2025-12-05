@@ -44,6 +44,7 @@ jobs:
           VERSION_FILE_PATH: "workflows/gpu_operator_versions/versions.json"
           SETTINGS_FILE_PATH: "workflows/gpu_operator_versions/settings.json"
           TEST_TO_TRIGGER_FILE_PATH: "workflows/generated-files/tests_to_trigger.txt"
+          CHECK_CATALOG_AVAILABILITY: "true"
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
         with:

@@ -45,7 +45,7 @@ GCS_MAX_RESULTS_PER_REQUEST = 1000
 # Data Fetching & JSON Update Functions
 # =============================================================================
 
-def http_get_json(url: str, params: Dict[str, Any] = None, headers: Dict[str, str] = None) -> Dict[str, Any]:
+def http_get_json(url: str, params: Dict[str, Any] | None = None, headers: Dict[str, str] | None = None) -> Dict[str, Any]:
     """Send an HTTP GET request and return the JSON response."""
     response = requests.get(url, params=params, headers=headers, timeout=30)
     response.raise_for_status()
