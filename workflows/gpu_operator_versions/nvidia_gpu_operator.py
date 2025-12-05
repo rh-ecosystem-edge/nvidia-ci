@@ -71,13 +71,13 @@ def get_sha(settings: Settings) -> str:
                         },
                         timeout=settings.request_timeout_sec)
     req.raise_for_status()
-    
+
     # For OCI index format, the digest is in the Docker-Content-Digest header
     digest = req.headers.get('Docker-Content-Digest', '')
     if not digest:
         logger.error(f'Docker-Content-Digest header not found in response headers: {req.headers}')
         msg = 'Digest not found in manifest response headers'
         raise ValueError(msg)
-    
+
     logger.info(f'Successfully retrieved digest: {digest}')
     return digest

@@ -9,11 +9,13 @@ class Settings:
     settings_file_path: str
     request_timeout_sec: int
     support_matrix: dict
+    check_catalog_availability: bool
 
     def __init__(self):
         self.version_file_path = os.getenv("VERSION_FILE_PATH")
         self.tests_to_trigger_file_path = os.getenv("TEST_TO_TRIGGER_FILE_PATH")
         self.request_timeout_sec = int(os.getenv("REQUEST_TIMEOUT_SECONDS", 30))
+        self.check_catalog_availability = os.getenv("CHECK_CATALOG_AVAILABILITY", "false").lower() == "true"
 
         # Settings file can be specified via env var or defaults to settings.json in same directory
         self.settings_file_path = os.getenv(
