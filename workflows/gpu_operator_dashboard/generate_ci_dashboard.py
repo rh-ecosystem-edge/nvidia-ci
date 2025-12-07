@@ -8,39 +8,9 @@ from datetime import datetime, timezone
 
 from workflows.common.utils import logger
 from workflows.common.templates import load_template
+from workflows.common.validation import has_valid_semantic_versions
 from workflows.gpu_operator_dashboard.fetch_ci_data import (
     OCP_FULL_VERSION, GPU_OPERATOR_VERSION, STATUS_ABORTED)
-
-
-def has_valid_semantic_versions(result: Dict[str, Any]) -> bool:
-    """
-    Check if both ocp_full_version and gpu_operator_version contain valid semantic versions.
-
-    Args:
-        result: Test result dictionary containing version fields
-
-    Returns:
-        True if both versions are valid semantic versions, False otherwise
-    """
-    try:
-        ocp_version = result.get(OCP_FULL_VERSION, "")
-        gpu_version = result.get(GPU_OPERATOR_VERSION, "")
-
-        if not ocp_version or not gpu_version:
-            return False
-
-        # Parse OCP version (should be like "4.14.1")
-        semver.VersionInfo.parse(ocp_version)
-
-        # Parse GPU operator version (may have suffix like "23.9.0(bundle)" - extract version part)
-        gpu_version_clean = gpu_version.split("(")[0].strip()
-        semver.VersionInfo.parse(gpu_version_clean)
-
-    except (ValueError, TypeError):
-        logger.warning(f"Invalid semantic version in result: ocp={result.get(OCP_FULL_VERSION)}, gpu={result.get(GPU_OPERATOR_VERSION)}")
-        return False
-    else:
-        return True
 
 
 def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]]) -> str:
@@ -67,7 +37,7 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]]) -> str:
         for r in release_results:
             # Only include entries with valid semantic versions
             # Ignore ABORTED results for regular (non-bundle) results
-            if has_valid_semantic_versions(r) and r.get("test_status") != STATUS_ABORTED:
+            if has_valid_semantic_versions(r, OCP_FULL_VERSION, GPU_OPERATOR_VERSION) and r.get("test_status") != STATUS_ABORTED:
                 regular_results.append(r)
         notes_html = build_notes(notes)
         table_rows_html = build_catalog_table_rows(regular_results)
