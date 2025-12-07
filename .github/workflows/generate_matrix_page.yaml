@@ -32,8 +32,12 @@ jobs:
     steps:
       - name: Set dynamic env vars
         run: |
+          # GPU Operator dashboard paths
           echo "DASHBOARD_DATA_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.json" >> "$GITHUB_ENV"
           echo "DASHBOARD_HTML_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.html" >> "$GITHUB_ENV"
+          # Network Operator dashboard paths
+          echo "NNO_DASHBOARD_DATA_FILEPATH=${DASHBOARD_OUTPUT_DIR}/network_operator_matrix.json" >> "$GITHUB_ENV"
+          echo "NNO_DASHBOARD_HTML_FILEPATH=${DASHBOARD_OUTPUT_DIR}/network_operator_matrix.html" >> "$GITHUB_ENV"
           echo "GH_PAGES_BRANCH=${{ github.event.inputs.gh_pages_branch || 'gh-pages' }}" >> "$GITHUB_ENV"
         env:
           DASHBOARD_OUTPUT_DIR: ${{ env.DASHBOARD_OUTPUT_DIR }}
@@ -67,26 +71,61 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install -r workflows/gpu_operator_dashboard/requirements.txt
+          pip install -r workflows/nno_dashboard/requirements.txt
 
       - name: Fetch CI Data
         run: |
           echo "Processing PR: ${{ steps.determine_pr.outputs.PR_NUMBER }}"
+          # GPU Operator
           python -m workflows.gpu_operator_dashboard.fetch_ci_data \
             --pr_number "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
             --baseline_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
             --merged_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}"
+          # Network Operator
+          python -m workflows.nno_dashboard.fetch_ci_data \
+            --pr_number "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
+            --baseline_data_filepath "${{ env.NNO_DASHBOARD_DATA_FILEPATH }}" \
+            --merged_data_filepath "${{ env.NNO_DASHBOARD_DATA_FILEPATH }}"
 
 
       - name: Generate HTML Dashboard (only if JSON changed)
         run: |
           cd "${{ env.DASHBOARD_OUTPUT_DIR }}"
+          
+          # Check if GPU Operator JSON changed
+          GPU_CHANGED=false
           if [[ ${{ github.event_name }} == "pull_request_target" ]] && git diff --exit-code gpu_operator_matrix.json; then
-            echo "no changes"
+            echo "GPU Operator: no changes"
           else
-            cd "${{ github.workspace }}"
+            echo "GPU Operator: changes detected"
+            GPU_CHANGED=true
+          fi
+          
+          # Check if Network Operator JSON changed
+          NNO_CHANGED=false
+          if [[ ${{ github.event_name }} == "pull_request_target" ]] && git diff --exit-code network_operator_matrix.json; then
+            echo "Network Operator: no changes"
+          else
+            echo "Network Operator: changes detected"
+            NNO_CHANGED=true
+          fi
+          
+          cd "${{ github.workspace }}"
+          
+          # Generate GPU Operator dashboard if changed
+          if [ "$GPU_CHANGED" = true ]; then
+            echo "Generating GPU Operator dashboard..."
             python -m workflows.gpu_operator_dashboard.generate_ci_dashboard \
               --dashboard_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
               --dashboard_html_filepath "${{ env.DASHBOARD_HTML_FILEPATH }}"
+          fi
+          
+          # Generate Network Operator dashboard if changed
+          if [ "$NNO_CHANGED" = true ]; then
+            echo "Generating Network Operator dashboard..."
+            python -m workflows.nno_dashboard.generate_ci_dashboard \
+              --dashboard_data_filepath "${{ env.NNO_DASHBOARD_DATA_FILEPATH }}" \
+              --dashboard_html_filepath "${{ env.NNO_DASHBOARD_HTML_FILEPATH }}"
           fi
 
       - name: Deploy HTML to GitHub Pages
