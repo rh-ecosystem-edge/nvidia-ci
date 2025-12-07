@@ -223,38 +223,34 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
     
     logger.info(f"Found {len(finished_files)} finished.json files")
     
-    # Build lookup dictionaries by BUILD_ID (not by parent directory)
-    # Network Operator version files are deeply nested, so we need to extract the build ID from the path
+    # Build lookup dictionaries by BUILD_ID only (simplest approach)
+    # Extract build_id from the known path structure:
+    # pr-logs/pull/{repo}/{pr}/{job_name}/{build_id}/...
     ocp_lookup = {}
     operator_lookup = {}
     
     for file_item in ocp_version_files:
         path = file_item["name"]
-        # Extract build ID from path using regex
-        match = NNO_TEST_PATH_REGEX.search(path)
-        if match:
-            build_id = match.group("build_id")
-            pr_num = match.group("pr_number")
-            job_name = match.group("job_name")
-            # Use the full build directory path as key
-            build_dir_key = f"pr-logs/pull/{match.group('repo')}/{pr_num}/{job_name}/{build_id}"
+        # Extract build_id from the 6th path segment (0-indexed: 0=pr-logs, 1=pull, 2=repo, 3=pr, 4=job_name, 5=build_id)
+        parts = path.split("/")
+        if len(parts) >= 6:
+            build_id = parts[5]
             try:
                 content = fetch_gcs_file_content(path)
-                ocp_lookup[build_dir_key] = content.strip()
+                ocp_lookup[build_id] = content.strip()
+                logger.info(f"Added OCP version for build {build_id}")
             except Exception as e:
                 logger.warning(f"Failed to fetch OCP version from {path}: {e}")
     
     for file_item in operator_version_files:
         path = file_item["name"]
-        match = NNO_TEST_PATH_REGEX.search(path)
-        if match:
-            build_id = match.group("build_id")
-            pr_num = match.group("pr_number")
-            job_name = match.group("job_name")
-            build_dir_key = f"pr-logs/pull/{match.group('repo')}/{pr_num}/{job_name}/{build_id}"
+        parts = path.split("/")
+        if len(parts) >= 6:
+            build_id = parts[5]
             try:
                 content = fetch_gcs_file_content(path)
-                operator_lookup[build_dir_key] = content.strip()
+                operator_lookup[build_id] = content.strip()
+                logger.info(f"Added Operator version for build {build_id}")
             except Exception as e:
                 logger.warning(f"Failed to fetch operator version from {path}: {e}")
     
@@ -263,8 +259,11 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
     for finished_item in finished_files:
         finished_path = finished_item["name"]
         
+        # Remove /finished.json from path before parsing (regex expects path without filename)
+        path_without_file = finished_path.rsplit("/finished.json", 1)[0] if finished_path.endswith("/finished.json") else finished_path
+        
         # Parse the path to extract job information
-        match = NNO_TEST_PATH_REGEX.search(finished_path)
+        match = NNO_TEST_PATH_REGEX.search(path_without_file)
         if not match:
             logger.warning(f"Could not parse path: {finished_path}")
             continue
@@ -274,13 +273,7 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
         pr_num = match.group("pr_number")
         repo = match.group("repo")
         
-        # Build the lookup key (same format as we used when building the lookup dictionaries)
-        build_dir = f"pr-logs/pull/{repo}/{pr_num}/{job_name}/{build_id}"
-        
         logger.info(f"Processing build {build_id} for job {job_name}")
-        logger.debug(f"Build dir key: {build_dir}")
-        logger.debug(f"Available OCP keys: {list(ocp_lookup.keys())[:3] if ocp_lookup else 'EMPTY'}")
-        logger.debug(f"Available Operator keys: {list(operator_lookup.keys())[:3] if operator_lookup else 'EMPTY'}")
         
         # Fetch finished.json content
         try:
@@ -290,15 +283,15 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
             logger.warning(f"Failed to fetch/parse finished.json from {finished_path}: {e}")
             continue
         
-        # Get OCP and operator versions using the build directory key
-        ocp_content = ocp_lookup.get(build_dir)
-        operator_content = operator_lookup.get(build_dir)
+        # Get OCP and operator versions using the build_id
+        ocp_content = ocp_lookup.get(build_id)
+        operator_content = operator_lookup.get(build_id)
         
         if not ocp_content:
-            logger.warning(f"Missing ocp.version for {build_dir}")
+            logger.warning(f"Missing ocp.version for build {build_id}")
             continue
         if not operator_content:
-            logger.warning(f"Missing operator.version for {build_dir}")
+            logger.warning(f"Missing operator.version for build {build_id}")
             continue
         
         # Create TestResult
