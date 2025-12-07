@@ -176,10 +176,50 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
     
     logger.info(f"Fetching Network Operator test data for PR #{pr_number}")
     
-    # Fetch all relevant files
-    finished_files = fetch_filtered_files(pr_number, "**/nvidia-network-operator*/finished.json")
-    ocp_version_files = fetch_filtered_files(pr_number, "**/nvidia-network-operator*/ocp.version")
-    operator_version_files = fetch_filtered_files(pr_number, "**/nvidia-network-operator*/operator.version")
+    # Fetch all finished.json files, then filter for network operator jobs
+    # Network operator finished.json files are at the build root, so we need to:
+    # 1. Fetch all finished.json files
+    # 2. Filter for paths containing "nvidia-network-operator" in the job name
+    all_finished_files = fetch_filtered_files(pr_number, "**/finished.json")
+    
+    # Filter for Network Operator jobs by checking if job name contains "nvidia-network-operator"
+    finished_files = []
+    for file_item in all_finished_files:
+        path = file_item.get("name", "")
+        # Check if this is a network operator job by looking for the pattern in the path
+        if "nvidia-network-operator" in path and path.endswith("/finished.json"):
+            # Additional check: must be at build root, not nested in artifacts
+            # Path should look like: .../rehearse-X-...-nvidia-network-operator-.../BUILD_ID/finished.json
+            if path.count("/finished.json") == 1 and "/artifacts/" not in path.split("/finished.json")[0]:
+                finished_files.append(file_item)
+    
+    # Now fetch version files - try multiple possible artifact paths
+    # Network Operator artifacts can be in different locations depending on test type
+    ocp_version_files = []
+    operator_version_files = []
+    
+    # Try common artifact patterns
+    version_patterns = [
+        "**/network-operator-e2e/ocp.version",
+        "**/artifacts/ocp.version",
+        "**/nvidia-network-operator*/ocp.version",
+    ]
+    
+    for pattern in version_patterns:
+        files = fetch_filtered_files(pr_number, pattern)
+        for file_item in files:
+            path = file_item.get("name", "")
+            # Only include if it's part of a network operator job
+            if "nvidia-network-operator" in path:
+                ocp_version_files.append(file_item)
+    
+    for pattern in version_patterns:
+        operator_pattern = pattern.replace("ocp.version", "operator.version")
+        files = fetch_filtered_files(pr_number, operator_pattern)
+        for file_item in files:
+            path = file_item.get("name", "")
+            if "nvidia-network-operator" in path:
+                operator_version_files.append(file_item)
     
     logger.info(f"Found {len(finished_files)} finished.json files")
     
