@@ -278,6 +278,9 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
         build_dir = f"pr-logs/pull/{repo}/{pr_num}/{job_name}/{build_id}"
         
         logger.info(f"Processing build {build_id} for job {job_name}")
+        logger.debug(f"Build dir key: {build_dir}")
+        logger.debug(f"Available OCP keys: {list(ocp_lookup.keys())[:3] if ocp_lookup else 'EMPTY'}")
+        logger.debug(f"Available Operator keys: {list(operator_lookup.keys())[:3] if operator_lookup else 'EMPTY'}")
         
         # Fetch finished.json content
         try:
