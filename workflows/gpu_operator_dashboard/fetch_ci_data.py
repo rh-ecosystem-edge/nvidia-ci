@@ -11,6 +11,18 @@ from pydantic import BaseModel
 import semver
 
 from workflows.common.utils import logger
+from workflows.common.gcs_utils import (
+    GCS_API_BASE_URL,
+    GCS_MAX_RESULTS_PER_REQUEST,
+    http_get_json,
+    fetch_gcs_file_content,
+    build_prow_job_url,
+    fetch_filtered_files,
+)
+from workflows.common.data_fetching import (
+    int_or_none,
+    merge_job_history_links,
+)
 
 
 # Constants for version field names
@@ -22,13 +34,6 @@ STATUS_SUCCESS = "SUCCESS"
 STATUS_FAILURE = "FAILURE"
 STATUS_ABORTED = "ABORTED"
 
-
-# =============================================================================
-# Constants
-# =============================================================================
-
-GCS_API_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o"
-
 # Regular expression to match test result paths.
 TEST_RESULT_PATH_REGEX = re.compile(
     r"pr-logs/pull/(?P<repo>[^/]+)/(?P<pr_number>\d+)/"
@@ -37,36 +42,10 @@ TEST_RESULT_PATH_REGEX = re.compile(
     r"(?P<build_id>[^/]+)"
 )
 
-# Maximum number of results per GCS API request for pagination
-GCS_MAX_RESULTS_PER_REQUEST = 1000
-
 
 # =============================================================================
 # Data Fetching & JSON Update Functions
 # =============================================================================
-
-def http_get_json(url: str, params: Dict[str, Any] = None, headers: Dict[str, str] = None) -> Dict[str, Any]:
-    """Send an HTTP GET request and return the JSON response."""
-    response = requests.get(url, params=params, headers=headers, timeout=30)
-    response.raise_for_status()
-    return response.json()
-
-
-def fetch_gcs_file_content(file_path: str) -> str:
-    """Fetch the raw text content from a file in GCS."""
-    logger.info(f"Fetching file content for {file_path}")
-    response = requests.get(
-        url=f"{GCS_API_BASE_URL}/{urllib.parse.quote_plus(file_path)}",
-        params={"alt": "media"},
-        timeout=30,
-    )
-    response.raise_for_status()
-    return response.content.decode("UTF-8")
-
-
-def build_prow_job_url(finished_json_path: str) -> str:
-    directory_path = finished_json_path[:-len('/finished.json')]
-    return f"https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/{directory_path}"
 
 
 # --- Pydantic Model and Domain Model for Test Results ---
@@ -129,40 +108,6 @@ class TestResult:
             return False
         else:
             return True
-
-
-def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, Any]]:
-    """Fetch files matching a specific glob pattern for a PR."""
-    logger.info(f"Fetching files matching pattern: {glob_pattern}")
-
-    params = {
-        "prefix": f"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/{pr_number}/",
-        "alt": "json",
-        "matchGlob": glob_pattern,
-        "maxResults": str(GCS_MAX_RESULTS_PER_REQUEST),
-        "projection": "noAcl",
-    }
-    headers = {"Accept": "application/json"}
-
-    all_items = []
-    next_page_token = None
-
-    # Handle pagination
-    while True:
-        if next_page_token:
-            params["pageToken"] = next_page_token
-
-        response_data = http_get_json(
-            GCS_API_BASE_URL, params=params, headers=headers)
-        items = response_data.get("items", [])
-        all_items.extend(items)
-
-        next_page_token = response_data.get("nextPageToken")
-        if not next_page_token:
-            break
-
-    logger.info(f"Found {len(all_items)} files matching {glob_pattern}")
-    return all_items
 
 
 def fetch_pr_files(pr_number: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -593,11 +538,10 @@ def merge_ocp_version_results(
     new_job_history_links = new_version_data.get("job_history_links", set())
     existing_job_history_links = merged_version_data.get("job_history_links", [])
 
-    # Convert existing list back to set, then merge with new set
-    all_job_history_links = set(existing_job_history_links)
-    all_job_history_links.update(new_job_history_links)
-    # Convert back to sorted list for JSON serialization
-    merged_version_data["job_history_links"] = sorted(list(all_job_history_links))
+    # Use common merge function
+    merged_version_data["job_history_links"] = merge_job_history_links(
+        new_job_history_links, existing_job_history_links
+    )
 
     return merged_version_data
 
@@ -628,19 +572,9 @@ def merge_and_save_results(
 
     logger.info(f"Results saved to {output_file}")
 
-
-
 # =============================================================================
 # Main Workflow: Update JSON
 # =============================================================================
-
-def int_or_none(value: Optional[str]) -> Optional[int]:
-    """Convert string to int or None for unlimited."""
-    if value is None:
-        return None
-    if value.lower() in ('none', 'unlimited'):
-        return None
-    return int(value)
 
 
 def main() -> None:

@@ -6,8 +6,9 @@ This directory contains multiple workflows for automating various aspects of the
 
 - [gpu_operator_versions/](./gpu_operator_versions/) — Automation for updating versions and triggering CI jobs
 - [gpu_operator_dashboard/](./gpu_operator_dashboard/) — CI dashboard generation for NVIDIA GPU Operator test results
+- [nno_dashboard/](./nno_dashboard/) — CI dashboard generation for NVIDIA Network Operator test results
 - [microshift_dashboard/](./microshift_dashboard/) — MicroShift NVIDIA Device Plugin testing dashboard
-- Shared modules: [utils.py](./utils.py), [templates.py](./templates.py)
+- [common/](./common/) — Shared utilities: logging, templates, GCS access, HTML builders, data structures
 
 See the individual README files in each subdirectory for detailed information.
 
