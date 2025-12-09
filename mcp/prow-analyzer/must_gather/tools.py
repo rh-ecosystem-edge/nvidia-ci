@@ -61,6 +61,9 @@ def find_must_gather_dirs(config: Dict[str, Any], repo_info: RepositoryInfo,
     """
     Find all must-gather data (both extracted directories and archives).
 
+    Uses a single GCS API call to list all objects under artifacts/, then filters
+    for must-gather directories and archives. Much more efficient than recursive traversal.
+
     Returns list containing:
     - Extracted directories (type='extracted'): Can be analyzed via list_must_gather_files
     - Archives (type='archive'): Require local download for analysis with tools like 'omc'
@@ -70,54 +73,56 @@ def find_must_gather_dirs(config: Dict[str, Any], repo_info: RepositoryInfo,
     bucket = config["gcs_bucket"]
     path_template = config["path_template"]
     gcsweb_base = config["gcsweb_base_url"]
-    artifacts_prefix = build_artifacts_path(repo_info, pr_number, job_name, build_id, path_template)
+    artifacts_prefix = build_artifacts_path(
+        repo_info, pr_number, job_name, build_id, path_template
+    ).rstrip('/')
 
-    top_dirs = gcs_client.list_directories(bucket, artifacts_prefix)
+    # Get all objects under artifacts/ in one API call
+    all_objects = gcs_client.list_all_objects(bucket, artifacts_prefix)
+
     results = []
+    found_dirs = set()  # Track directories we've already added
 
-    # Search for must-gather directories and archives at multiple levels
-    for top_dir in top_dirs:
-        dir_path = f"{artifacts_prefix}{top_dir}"
+    def _is_must_gather_name(name: str) -> bool:
+        """Check if a name contains must-gather or must_gather."""
+        name_lower = name.lower()
+        return "must-gather" in name_lower or "must_gather" in name_lower
 
-        # Check if this directory itself is a must-gather
-        if "must-gather" in top_dir.lower():
+    # Process all objects to find must-gather directories and archives
+    for obj in all_objects:
+        relative_path = obj["name"]
+        full_path = obj["full_path"]
+
+        # Check if this is a must-gather archive file (check filename only, not path)
+        filename = relative_path.split('/')[-1]
+        if _is_must_gather_name(filename) and _is_archive(filename):
             results.append({
-                "path": top_dir,
-                "full_path": dir_path,
-                "level": "step",
-                "type": "extracted",
+                "filename": filename,
+                "path": relative_path,
+                "full_path": full_path,
+                "size_bytes": obj["size"],
+                "type": "archive",
+                "download_url": f"{gcsweb_base}/{bucket}/{full_path}",
             })
+            continue
 
-        # Check one level deeper
-        subdirs_data = gcs_client.list_files_and_directories(bucket, dir_path + "/")
+        # Check each directory component in the path for must-gather (exclude filename)
+        path_parts = relative_path.split('/')
+        # Skip the last element (filename) - only check directory components
+        for i, part in enumerate(path_parts[:-1]):
+            if _is_must_gather_name(part):
+                # This is a must-gather directory
+                dir_path = '/'.join(path_parts[:i+1])
 
-        # Check for extracted directories
-        for subdir in subdirs_data.get("directories", []):
-            if "must-gather" in subdir.lower():
-                subdir_full_path = f"{dir_path}/{subdir}"
-                subdir_contents = gcs_client.list_files_and_directories(bucket, subdir_full_path + "/")
+                # Skip if we've already added this directory
+                if dir_path in found_dirs:
+                    continue
 
-                # Only include if it has directories (meaning it's extracted)
-                if subdir_contents.get("directories"):
-                    results.append({
-                        "path": f"{top_dir}/{subdir}",
-                        "full_path": subdir_full_path,
-                        "level": "nested",
-                        "type": "extracted",
-                    })
-
-        # Check for archive files
-        for file_info in subdirs_data.get("files", []):
-            filename = file_info["name"]
-            if "must-gather" in filename.lower() and _is_archive(filename):
-                file_path = f"{dir_path}/{filename}"
+                found_dirs.add(dir_path)
                 results.append({
-                    "filename": filename,
-                    "path": f"{top_dir}/{filename}",
-                    "full_path": file_path,
-                    "size_bytes": file_info["size"],
-                    "type": "archive",
-                    "download_url": f"{gcsweb_base}/{bucket}/{file_path}",
+                    "path": dir_path,
+                    "full_path": f"{artifacts_prefix}/{dir_path}",
+                    "type": "extracted",
                 })
 
     return results
