@@ -147,3 +147,70 @@ def list_files_and_directories(bucket: str, path: str) -> Dict[str, Any]:
             "total_files": 0,
         }
 
+
+def list_all_objects(bucket: str, prefix: str, max_results: int = 10000) -> List[Dict[str, Any]]:
+    """
+    List all objects (files and directories) under a prefix recursively.
+
+    This uses GCS API without delimiter to get all objects in one (or few) API calls,
+    which is much more efficient than recursive traversal.
+
+    Args:
+        bucket: GCS bucket name
+        prefix: Path prefix to list under
+        max_results: Maximum number of results to return per page
+
+    Returns:
+        List of objects with fields:
+        - name (str): Relative path from prefix
+        - full_path (str): Complete GCS path
+        - size (int): Size in bytes
+        - updated (str): ISO 8601 timestamp of last update
+    """
+    url = f"https://storage.googleapis.com/storage/v1/b/{bucket}/o"
+
+    all_objects = []
+    next_page_token = None
+
+    # Normalize prefix
+    if prefix and not prefix.endswith('/'):
+        prefix = prefix + '/'
+
+    while True:
+        params = {
+            "prefix": prefix,
+            "alt": "json",
+            "maxResults": max_results,
+        }
+
+        if next_page_token:
+            params["pageToken"] = next_page_token
+
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        # Process items
+        items = data.get("items", [])
+        for item in items:
+            name = item["name"]
+            # Remove the prefix to get relative path
+            if prefix and name.startswith(prefix):
+                relative_name = name[len(prefix):]
+            else:
+                relative_name = name
+
+            all_objects.append({
+                "name": relative_name,
+                "full_path": name,
+                "size": int(item.get("size", 0)),
+                "updated": item.get("updated", ""),
+            })
+
+        # Check for next page
+        next_page_token = data.get("nextPageToken")
+        if not next_page_token:
+            break
+
+    return all_objects
+
