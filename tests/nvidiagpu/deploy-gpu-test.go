@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -40,8 +41,11 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/mig"
+	nodes "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nodes"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 var (
@@ -86,6 +90,7 @@ var (
 	CurrentCSV                 = ""
 	CurrentCSVVersion          = ""
 	clusterArchitecture        = UndefinedValue
+	labelsToCheck              = []string{}
 )
 
 var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
@@ -102,6 +107,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 	Context("DeployGpu", Label("deploy-gpu-with-dtk"), func() {
 
 		BeforeAll(func() {
+			glog.V(0).Infof("Start of the test case, BeforeAll")
 			if nvidiaGPUConfig.InstanceType == "" {
 				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE" +
 					" is not set, skipping scaling cluster")
@@ -142,11 +148,17 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			cleanupAfterTest = nvidiaGPUConfig.CleanupAfterTest
+			glog.V(0).Infof("CleanupAfterTest: %v", cleanupAfterTest)
 
-			if cleanupAfterTest {
+			// if any of the following labels are present, the operator should be kept
+			labelsToCheck = []string{"operator-upgrade", "gpu-burn-mig", "single-mig"}
+			glog.V(0).Infof("LabelsToCheck: %v", labelsToCheck)
+
+			if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 				glog.V(gpuparams.GpuLogLevel).Info("NVIDIAGPU_CLEANUP is not set or is set to true; cleaning up resources after test case execution.")
 			} else {
 				glog.V(gpuparams.GpuLogLevel).Infof("NVIDIAGPU_CLEANUP is set to '%v'; skipping cleanup after test case execution.", cleanupAfterTest)
+				glog.V(gpuparams.GpuLogLevel).Infof("... or labels prevent immediate cleanup")
 			}
 
 			if nvidiaGPUConfig.DeployFromBundle {
@@ -238,7 +250,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 		})
 
 		BeforeEach(func() {
-
+			glog.V(0).Infof(
+				"Verboselevel: %s GPUloglevel: %d",
+				inittools.GeneralConfig.VerboseLevel, gpuparams.GpuLogLevel)
 		})
 
 		AfterEach(func() {
@@ -246,10 +260,14 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 		})
 
 		AfterAll(func() {
-
+			glog.V(gpuparams.Gpu10LogLevel).Infof("cleanup in AfterAll")
 			if nfdInstance.CleanupAfterInstall && cleanupAfterTest {
 				err := nfd.Cleanup(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "Error cleaning up NFD resources: %v", err)
+			}
+			// Cleanup GPU Operator Resources, if requested
+			if cleanupAfterTest {
+				cleanupGPUOperatorResources()
 			}
 		})
 
@@ -317,7 +335,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					pulledMachineSetBuilder.Definition.ObjectMeta.Name, err)
 
 				defer func() {
-					if cleanupAfterTest {
+					if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 						err := pulledMachineSetBuilder.Delete()
 						Expect(err).ToNot(HaveOccurred())
 					}
@@ -461,7 +479,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			defer func() {
-				if cleanupAfterTest {
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					err := nsBuilder.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -496,7 +514,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				}
 
 				defer func() {
-					if cleanupAfterTest {
+					if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 						err := ogBuilder.Delete()
 						Expect(err).ToNot(HaveOccurred())
 					}
@@ -534,7 +552,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				}
 
 				defer func() {
-					if cleanupAfterTest {
+					if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 						err := createdSub.Delete()
 						Expect(err).ToNot(HaveOccurred())
 					}
@@ -621,7 +639,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				"succeeded")
 
 			defer func() {
-				if cleanupAfterTest {
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					err := clusterCSV.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -651,7 +669,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				createdClusterPolicyBuilder.Definition.Name)
 
 			defer func() {
-				if cleanupAfterTest {
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					_, err := createdClusterPolicyBuilder.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -732,11 +750,29 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			defer func() {
-				if cleanupAfterTest {
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					err := gpuBurnNsBuilder.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
 			}()
+
+			// If there is a previously deployed gpu-burn pod, delete it.
+			// It does not appear on a fresly installed cluster, but it can appear on e.g. baremetal clusters.
+			// Any error is ignored, as it is expected to not be found.
+
+			By("Pull the possibly existing gpu-burn pod object from the cluster")
+			currentGpuBurnPodPulled, _ := pod.Pull(inittools.APIClient, burn.Namespace, burn.Namespace)
+
+			currentGpuBurnPodName, _ := get.GetFirstPodNameWithLabel(inittools.APIClient, burn.Namespace,
+				burn.PodLabel)
+			glog.V(gpuparams.GpuLogLevel).Infof("gpuPodName is %s ", currentGpuBurnPodName)
+
+			// If pod name is not nil, delete it.
+			if currentGpuBurnPodPulled != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("Deleting gpu-burn pod")
+				_, _ = currentGpuBurnPodPulled.Delete()
+				Expect(err).ToNot(HaveOccurred(), "Error deleting gpu-burn pod")
+			}
 
 			By("Deploy GPU Burn configmap in test-gpu-burn namespace")
 			gpuBurnConfigMap, err := gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName,
@@ -754,7 +790,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				configmapBuilder.Definition.Name)
 
 			defer func() {
-				if cleanupAfterTest {
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					err := configmapBuilder.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -792,7 +828,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Cleanup gpu-burn pod only if cleanupAfterTest is true and OperatorUpgradeToChannel is undefined")
 			defer func() {
-				if cleanupAfterTest && OperatorUpgradeToChannel == UndefinedValue {
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) && OperatorUpgradeToChannel == UndefinedValue {
 					_, err := gpuPodPulled.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -1026,7 +1062,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				"namespace '%s' :  %v ", burn.Namespace, err)
 
 			defer func() {
-				if cleanupAfterTest {
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					_, err := gpuBurnPod2Pulled.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -1063,5 +1099,509 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 		})
 
+		It("Test GPU Burn with single strategy MIG Configuration", Label("gpu-burn-mig"), func() {
+			testGPUBurnWithMIGConfiguration()
+		})
+
+		It("Test GPU Burn with single strategy MIG Configuration in mig package", Label("single-mig"), func() {
+			mig.TestSingleMIGGPUBurn(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
+		})
 	})
 })
+
+// cleanupGPUOperatorResources performs cleanup of GPU Operator resources
+// It checks if cleanup should run based on cleanupAfterTest and cleanup label
+func cleanupGPUOperatorResources() {
+	if !cleanupAfterTest {
+		// if HasLabel("cleanup") {
+		// 	glog.V(gpuparams.GpuLogLevel).Infof("Cleanup is enabled via cleanup label, running cleanup")
+		// } else {
+		// 	glog.V(gpuparams.GpuLogLevel).Infof("Cleanup is disabled, skipping GPU operator cleanup")
+		// 	return
+		// }
+		return
+	}
+
+	glog.V(gpuparams.GpuLogLevel).Infof("Starting cleanup of GPU Operator Resources")
+
+	By("Deleting ClusterPolicy")
+	clusterPolicyBuilder, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
+	if err == nil && clusterPolicyBuilder.Exists() {
+		_, err := clusterPolicyBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting ClusterPolicy: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy deleted successfully")
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy not found or already deleted")
+	}
+
+	By("Deleting CSV")
+	csvList, err := olm.ListClusterServiceVersion(inittools.APIClient, nvidiagpu.SubscriptionNamespace)
+	if err == nil && len(csvList) > 0 {
+		for _, csv := range csvList {
+			if strings.Contains(csv.Definition.Name, "gpu-operator") {
+				err := csv.Delete()
+				Expect(err).ToNot(HaveOccurred(), "Error deleting CSV: %v", err)
+				glog.V(gpuparams.GpuLogLevel).Infof("CSV %s deleted successfully", csv.Definition.Name)
+			}
+		}
+	}
+
+	By("Deleting Subscription")
+	subBuilder, err := olm.PullSubscription(inittools.APIClient, nvidiagpu.SubscriptionName, nvidiagpu.SubscriptionNamespace)
+	if err == nil && subBuilder.Exists() {
+		err := subBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting Subscription: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("Subscription deleted successfully")
+	}
+
+	By("Deleting OperatorGroup")
+	ogBuilder, err := olm.PullOperatorGroup(inittools.APIClient, nvidiagpu.OperatorGroupName, nvidiagpu.SubscriptionNamespace)
+	if err == nil && ogBuilder.Exists() {
+		err := ogBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting OperatorGroup: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("OperatorGroup deleted successfully")
+	}
+
+	By("Deleting GPU Operator Namespace")
+	nsBuilder := namespace.NewBuilder(inittools.APIClient, nvidiagpu.SubscriptionNamespace)
+	if nsBuilder.Exists() {
+		err := nsBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting namespace: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s deleted successfully", nvidiagpu.SubscriptionNamespace)
+	}
+
+	By("Deleting GPU Burn Namespace")
+	burnNsBuilder := namespace.NewBuilder(inittools.APIClient, burn.Namespace)
+	if burnNsBuilder.Exists() {
+		err := burnNsBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting burn namespace: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s deleted successfully", burn.Namespace)
+	}
+
+	glog.V(gpuparams.GpuLogLevel).Infof("Completed cleanup of GPU Operator Resources")
+}
+
+// // shouldKeepOperator checks if the operator should be kept based on test labels and upgrade channel
+// func shouldKeepOperator(loglevel glog.Level) bool {
+// 	// Keep operator if:
+// 	// 1. There's an upgrade test to run
+// 	// 2. There's a MIG test to run
+// 	// 3. Any other test that needs the operator
+
+// 	// Get the label filter from TEST_LABELS environment variable
+// 	// This contains the actual --label-filter value used at runtime
+// 	testLabelsFilter := os.Getenv("TEST_LABELS")
+
+// 	glog.V(loglevel).Infof("TEST_LABELS filter: %s", testLabelsFilter)
+
+// 	// Check if the filter string contains the labels we care about
+// 	hasRelevantLabel := strings.Contains(testLabelsFilter, "gpu-burn-mig") ||
+// 		strings.Contains(testLabelsFilter, "operator-upgrade")
+
+// 	glog.V(loglevel).Infof("Should keep operator: OperatorUpgradeToChannel=%v, hasRelevantLabel=%v (from TEST_LABELS)",
+// 		OperatorUpgradeToChannel != UndefinedValue, hasRelevantLabel)
+
+// 	return OperatorUpgradeToChannel != UndefinedValue || hasRelevantLabel
+// }
+
+// testGPUBurnWithMIGConfiguration performs the GPU Burn test with single strategy MIG Configuration
+func testGPUBurnWithMIGConfiguration() {
+	glog.V(gpuparams.Gpu100LogLevel).Infof("Starting GPU Burn with MIG Configuration testcase")
+
+	By("Starting GPU Burn with single strategy MIG Configuration testcase")
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Cleaning up test-gpu-burn namespace resources, if necessary")
+
+	// select one mig profile from the list of mig profiles
+	var useMigProfile string // = "mig-1g.5gb"  // mig profiles are queried from the hardware
+	var useMigIndex int = -1 // will be set to random value after migCapabilities is populated
+
+	// Delete any existing gpu-burn pods with the label
+	gpuBurnPodName, err := get.GetFirstPodNameWithLabel(inittools.APIClient, burn.Namespace, burn.PodLabel)
+	if err == nil {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Found existing gpu-burn pod '%s', deleting it", gpuBurnPodName)
+		existingPodBuilder, err := pod.Pull(inittools.APIClient, gpuBurnPodName, burn.Namespace)
+		if err == nil {
+			_, err = existingPodBuilder.Delete()
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("Error deleting existing gpu-burn pod: %v", err)
+			} else {
+				glog.V(gpuparams.GpuLogLevel).Infof("Successfully deleted gpu-burn pod '%s'", gpuBurnPodName)
+			}
+		}
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("No existing gpu-burn pod found to delete")
+	}
+
+	// Delete the configmap if it exists
+	existingConfigmapBuilder, err := configmap.Pull(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
+	if err == nil {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Found existing gpu-burn configmap '%s', deleting it", burn.ConfigMapName)
+		err = existingConfigmapBuilder.Delete()
+		if err != nil {
+			glog.V(gpuparams.GpuLogLevel).Infof("Error deleting gpu-burn configmap: %v", err)
+		} else {
+			glog.V(gpuparams.GpuLogLevel).Infof("Successfully deleted gpu-burn configmap '%s'", burn.ConfigMapName)
+		}
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("No existing gpu-burn configmap found to delete")
+	}
+
+	// Wait a moment for resources to be cleaned up
+	By("Wait for resources cleanup to complete")
+	glog.V(gpuparams.GpuLogLevel).Infof("Waiting for test-gpu-burn resources cleanup to complete")
+	time.Sleep(3 * time.Second)
+
+	By("Check if MIG single strategy is available on GPU nodes")
+	glog.V(gpuparams.GpuLogLevel).Infof("Checking for MIG single strategy availability on GPU nodes")
+
+	_, migCapabilities, err := get.MIGCapabilities(inittools.APIClient, WorkerNodeSelector)
+	if err != nil {
+		glog.V(gpuparams.GpuLogLevel).Infof("Could not discover MIG configurations: %v", err)
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("Found %d MIG configuration profiles", len(migCapabilities))
+		for i, info := range migCapabilities {
+			glog.V(gpuparams.GpuLogLevel).Infof("  [%d] Profile name: %s, slices %d/%d", i, info.MigName, info.Available, info.Total)
+		}
+	}
+
+	if len(migCapabilities) == 0 {
+		glog.V(gpuparams.GpuLogLevel).Infof("No MIG configurations available")
+		Skip("No MIG configurations found")
+		return
+	}
+
+	// Select random index if not already set
+	if useMigIndex < 0 {
+		useMigIndex = rand.Intn(len(migCapabilities))
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Selected random MIG index: %d (available: 0-%d)", useMigIndex, len(migCapabilities)-1)
+	} else if useMigIndex >= len(migCapabilities) {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("MIG index %d is out of range (available: 0-%d), using last available index", useMigIndex, len(migCapabilities)-1)
+		useMigIndex = len(migCapabilities) - 1
+	} else {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("MIG index %d is within range (available: 0-%d), using it", useMigIndex, len(migCapabilities)-1)
+	}
+
+	By("Set the MIG strategy label on GPU worker nodes")
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG strategy label on GPU worker nodes from %d entry of the list (profile: %s with %d/%d slices)",
+		useMigIndex, migCapabilities[useMigIndex].MigName, migCapabilities[useMigIndex].Available, migCapabilities[useMigIndex].Total)
+	MigProfile := "all-" + migCapabilities[useMigIndex].MigName
+	strategy := "single"
+	useMigProfile = migCapabilities[useMigIndex].Flavor
+
+	// use first mig profile from the list, unless specified otherwise
+	nodeBuilders, err := nodes.List(inittools.APIClient, metav1.ListOptions{LabelSelector: labels.Set(WorkerNodeSelector).String()})
+	if err != nil {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to list worker nodes: %v", err)
+	} else {
+		for _, nodeBuilder := range nodeBuilders {
+			glog.V(gpuparams.GpuLogLevel).Infof("Setting MIG %s strategy label on node '%s' (overwrite=true)", strategy, nodeBuilder.Definition.Name)
+			nodeBuilder = nodeBuilder.WithLabel("nvidia.com/mig.strategy", strategy)
+			_, err = nodeBuilder.Update()
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("Failed to update node '%s' with MIG label: %v, error: %v", nodeBuilder.Definition.Name, strategy, err)
+			} else {
+				glog.V(gpuparams.GpuLogLevel).Infof("Successfully set MIG %s strategy label on node '%s'", strategy, nodeBuilder.Definition.Name)
+			}
+			glog.V(gpuparams.GpuLogLevel).Infof("Setting MIG configuration label %s on node '%s' (overwrite=true)", MigProfile, nodeBuilder.Definition.Name)
+			nodeBuilder = nodeBuilder.WithLabel("nvidia.com/mig.config", MigProfile)
+			_, err = nodeBuilder.Update()
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("Failed to update node '%s' with MIG label: %v", nodeBuilder.Definition.Name, err)
+			} else {
+				glog.V(gpuparams.GpuLogLevel).Infof("Successfully set MIG configuration label on node '%s' with %s", nodeBuilder.Definition.Name, MigProfile)
+			}
+		}
+	}
+
+	By("Wait for GPU operator to reconcile after setting MIG node labels")
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Sleeping for 30 seconds to allow GPU operator to process node label changes")
+	time.Sleep(30 * time.Second)
+
+	By(fmt.Sprintf("Wait up to %s for ClusterPolicy to be ready after node label changes",
+		nvidiagpu.ClusterPolicyReadyTimeout))
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Waiting for ClusterPolicy to be ready after setting MIG node labels")
+	err = wait.ClusterPolicyReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
+		nvidiagpu.ClusterPolicyReadyCheckInterval, nvidiagpu.ClusterPolicyReadyTimeout)
+	if err != nil {
+		glog.V(gpuparams.GpuLogLevel).Infof("Warning: ClusterPolicy may not be fully ready after node label changes: %v", err)
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy is ready after node label changes")
+	}
+
+	By("Check for MIG single strategy capability labels on GPU nodes")
+	migSingleLabel := "nvidia.com/mig.strategy.single"
+
+	migSingleAvailable, err := check.NodeWithLabel(inittools.APIClient, migSingleLabel, WorkerNodeSelector)
+	if err != nil || !migSingleAvailable {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("MIG single strategy label not found on GPU nodes: %v", err)
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Note: MIG strategy labels may not be available yet even if MIG is configured.")
+		glog.V(gpuparams.Gpu10LogLevel).Infof("The test will proceed if MIG configurations are discovered later.")
+	} else {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("MIG single strategy label found, proceeding with test")
+	}
+
+	defer func() {
+		glog.V(gpuparams.Gpu100LogLevel).Infof("defer11 (set MIG labels to non-mig on GPU nodes)")
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG strategy label on GPU worker nodes")
+		nodeBuilders, err := nodes.List(inittools.APIClient, metav1.ListOptions{LabelSelector: labels.Set(WorkerNodeSelector).String()})
+		if err != nil {
+			glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to list worker nodes: %v", err)
+		} else {
+			for _, nodeBuilder := range nodeBuilders {
+				glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG strategy label on node '%s' (overwrite=true)", nodeBuilder.Definition.Name)
+				nodeBuilder = nodeBuilder.WithLabel("nvidia.com/mig.strategy", "all-disabled")
+				_, err = nodeBuilder.Update()
+				if err != nil {
+					glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to update node '%s' with MIG label: %v", nodeBuilder.Definition.Name, err)
+				} else {
+					glog.V(gpuparams.Gpu10LogLevel).Infof("Successfully set MIG strategy label on node '%s'", nodeBuilder.Definition.Name)
+				}
+				glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG configuration label on node '%s' (overwrite=true)", nodeBuilder.Definition.Name)
+				nodeBuilder = nodeBuilder.WithLabel("nvidia.com/mig.config", "all-disabled")
+				_, err = nodeBuilder.Update()
+				if err != nil {
+					glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to update node '%s' with MIG label: %v", nodeBuilder.Definition.Name, err)
+				} else {
+					glog.V(gpuparams.Gpu10LogLevel).Infof("Successfully set MIG configuration label on node '%s'", nodeBuilder.Definition.Name)
+				}
+			}
+		}
+
+		By("Wait for GPU operator to reconcile after setting MIG node labels")
+		glog.V(gpuparams.GpuLogLevel).Infof("Sleeping for 30 seconds to allow GPU operator to process node label changes")
+		time.Sleep(30 * time.Second)
+
+		By(fmt.Sprintf("Wait up to %s for ClusterPolicy to be ready after node label changes", nvidiagpu.ClusterPolicyReadyTimeout))
+		glog.V(gpuparams.GpuLogLevel).Infof("Waiting for ClusterPolicy to be ready after setting MIG node labels")
+		err = wait.ClusterPolicyReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
+			nvidiagpu.ClusterPolicyReadyCheckInterval, nvidiagpu.ClusterPolicyReadyTimeout)
+		if err != nil {
+			glog.V(gpuparams.GpuLogLevel).Infof("Warning: ClusterPolicy may not be fully ready after node label changes: %v", err)
+		} else {
+			glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy is ready after node label changes")
+		}
+	}()
+
+	By("Pull existing ClusterPolicy")
+	glog.V(gpuparams.GpuLogLevel).Infof(
+		"Pulling ClusterPolicy builder structure named '%s'", nvidiagpu.ClusterPolicyName)
+	pulledClusterPolicyBuilder, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
+
+	Expect(err).ToNot(HaveOccurred(), "error pulling ClusterPolicy builder object name '%s' "+
+		"from cluster: %v", nvidiagpu.ClusterPolicyName, err)
+
+	glog.V(gpuparams.GpuLogLevel).Infof(
+		"Pulled ClusterPolicy builder structure named '%s'", pulledClusterPolicyBuilder.Object.Name)
+
+	By("Capturing current clusterPolicy ResourceVersion")
+	initialClusterPolicyResourceVersion := pulledClusterPolicyBuilder.Object.ResourceVersion
+	glog.V(gpuparams.GpuLogLevel).Infof(
+		"Pulled ClusterPolicy resourceVersion is '%s'", initialClusterPolicyResourceVersion)
+
+	By("Configuring MIG strategy in ClusterPolicy")
+	migStrategy := nvidiagpuv1.MIGStrategySingle
+	glog.V(gpuparams.GpuLogLevel).Infof(
+		"Setting ClusterPolicy MIG strategy to '%s'", migStrategy)
+
+	currentMigStrategy := pulledClusterPolicyBuilder.Definition.Spec.MIG.Strategy
+	if currentMigStrategy == "" {
+		glog.V(gpuparams.GpuLogLevel).Infof(
+			"Current MIG strategy is empty, setting to '%s'", migStrategy)
+		pulledClusterPolicyBuilder.Definition.Spec.MIG.Strategy = migStrategy
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof(
+			"Current MIG strategy is '%s', updating to '%s'",
+			currentMigStrategy, migStrategy)
+		pulledClusterPolicyBuilder.Definition.Spec.MIG.Strategy = migStrategy
+	}
+
+	By("Update ClusterPolicy with MIG configuration")
+	updatedClusterPolicyBuilder, err := pulledClusterPolicyBuilder.Update(true)
+
+	Expect(err).ToNot(HaveOccurred(), "error updating ClusterPolicy with MIG configuration: %v", err)
+
+	By("Capturing updated clusterPolicy ResourceVersion")
+	updatedClusterPolicyResourceVersion := updatedClusterPolicyBuilder.Object.ResourceVersion
+	glog.V(gpuparams.GpuLogLevel).Infof(
+		"Updated ClusterPolicy resourceVersion is '%s'", updatedClusterPolicyResourceVersion)
+
+	glog.V(gpuparams.Gpu10LogLevel).Infof(
+		"After updating ClusterPolicy, MIG strategy is now '%v'",
+		updatedClusterPolicyBuilder.Definition.Spec.MIG.Strategy)
+
+	// Need sleep to allow ClusterPolicy state changes (otherwise the next wait will go through immediately)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Sleeping 30 seconds to allow ClusterPolicy state changes")
+	time.Sleep(30 * time.Second)
+
+	By(fmt.Sprintf("Wait up to %s for ClusterPolicy to be ready with MIG configuration", nvidiagpu.ClusterPolicyReadyTimeout))
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Waiting up to %s for ClusterPolicy to be ready with MIG configuration",
+		nvidiagpu.ClusterPolicyReadyTimeout)
+	err = wait.ClusterPolicyReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
+		nvidiagpu.ClusterPolicyReadyCheckInterval, nvidiagpu.ClusterPolicyReadyTimeout)
+
+	glog.V(gpuparams.Gpu10LogLevel).Infof("error waiting for ClusterPolicy to be Ready with MIG: %v", err)
+	Expect(err).ToNot(HaveOccurred(), "error waiting for ClusterPolicy to be Ready with MIG: %v", err)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Waiting up to %s for ClusterPolicy to be ready with MIG configuration",
+		nvidiagpu.ClusterPolicyReadyTimeout)
+
+	By("Pull the ready ClusterPolicy with MIG configuration from cluster")
+	pulledMIGReadyClusterPolicy, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
+	Expect(err).ToNot(HaveOccurred(), "error pulling ClusterPolicy %s from cluster: %v",
+		nvidiagpu.ClusterPolicyName, err)
+
+	migReadyJSON, err := json.MarshalIndent(pulledMIGReadyClusterPolicy, "", " ")
+	if err == nil {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("The ClusterPolicy with MIG configuration has name: %v",
+			pulledMIGReadyClusterPolicy.Definition.Name)
+		glog.V(gpuparams.GpuLogLevel).Infof("The ClusterPolicy with MIG configuration marshalled "+
+			"in json: %v", string(migReadyJSON))
+	} else {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Error Marshalling ClusterPolicy with MIG into json: %v", err)
+	}
+
+	By("Get Cluster Architecture from first GPU enabled worker node")
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Getting cluster architecture from nodes with "+
+		"WorkerNodeSelector: %v", WorkerNodeSelector)
+	clusterArch, err := get.GetClusterArchitecture(inittools.APIClient, WorkerNodeSelector)
+	Expect(err).ToNot(HaveOccurred(), "error getting cluster architecture: %v", err)
+
+	glog.V(gpuparams.Gpu10LogLevel).Infof("cluster architecture for GPU enabled worker node is: %s",
+		clusterArch)
+	// Wait a bit for GFD to update node labels after MIG configuration
+	time.Sleep(30 * time.Second)
+
+	By("Ensure test-gpu-burn namespace exists")
+	gpuBurnNsBuilder := namespace.NewBuilder(inittools.APIClient, burn.Namespace)
+	if gpuBurnNsBuilder.Exists() {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("The namespace '%s' already exists",
+			gpuBurnNsBuilder.Object.Name)
+	} else {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Creating the gpu burn namespace '%s'",
+			burn.Namespace)
+		createdGPUBurnNsBuilder, err := gpuBurnNsBuilder.Create()
+		Expect(err).ToNot(HaveOccurred(), "error creating gpu burn "+
+			"namespace '%s' : %v ", burn.Namespace, err)
+
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Successfully created namespace '%s'",
+			createdGPUBurnNsBuilder.Object.Name)
+
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Labeling the newly created namespace '%s'",
+			createdGPUBurnNsBuilder.Object.Name)
+
+		labeledGPUBurnNsBuilder := createdGPUBurnNsBuilder.WithMultipleLabels(map[string]string{
+			"openshift.io/cluster-monitoring":    "true",
+			"pod-security.kubernetes.io/enforce": "privileged",
+		})
+
+		newGPUBurnLabeledNsBuilder, err := labeledGPUBurnNsBuilder.Update()
+		Expect(err).ToNot(HaveOccurred(), "error labeling namespace %v : %v ",
+			newGPUBurnLabeledNsBuilder.Definition.Name, err)
+
+		glog.V(gpuparams.Gpu10LogLevel).Infof("The gpu-burn labeled namespace has "+
+			"labels: %v", newGPUBurnLabeledNsBuilder.Object.Labels)
+	}
+
+	By("Deploy GPU Burn configmap in test-gpu-burn namespace")
+	gpuBurnConfigMap, err := gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName,
+		burn.Namespace)
+	Expect(err).ToNot(HaveOccurred(), "Error Creating gpu burn configmap: %v", err)
+
+	glog.V(gpuparams.Gpu10LogLevel).Infof("The created gpuBurnConfigMap has name: %s",
+		gpuBurnConfigMap.Name)
+
+	configmapBuilder, err := configmap.Pull(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
+	Expect(err).ToNot(HaveOccurred(), "Error pulling gpu-burn configmap '%s' from "+
+		"namespace '%s': %v", burn.ConfigMapName, burn.Namespace, err)
+
+	glog.V(gpuparams.Gpu10LogLevel).Infof("The pulled gpuBurnConfigMap has name: %s",
+		configmapBuilder.Definition.Name)
+
+	defer func() {
+		glog.V(gpuparams.Gpu100LogLevel).Infof("defer11 (configmapBuilder) sleeping for 15 seconds")
+		if cleanupAfterTest {
+			err := configmapBuilder.Delete()
+			time.Sleep(time.Second * 15)
+			Expect(err).ToNot(HaveOccurred())
+		}
+		time.Sleep(time.Second * 15)
+	}()
+
+	By("Deploy gpu-burn pod with MIG configuration in test-gpu-burn namespace")
+	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod image name is: '%s', in namespace '%s'",
+		BurnImageName[clusterArch], burn.Namespace)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Creating pod with MIG profile '%s' requesting %d instances",
+		useMigProfile, migCapabilities[useMigIndex].Available)
+
+	gpuBurnMigPod, err := gpuburn.CreateGPUBurnPodWithMIG(inittools.APIClient, burn.Namespace, burn.Namespace,
+		BurnImageName[clusterArch], useMigProfile, migCapabilities[useMigIndex].Available, nvidiagpu.BurnPodCreationTimeout)
+	Expect(err).ToNot(HaveOccurred(), "Error creating gpu burn pod with MIG: %v", err)
+
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Creating gpu-burn pod '%s' with MIG configuration in namespace '%s'",
+		burn.Namespace, burn.Namespace)
+
+	_, err = inittools.APIClient.Pods(gpuBurnMigPod.Namespace).Create(context.TODO(), gpuBurnMigPod,
+		metav1.CreateOptions{})
+	Expect(err).ToNot(HaveOccurred(), "Error creating gpu-burn '%s' with MIG in "+
+		"namespace '%s': %v", burn.Namespace, burn.Namespace, err)
+
+	glog.V(gpuparams.Gpu10LogLevel).Infof("The created gpuBurnMigPod has name: %s has status: %v",
+		gpuBurnMigPod.Name, gpuBurnMigPod.Status)
+
+	By("Get the gpu-burn pod with label \"app=gpu-burn-app\"")
+	gpuMigPodName, err := get.GetFirstPodNameWithLabel(inittools.APIClient, burn.Namespace, burn.PodLabel)
+	Expect(err).ToNot(HaveOccurred(), "error getting gpu-burn pod with label "+
+		"'app=gpu-burn-app' from namespace '%s': %v", burn.Namespace, err)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("gpuMigPodName is %s", gpuMigPodName)
+
+	By("Pull the gpu-burn pod object from the cluster")
+	gpuMigPodPulled, err := pod.Pull(inittools.APIClient, gpuMigPodName, burn.Namespace)
+	Expect(err).ToNot(HaveOccurred(), "error pulling gpu-burn pod from "+
+		"namespace '%s': %v", burn.Namespace, err)
+
+	defer func() {
+		glog.V(gpuparams.Gpu100LogLevel).Infof("defer12 (gpuMigPodPulled) sleeping for 5 seconds	")
+		if cleanupAfterTest {
+			time.Sleep(time.Second * 5)
+			_, err := gpuMigPodPulled.Delete()
+			Expect(err).ToNot(HaveOccurred())
+		}
+	}()
+
+	By(fmt.Sprintf("Wait for up to %s for gpu-burn pod with MIG to be in Running phase", nvidiagpu.BurnPodRunningTimeout))
+	err = gpuMigPodPulled.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
+	Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod with MIG in "+
+		"namespace '%s' to go to Running phase: %v", burn.Namespace, err)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod with MIG now in Running phase")
+
+	By(fmt.Sprintf("Wait for up to %s for gpu-burn pod with MIG to run to completion and be in Succeeded phase/Completed status", nvidiagpu.BurnPodSuccessTimeout))
+	err = gpuMigPodPulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.BurnPodSuccessTimeout)
+
+	Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod '%s' with MIG in "+
+		"namespace '%s' to go Succeeded phase/Completed status: %v", burn.Namespace, burn.Namespace, err)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod with MIG now in Succeeded Phase/Completed status")
+
+	By("Get the gpu-burn pod logs")
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Get the gpu-burn pod logs with MIG configuration")
+
+	gpuBurnMigLogs, err := gpuMigPodPulled.GetLog(nvidiagpu.BurnLogCollectionPeriod, "gpu-burn-ctr")
+
+	Expect(err).ToNot(HaveOccurred(), "error getting gpu-burn pod '%s' logs "+
+		"from gpu burn namespace '%s': %v", burn.Namespace, err)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Gpu-burn pod '%s' with MIG logs:\n%s",
+		gpuMigPodPulled.Definition.Name, gpuBurnMigLogs)
+
+	// Need to add checking for other possible GPU's
+	By("Parse the gpu-burn pod logs and check for successful execution with MIG")
+	// migCapabilities[useMigIndex].Available
+	for i := 0; i < migCapabilities[useMigIndex].Available; i++ {
+		match1Mig := strings.Contains(gpuBurnMigLogs, fmt.Sprintf("GPU %d: OK", i))
+		// match2Mig := strings.Contains(gpuBurnMigLogs, fmt.Sprintf("100.0%  proc'd: %d", i))
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Checking if GPU %d: OK is present in logs: %v", i, match1Mig)
+		Expect(match1Mig).ToNot(BeFalse(), "gpu-burn pod execution with MIG was FAILED")
+	}
+	// match1Mig := strings.Contains(gpuBurnMigLogs, "GPU 0: OK")
+	match2Mig := strings.Contains(gpuBurnMigLogs, "100.0%  proc'd:")
+
+	Expect(match2Mig).ToNot(BeFalse(), "gpu-burn pod execution with MIG was FAILED")
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Gpu-burn pod execution with MIG configuration was successful")
+}
