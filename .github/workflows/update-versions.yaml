@@ -9,6 +9,12 @@ on:
         default: 'main'
         required: false
         type: string
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
 jobs:
   ocp-version:
     if: github.event_name != 'schedule' || github.repository == 'rh-ecosystem-edge/nvidia-ci' || vars.VERSION_UPDATE_FLOW_ENABLE_SCHEDULED == 'true'
@@ -26,7 +32,6 @@ jobs:
         id: read_tests
         run: |
           pip install -r workflows/gpu_operator_versions/requirements.txt
-          export GH_AUTH_TOKEN=$(echo ${{ secrets.GITHUB_TOKEN }} | base64)
           mkdir -p $(dirname ${TEST_TO_TRIGGER_FILE_PATH})
           python -m workflows.gpu_operator_versions.update_versions
           {
@@ -36,10 +41,10 @@ jobs:
           } >> $GITHUB_OUTPUT
 
         env:
-          GH_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OCP_IGNORED_VERSIONS_REGEX: "^4.[0-9]$|^4.1[0-1]$|^4.19.0-rc.0$|^4.18.22$"
           VERSION_FILE_PATH: "workflows/gpu_operator_versions/versions.json"
+          SETTINGS_FILE_PATH: "workflows/gpu_operator_versions/settings.json"
           TEST_TO_TRIGGER_FILE_PATH: "workflows/generated-files/tests_to_trigger.txt"
+          CHECK_CATALOG_AVAILABILITY: "true"
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
         with:
@@ -60,3 +65,10 @@ jobs:
             ${{ vars.VERSION_UPDATE_FLOW_NOTIFY_USERS }}
           delete-branch: true
           assignees: ${{ vars.VERSION_UPDATE_FLOW_ASSIGNEES }}
+
+      - name: Notify on failure
+        if: failure()
+        uses: ./.github/actions/notify-failure
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+

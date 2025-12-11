@@ -4,3 +4,4 @@ venv/
 *.pyc
 /archive/
 *.test
+.cursorrules

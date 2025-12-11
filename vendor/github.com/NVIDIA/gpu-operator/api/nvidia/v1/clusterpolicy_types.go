@@ -24,11 +24,8 @@ import (
 	kata_v1alpha1 "github.com/NVIDIA/k8s-kata-manager/api/v1alpha1/config"
 	upgrade_v1alpha1 "github.com/NVIDIA/k8s-operator-libs/api/upgrade/v1alpha1"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	"golang.org/x/mod/semver"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/NVIDIA/gpu-operator/internal/consts"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -482,11 +479,22 @@ type DriverSpec struct {
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:booleanSwitch"
 	UsePrecompiled *bool `json:"usePrecompiled,omitempty"`
 
+	// Deprecated: This field is no longer honored by the gpu-operator. Please use KernelModuleType instead.
 	// UseOpenKernelModules indicates if the open GPU kernel modules should be used
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.displayName="Enable use of open GPU kernel modules"
-	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:booleanSwitch"
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:booleanSwitch,urn:alm:descriptor:com.tectonic.ui:hidden"
 	UseOpenKernelModules *bool `json:"useOpenKernelModules,omitempty"`
+
+	// KernelModuleType represents the type of driver kernel modules to be used when installing the GPU driver.
+	// Accepted values are auto, proprietary and open. NOTE: If auto is chosen, it means that the recommended kernel module
+	// type is chosen based on the GPU devices on the host and the driver branch used
+	// +kubebuilder:validation:Enum=auto;open;proprietary
+	// +kubebuilder:default=auto
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.displayName="Kernel Module Type"
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.description="Kernel Module Type"
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:select:auto,urn:alm:descriptor:com.tectonic.ui:select:open,urn:alm:descriptor:com.tectonic.ui:select:proprietary"
+	KernelModuleType string `json:"kernelModuleType,omitempty"`
 
 	// Enabled indicates if deployment of NVIDIA Driver through operator is enabled
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
@@ -902,6 +910,11 @@ type DCGMExporterSpec struct {
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.displayName="ServiceMonitor configuration for NVIDIA DCGM Exporter"
 	ServiceMonitor *DCGMExporterServiceMonitorConfig `json:"serviceMonitor,omitempty"`
+
+	// Optional: Service configuration for NVIDIA DCGM Exporter
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.displayName="Service configuration for NVIDIA DCGM Exporter"
+	ServiceSpec *DCGMExporterServiceConfig `json:"service,omitempty"`
 }
 
 // DCGMExporterMetricsConfig defines metrics to be collected by NVIDIA DCGM Exporter
@@ -912,6 +925,21 @@ type DCGMExporterMetricsConfig struct {
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.displayName="ConfigMap name with file dcgm-metrics.csv"
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:text"
 	Name string `json:"name,omitempty"`
+}
+
+// DCGMExporterServiceConfig defines the configuration options for the Kubernetes Service deployed for DCGM Exporter
+type DCGMExporterServiceConfig struct {
+	// Type represents the ServiceType which describes ingress methods for a service
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.displayName="ServiceType for the DCGM Exporter K8s Service"
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:text"
+	Type corev1.ServiceType `json:"type,omitempty"`
+
+	// InternalTrafficPolicy describes how nodes distribute service traffic they receive on the ClusterIP.
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.displayName="Internal Traffic Policy for the DCGM Exporter K8s Service"
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.x-descriptors="urn:alm:descriptor:com.tectonic.ui:text"
+	InternalTrafficPolicy *corev1.ServiceInternalTrafficPolicy `json:"internalTrafficPolicy,omitempty"`
 }
 
 // DCGMExporterServiceMonitorConfig defines configuration options for the ServiceMonitor
@@ -1743,7 +1771,7 @@ func imagePath(repository string, image string, version string, imagePathEnvName
 	}
 
 	// 3. If both are not set, error out
-	return "", fmt.Errorf("Empty image path provided through both ClusterPolicy CR and ENV %s", imagePathEnvName)
+	return "", fmt.Errorf("empty image path provided through both ClusterPolicy CR and ENV %s", imagePathEnvName)
 }
 
 // ImagePath sets image path for given component type
@@ -1807,7 +1835,7 @@ func ImagePath(spec interface{}) (string, error) {
 		config := spec.(*CCManagerSpec)
 		return imagePath(config.Repository, config.Image, config.Version, "CC_MANAGER_IMAGE")
 	default:
-		return "", fmt.Errorf("Invalid type to construct image path: %v", v)
+		return "", fmt.Errorf("invalid type to construct image path: %v", v)
 	}
 }
 
@@ -1856,11 +1884,7 @@ func (d *DriverSpec) UsePrecompiledDrivers() bool {
 
 // OpenKernelModulesEnabled returns true if driver install is enabled using open GPU kernel modules
 func (d *DriverSpec) OpenKernelModulesEnabled() bool {
-	if d.UseOpenKernelModules == nil {
-		// default is false if not specified by user
-		return false
-	}
-	return *d.UseOpenKernelModules
+	return d.KernelModuleType == "open"
 }
 
 // IsEnabled returns true if device-plugin is enabled(default) through gpu-operator
@@ -1998,28 +2022,6 @@ func (gds *GPUDirectStorageSpec) IsEnabled() bool {
 		return false
 	}
 	return *gds.Enabled
-}
-
-// IsOpenKernelModulesRequired returns true if NVIDIA OpenRM drivers required in this configuration
-func (gds *GPUDirectStorageSpec) IsOpenKernelModulesRequired() bool {
-	// Add constraints here which require OpenRM drivers
-	if !gds.IsEnabled() {
-		return false
-	}
-
-	// If image digest is provided instead of the version, assume that OpenRM driver is required
-	if strings.HasPrefix(gds.Version, "sha256") {
-		return true
-	}
-
-	gdsVersion := gds.Version
-	if !strings.HasPrefix(gdsVersion, "v") {
-		gdsVersion = fmt.Sprintf("v%s", gdsVersion)
-	}
-	if semver.Compare(gdsVersion, consts.MinimumGDSVersionForOpenRM) >= 0 {
-		return true
-	}
-	return false
 }
 
 // IsEnabled returns true if GDRCopy is enabled through gpu-operator
