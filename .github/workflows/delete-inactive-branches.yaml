@@ -31,22 +31,22 @@ jobs:
           echo "Looking for merged PRs created by: $PR_AUTHOR"
 
           echo "Fetching merged pull requests"
-          PR_DATA=$(gh pr list --state merged --author "$PR_AUTHOR" --json headRefName,number,author,title --limit 20)
-
+          PR_DATA=$(gh pr list --repo "$GITHUB_REPOSITORY" --state merged --author "$PR_AUTHOR" --json headRefName,number,author,title --limit 20)
+          
           if [ "$PR_DATA" = "[]" ]; then
             echo "No merged PRs found for author: $PR_AUTHOR"
             exit 0
           fi
 
           echo "Extracting branch names"
-          BRANCHES=$(echo "$PR_DATA" | jq -r --arg author "$PR_AUTHOR" '.[] | select(.author.login == $author) | .headRefName')
-
+          BRANCHES=$(echo "$PR_DATA" | jq -r '.[].headRefName')
+          
           if [ -z "$BRANCHES" ]; then
-            echo "No branches found after filtering by author"
+            echo "No branches found to delete"
             exit 0
           fi
-
-          echo "Found branches to potentially delete"
+          
+          echo "Found branches to potentially delete:"
           echo "$BRANCHES"
 
           echo "$BRANCHES" | while read branch; do
