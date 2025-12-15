@@ -74,16 +74,13 @@ var (
 
 var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 
-	glog.V(gpuparams.Gpu100LogLevel).Infof("Start of the test suite")
-
-	nvidiaGPUConfig = nvidiagpuconfig.NewNvidiaGPUConfig()
-
-	// nfdConfig, _ = internalNFD.NewNFDConfig()
-
 	Context("MIG Test Cases", Label("mig-test-cases"), func() {
 
 		BeforeAll(func() {
 			glog.V(gpuparams.Gpu10LogLevel).Infof("Start of the test case, BeforeAll")
+			nvidiaGPUConfig = nvidiagpuconfig.NewNvidiaGPUConfig()
+
+			// nfdConfig, _ = internalNFD.NewNFDConfig()
 			cleanupAfterTest = nvidiaGPUConfig.CleanupAfterTest
 			By("Report OpenShift version")
 			mig.ReportOpenShiftVersionAndEnsureNFD(nfdInstance)

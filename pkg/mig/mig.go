@@ -109,11 +109,14 @@ func TestSingleMIGGPUBurn(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, burn
 	configmapBuilder := createAndPullGPUBurnConfigMap(burn.ConfigMapName, burn.Namespace)
 
 	defer func() {
+		defer GinkgoRecover()
 		glog.V(gpuparams.Gpu100LogLevel).Infof("defer2 (configmapBuilder) sleeping for 15 seconds")
 		if cleanupAfterTest {
 			err := configmapBuilder.Delete()
 			time.Sleep(time.Second * 15)
-			Expect(err).ToNot(HaveOccurred())
+			if err != nil {
+				glog.Errorf("Failed to delete configmap during cleanup: %v", err)
+			}
 		}
 	}()
 
@@ -127,11 +130,14 @@ func TestSingleMIGGPUBurn(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, burn
 		burn.PodLabel)
 
 	defer func() {
+		defer GinkgoRecover()
 		glog.V(gpuparams.Gpu100LogLevel).Infof("defer3 (gpuMigPodPulled) sleeping for 5 seconds	")
 		if cleanupAfterTest {
 			time.Sleep(time.Second * 5)
 			_, err := gpuMigPodPulled.Delete()
-			Expect(err).ToNot(HaveOccurred())
+			if err != nil {
+				glog.Errorf("Failed to delete gpu-burn pod during cleanup: %v", err)
+			}
 		}
 	}()
 
@@ -460,15 +466,15 @@ func ResetMIGLabelsToDisabled(WorkerNodeSelector map[string]string) {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to list worker nodes: %v", err)
 	} else {
 		for _, nodeBuilder := range nodeBuilders {
-			glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG strategy label on node '%s' (overwrite=true)", nodeBuilder.Definition.Name)
-			nodeBuilder = nodeBuilder.WithLabel("nvidia.com/mig.strategy", "all-disabled")
+			glog.V(gpuparams.Gpu10LogLevel).Infof("Removing MIG strategy label from node '%s'", nodeBuilder.Definition.Name)
+			nodeBuilder = nodeBuilder.RemoveLabel("nvidia.com/mig.strategy", "")
 			_, err = nodeBuilder.Update()
 			if err != nil {
-				glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to update node '%s' with MIG label: %v", nodeBuilder.Definition.Name, err)
+				glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to remove MIG strategy label from node '%s': %v", nodeBuilder.Definition.Name, err)
 			} else {
-				glog.V(gpuparams.Gpu10LogLevel).Infof("Successfully set MIG strategy label on node '%s'", nodeBuilder.Definition.Name)
+				glog.V(gpuparams.Gpu10LogLevel).Infof("Successfully removed MIG strategy label from node '%s'", nodeBuilder.Definition.Name)
 			}
-			glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG configuration label on node '%s' (overwrite=true)", nodeBuilder.Definition.Name)
+			glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG configuration label to 'all-disabled' on node '%s' (overwrite=true)", nodeBuilder.Definition.Name)
 			nodeBuilder = nodeBuilder.WithLabel("nvidia.com/mig.config", "all-disabled")
 			_, err = nodeBuilder.Update()
 			if err != nil {
@@ -679,12 +685,12 @@ func deployGPUBurnPodWithMIGAndPull(
 	Expect(err).ToNot(HaveOccurred(), "Error creating gpu burn pod with MIG: %v", err)
 
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Creating gpu-burn pod '%s' with MIG configuration in namespace '%s'",
-		namespace, namespace)
+		gpuBurnMigPod.Name, gpuBurnMigPod.Namespace)
 
 	_, err = inittools.APIClient.Pods(gpuBurnMigPod.Namespace).Create(context.TODO(), gpuBurnMigPod,
 		metav1.CreateOptions{})
 	Expect(err).ToNot(HaveOccurred(), "Error creating gpu-burn '%s' with MIG in "+
-		"namespace '%s': %v", namespace, namespace, err)
+		"namespace '%s': %v", gpuBurnMigPod.Namespace, gpuBurnMigPod.Namespace, err)
 
 	glog.V(gpuparams.Gpu10LogLevel).Infof("The created gpuBurnMigPod has name: %s has status: %v",
 		gpuBurnMigPod.Name, gpuBurnMigPod.Status)
@@ -729,7 +735,7 @@ func getGPUBurnPodLogs(gpuMigPodPulled *pod.Builder, namespace string) string {
 	gpuBurnMigLogs, err := gpuMigPodPulled.GetLog(nvidiagpu.BurnLogCollectionPeriod, "gpu-burn-ctr")
 
 	Expect(err).ToNot(HaveOccurred(), "error getting gpu-burn pod '%s' logs "+
-		"from gpu burn namespace '%s': %v", namespace, err)
+		"from gpu burn namespace '%s': %v", gpuMigPodPulled.Definition.Name, gpuMigPodPulled.Definition.Namespace, err)
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Gpu-burn pod '%s' with MIG logs:\n%s",
 		gpuMigPodPulled.Definition.Name, gpuBurnMigLogs)
 

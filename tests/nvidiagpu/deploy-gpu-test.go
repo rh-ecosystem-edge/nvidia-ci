@@ -770,8 +770,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			// If pod name is not nil, delete it.
 			if currentGpuBurnPodPulled != nil {
 				glog.V(gpuparams.GpuLogLevel).Infof("Deleting gpu-burn pod")
-				_, _ = currentGpuBurnPodPulled.Delete()
-				Expect(err).ToNot(HaveOccurred(), "Error deleting gpu-burn pod")
+				_, deleteErr := currentGpuBurnPodPulled.Delete()
+				Expect(deleteErr).ToNot(HaveOccurred(), "Error deleting gpu-burn pod: %v", deleteErr)
 			}
 
 			By("Deploy GPU Burn configmap in test-gpu-burn namespace")
@@ -1348,13 +1348,13 @@ func testGPUBurnWithMIGConfiguration() {
 			glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to list worker nodes: %v", err)
 		} else {
 			for _, nodeBuilder := range nodeBuilders {
-				glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG strategy label on node '%s' (overwrite=true)", nodeBuilder.Definition.Name)
-				nodeBuilder = nodeBuilder.WithLabel("nvidia.com/mig.strategy", "all-disabled")
+				glog.V(gpuparams.Gpu10LogLevel).Infof("Removing MIG strategy label from node '%s'", nodeBuilder.Definition.Name)
+				nodeBuilder = nodeBuilder.RemoveLabel("nvidia.com/mig.strategy", "")
 				_, err = nodeBuilder.Update()
 				if err != nil {
-					glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to update node '%s' with MIG label: %v", nodeBuilder.Definition.Name, err)
+					glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to remove MIG strategy label from node '%s': %v", nodeBuilder.Definition.Name, err)
 				} else {
-					glog.V(gpuparams.Gpu10LogLevel).Infof("Successfully set MIG strategy label on node '%s'", nodeBuilder.Definition.Name)
+					glog.V(gpuparams.Gpu10LogLevel).Infof("Successfully removed MIG strategy label from node '%s'", nodeBuilder.Definition.Name)
 				}
 				glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG configuration label on node '%s' (overwrite=true)", nodeBuilder.Definition.Name)
 				nodeBuilder = nodeBuilder.WithLabel("nvidia.com/mig.config", "all-disabled")
@@ -1523,7 +1523,6 @@ func testGPUBurnWithMIGConfiguration() {
 			time.Sleep(time.Second * 15)
 			Expect(err).ToNot(HaveOccurred())
 		}
-		time.Sleep(time.Second * 15)
 	}()
 
 	By("Deploy gpu-burn pod with MIG configuration in test-gpu-burn namespace")

@@ -242,7 +242,6 @@ func (builder *Builder) WithLabel(key, value string) *Builder {
 	glog.V(gpuparams.Gpu100LogLevel).Infof("Setting label %s=%s on node %s (overwrite=true)", key, value, builder.Definition.Name)
 
 	if key == "" {
-		glog.V(gpuparams.Gpu100LogLevel).Infof("Failed to apply label with an empty key to node %s", builder.Definition.Name)
 		builder.errorMsg = "error to set empty key to node"
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to apply label with an empty key to node %s", builder.Definition.Name)
 		return builder

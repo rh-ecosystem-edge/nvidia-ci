@@ -67,8 +67,9 @@ func CreateGPUBurnPodWithMIG(apiClient *clients.Settings, podName, podNamespace 
 	configMapVolumeSource.Name = "gpu-burn-entrypoint"
 	configMapVolumeSource.DefaultMode = &volumeDefaultMode
 
-	// Construct single MIG resource name (nvidia.com/gpu)
-	// other than single MIG uses e.g. "nvidia.com/mig-1g.5gb"
+	// Construct MIG resource name using the migProfile.
+	// For single strategy MIGs, migProfile is "gpu" resulting in "nvidia.com/gpu".
+	// For other MIG profiles, migProfile is like "mig-1g.5gb" resulting in "nvidia.com/mig-1g.5gb".
 	migResourceName := fmt.Sprintf("nvidia.com/%s", migProfile)
 
 	return &corev1.Pod{
