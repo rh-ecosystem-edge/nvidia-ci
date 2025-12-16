@@ -79,6 +79,7 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 		BeforeAll(func() {
 			glog.V(gpuparams.Gpu10LogLevel).Infof("Start of the test case, BeforeAll")
 			nvidiaGPUConfig = nvidiagpuconfig.NewNvidiaGPUConfig()
+			Expect(nvidiaGPUConfig).ToNot(BeNil(), "Failed to initialize NvidiaGPUConfig")
 
 			// nfdConfig, _ = internalNFD.NewNFDConfig()
 			cleanupAfterTest = nvidiaGPUConfig.CleanupAfterTest

@@ -94,11 +94,19 @@ func TestSingleMIGGPUBurn(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, burn
 
 	// ***** Pull existing ClusterPolicy
 	By("Pull existing ClusterPolicy")
-	pulledClusterPolicyBuilder, _ := pullClusterPolicyAndCaptureResourceVersion()
+	pulledClusterPolicyBuilder, _, err := pullClusterPolicyAndCaptureResourceVersion()
+	Expect(err).ToNot(HaveOccurred(), "error pulling ClusterPolicy: %v", err)
+	if pulledClusterPolicyBuilder == nil {
+		Fail("pulledClusterPolicyBuilder is nil after pullClusterPolicyAndCaptureResourceVersion")
+	}
 
 	// ***** Configure MIG strategy for the test
 	By("Configuring MIG strategy in ClusterPolicy")
-	clusterArch, _ := configureMIGStrategyAndGetClusterArch(pulledClusterPolicyBuilder, WorkerNodeSelector)
+	clusterArch, err := configureMIGStrategyAndGetClusterArch(pulledClusterPolicyBuilder, WorkerNodeSelector)
+	Expect(err).ToNot(HaveOccurred(), "error configuring MIG strategy and getting cluster architecture: %v", err)
+	if clusterArch == "" {
+		Fail("clusterArch is empty after configureMIGStrategyAndGetClusterArch")
+	}
 
 	// ***** Check and create test-gpu-burn namespace if it is missing
 	By("Ensure test-gpu-burn namespace exists")
@@ -581,7 +589,6 @@ func configureMIGStrategyAndGetClusterArch(
 	glog.V(gpuparams.Gpu10LogLevel).Infof("cluster architecture for GPU enabled worker node is: %s",
 		clusterArch)
 
-	Expect(err).ToNot(HaveOccurred(), "error configuring MIG strategy and getting cluster architecture: %v", err)
 	time.Sleep(30 * time.Second)
 
 	return clusterArch, nil
@@ -589,15 +596,18 @@ func configureMIGStrategyAndGetClusterArch(
 
 // pullClusterPolicyAndCaptureResourceVersion pulls the ClusterPolicy from the cluster,
 // validates it was pulled successfully, and captures its ResourceVersion.
-// It returns the pulled ClusterPolicy builder and the ResourceVersion string.
-func pullClusterPolicyAndCaptureResourceVersion() (*nvidiagpu.Builder, string) {
+// It returns the pulled ClusterPolicy builder, the ResourceVersion string, and an error.
+func pullClusterPolicyAndCaptureResourceVersion() (*nvidiagpu.Builder, string, error) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Pull ClusterPolicy and capture ResourceVersion"))
 	glog.V(gpuparams.GpuLogLevel).Infof(
 		"Pulling ClusterPolicy builder structure named '%s'", nvidiagpu.ClusterPolicyName)
 	pulledClusterPolicyBuilder, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
-
-	Expect(err).ToNot(HaveOccurred(), "error pulling ClusterPolicy builder object name '%s' "+
-		"from cluster: %v", nvidiagpu.ClusterPolicyName, err)
+	if err != nil {
+		return nil, "", fmt.Errorf("error pulling ClusterPolicy builder object name '%s' from cluster: %w", nvidiagpu.ClusterPolicyName, err)
+	}
+	if pulledClusterPolicyBuilder == nil {
+		return nil, "", fmt.Errorf("pulled ClusterPolicy builder is nil for '%s'", nvidiagpu.ClusterPolicyName)
+	}
 
 	glog.V(gpuparams.GpuLogLevel).Infof(
 		"Pulled ClusterPolicy builder structure named '%s'", pulledClusterPolicyBuilder.Object.Name)
@@ -607,7 +617,7 @@ func pullClusterPolicyAndCaptureResourceVersion() (*nvidiagpu.Builder, string) {
 	glog.V(gpuparams.GpuLogLevel).Infof(
 		"Pulled ClusterPolicy resourceVersion is '%s'", initialClusterPolicyResourceVersion)
 
-	return pulledClusterPolicyBuilder, initialClusterPolicyResourceVersion
+	return pulledClusterPolicyBuilder, initialClusterPolicyResourceVersion, nil
 }
 
 // ensureGPUBurnNamespaceExists ensures that the GPU burn namespace exists.
@@ -680,7 +690,7 @@ func deployGPUBurnPodWithMIGAndPull(
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Creating pod with MIG profile '%s' requesting %d instances",
 		useMigProfile, migInstanceCount)
 
-	gpuBurnMigPod, err := gpuburn.CreateGPUBurnPodWithMIG(inittools.APIClient, namespace, namespace,
+	gpuBurnMigPod, err := gpuburn.CreateGPUBurnPodWithMIG(inittools.APIClient, "gpu-burn-pod", namespace,
 		imageName, useMigProfile, migInstanceCount, nvidiagpu.BurnPodCreationTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Error creating gpu burn pod with MIG: %v", err)
 
@@ -690,7 +700,7 @@ func deployGPUBurnPodWithMIGAndPull(
 	_, err = inittools.APIClient.Pods(gpuBurnMigPod.Namespace).Create(context.TODO(), gpuBurnMigPod,
 		metav1.CreateOptions{})
 	Expect(err).ToNot(HaveOccurred(), "Error creating gpu-burn '%s' with MIG in "+
-		"namespace '%s': %v", gpuBurnMigPod.Namespace, gpuBurnMigPod.Namespace, err)
+		"namespace '%s': %v", gpuBurnMigPod.Name, gpuBurnMigPod.Namespace, err)
 
 	glog.V(gpuparams.Gpu10LogLevel).Infof("The created gpuBurnMigPod has name: %s has status: %v",
 		gpuBurnMigPod.Name, gpuBurnMigPod.Status)
@@ -722,7 +732,7 @@ func waitForGPUBurnPodToComplete(gpuMigPodPulled *pod.Builder, namespace string)
 	err = gpuMigPodPulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.BurnPodSuccessTimeout)
 
 	Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod '%s' with MIG in "+
-		"namespace '%s' to go Succeeded phase/Completed status: %v", namespace, namespace, err)
+		"namespace '%s' to go Succeeded phase/Completed status: %v", gpuMigPodPulled.Definition.Name, gpuMigPodPulled.Definition.Namespace, err)
 	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod with MIG now in Succeeded Phase/Completed status")
 }
 
