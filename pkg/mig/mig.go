@@ -53,7 +53,7 @@ const (
 func TestSingleMIGGPUBurn(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, burn *nvidiagpu.GPUBurnConfig, BurnImageName map[string]string, WorkerNodeSelector map[string]string, cleanupAfterTest bool) {
 	// select one mig profile from the list of mig profiles
 	var useMigProfile string // = "mig-1g.5gb"  // mig profiles are queried from the hardware
-	var useMigIndex int = -1 // will be set to random value after migCapabilities is populated
+	var useMigIndex int      // will be set to random value after migCapabilities is populated
 	var migCapabilities []get.MIGProfileInfo
 	// glog.V(gpuparams.Gpu10LogLevel).Infof("Starting GPU Burn with MIG Configuration testcase")
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Starting GPU Burn with MIG Configuration testcase"))
