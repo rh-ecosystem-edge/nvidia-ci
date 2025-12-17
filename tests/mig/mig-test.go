@@ -1,51 +1,25 @@
 package mig
 
 import (
-	// "context"
-	// "encoding/json"
-	// "fmt"
-	// "math/rand"
-	// "strings"
-	// "time"
-
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
-
-	// "github.com/rh-ecosystem-edge/nvidia-ci/internal/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
 	_ "github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/mig"
-
-	// "github.com/rh-ecosystem-edge/nvidia-ci/pkg/mig"
 	nfd "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
-
-	// "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nodes"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"
 
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	// "github.com/rh-ecosystem-edge/nvidia-ci/pkg/configmap"
-
-	// "github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
-	// "github.com/rh-ecosystem-edge/nvidia-ci/pkg/pod"
-
-	// "github.com/operator-framework/api/pkg/operators/v1alpha1"
-	// "github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
-
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
-	// "github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
-	// corev1 "k8s.io/api/core/v1"
 )
 
 var (
 	nfdInstance = operatorconfig.NewCustomConfig()
 	burn        = nvidiagpu.NewDefaultGPUBurnConfig()
-
-	// InstallPlanApproval v1alpha1.Approval = "Automatic"
 
 	WorkerNodeSelector = map[string]string{
 		inittools.GeneralConfig.WorkerLabel: "",
@@ -59,7 +33,6 @@ var (
 
 	// NvidiaGPUConfig provides access to general configuration parameters.
 	nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig
-	// nfdConfig       *internalNFD.NFDConfig
 
 	ScaleCluster        = false
 	UseSingleMIGProfile = false
@@ -68,8 +41,6 @@ var (
 	MixedMigProfile     = UndefinedValue
 
 	cleanupAfterTest = true
-	// CurrentCSV        = ""
-	// CurrentCSVVersion = ""
 )
 
 var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
@@ -81,7 +52,6 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 			nvidiaGPUConfig = nvidiagpuconfig.NewNvidiaGPUConfig()
 			Expect(nvidiaGPUConfig).ToNot(BeNil(), "Failed to initialize NvidiaGPUConfig")
 
-			// nfdConfig, _ = internalNFD.NewNFDConfig()
 			cleanupAfterTest = nvidiaGPUConfig.CleanupAfterTest
 			By("Report OpenShift version")
 			mig.ReportOpenShiftVersionAndEnsureNFD(nfdInstance)

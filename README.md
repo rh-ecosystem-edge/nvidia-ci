@@ -63,7 +63,7 @@ The test-runner [script](scripts/test-runner.sh) is the recommended way for exec
 
 General Parameters for the script are controlled by the following environment variables:
 - `TEST_FEATURES`: list of features to be tested.  Subdirectories under `tests` dir that match a feature will be included (internal directories are excluded).  When we have more than one subdirectlory ot tests, they can be listed comma separated.- _required_
-- `TEST_LABELS`: ginkgo query passed to the label-filter option for including/excluding tests - _optional_
+- `TEST_LABELS`: ginkgo query passed to the label-filter option for including/excluding tests. Supports comma-separated labels (AND logic) and `||` operator (OR logic). Examples: `'nvidia-ci,gpu'`, `'nvidia-ci,mps'`, `'nvidia-ci,mig'`, `'deploy || rdma-legacy-sriov'` - _optional_
 - `TEST_VERBOSE`: executes ginkgo with verbose test output - _optional_
 - `TEST_TRACE`: includes full stack trace from ginkgo tests when a failure occurs - _optional_
 - `VERBOSE_SCRIPT`: prints verbose script information when executing the script - _optional_
@@ -107,6 +107,10 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE`: MacvlanNetwork Custom Resource instance IPAM or IP Address/Subnet mask range for Eth or IB interface - _required_
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - _required_
 - `NVIDIANETWORK_RDMA_GPUDIRECT`: Boolean flag to run RDMA workload with 1 nvidia.com/gpu resource - _optional_
+
+NVIDIA MIG parameters for the script are controlled by the following environment variables:
+- `NVIDIAGPU_SINGLE_MIG_PROFILE`: Index number, that chooses the MIG profile from list of available MIG profiles.  If not specified, a valid random number is used. Typically values 0-5. - _optional_
+
 ### Testing MPS with GPU Operator
 
 To test the Multi-Process Service (MPS) functionality, you need to first deploy the GPU Operator and then run the MPS tests without cleaning up the GPU Operator deployment between test suites.
@@ -153,6 +157,54 @@ $ export NVIDIAGPU_CLEANUP=true
 $ make run-tests
 ```
 This will remove all resources created by both the GPU Operator deployment and MPS tests.
+
+### Testing MIG with GPU Operator
+
+To test the Multi-Instance GPU (MIG) functionality, you need to first deploy the GPU Operator and then run the MIG tests without cleaning up the GPU Operator deployment between test suites.
+
+It is recommended to execute the runner script through the `make run-tests` make target.
+
+#### Steps to run MIG tests:
+
+1. Run mig testcase(s) with nvidia-ci on any cluster
+```
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DUMP_FAILED_TESTS=true
+$ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
+$ export TEST_FEATURES="nvidiagpu"
+$ export TEST_LABELS='nvidia-ci,gpu,gpu-burn-mig,single-mig'
+$ export TEST_TRACE=true
+$ export VERBOSE_LEVEL=100
+$ export NVIDIAGPU_CLEANUP=false
+$ NVIDIAGPU_SINGLE_MIG_PROFILE=1  ## any value of int type, usually 0-5 are valid
+$ make run-tests
+```
+2. Run only mig testcase(s) on an existing cluster which has GPU operator installed,
+e.g. after executing step 1. MIG testcase(s) can be used from either nvidiagpu or
+mig package. MIG is used in this example. In the other case, use `TEST_FEATURES="nvidiagpu"`
+to execute the testcase from nvidiagpu package.
+```
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DUMP_FAILED_TESTS=true
+$ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
+$ export TEST_FEATURES="mig"
+$ export TEST_LABELS='gpu,single-mig'
+$ export TEST_TRACE=true
+$ export VERBOSE_LEVEL=100
+$ export NVIDIAGPU_SINGLE_MIG_PROFILE=1
+$ export NVIDIAGPU_CLEANUP=false
+$ make run-tests
+```
+
+#### Cleanup:
+
+If the GPU operator needs to be cleaned up, just set the cleanup parameter to true
+in the last execution of either steps 1 or 2
+```
+$ export NVIDIAGPU_CLEANUP=true
+```
+
+#### Examples:
 
 Example running the end-to-end GPU Operator test case:
 ```

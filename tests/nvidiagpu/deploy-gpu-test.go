@@ -761,7 +761,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			// Any error is ignored, as it is expected to not be found.
 
 			By("Pull the possibly existing gpu-burn pod object from the cluster")
-			currentGpuBurnPodPulled, _ := pod.Pull(inittools.APIClient, burn.Namespace, burn.Namespace)
+			currentGpuBurnPodPulled, _ := pod.Pull(inittools.APIClient, burn.PodName, burn.Namespace)
 
 			currentGpuBurnPodName, _ := get.GetFirstPodNameWithLabel(inittools.APIClient, burn.Namespace,
 				burn.PodLabel)
@@ -800,7 +800,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod image name is: '%s', in namespace '%s'",
 				BurnImageName[clusterArchitecture], burn.Namespace)
 
-			gpuBurnPod, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.Namespace, burn.Namespace,
+			gpuBurnPod, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.PodName, burn.Namespace,
 				BurnImageName[(clusterArchitecture)], nvidiagpu.BurnPodCreationTimeout)
 			Expect(err).ToNot(HaveOccurred(), "Error creating gpu burn pod: %v", err)
 
@@ -1004,7 +1004,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				"in json: %v", string(cpReadyAgainJSON))
 
 			By("Pull the previously deployed gpu-burn pod object from the cluster")
-			currentGpuBurnPodPulled, err := pod.Pull(inittools.APIClient, burn.Namespace, burn.Namespace)
+			currentGpuBurnPodPulled, err := pod.Pull(inittools.APIClient, burn.PodName, burn.Namespace)
 			Expect(err).ToNot(HaveOccurred(), "error pulling previously deployed and completed "+
 				"gpu-burn pod from namespace '%s' :  %v ", burn.Namespace, err)
 
@@ -1034,7 +1034,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("cluster architecture for GPU enabled worker node is: %s",
 				clusterArch)
 
-			gpuBurnPod2, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.Namespace, burn.Namespace,
+			gpuBurnPod2, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.PodName, burn.Namespace,
 				BurnImageName[(clusterArch)], nvidiagpu.BurnPodPostUpgradeCreationTimeout)
 			Expect(err).ToNot(HaveOccurred(), "Error re-building gpu burn pod object after "+
 				"upgrade: %v", err)
@@ -1254,7 +1254,7 @@ func testGPUBurnWithMIGConfiguration() {
 	By("Check if MIG single strategy is available on GPU nodes")
 	glog.V(gpuparams.GpuLogLevel).Infof("Checking for MIG single strategy availability on GPU nodes")
 
-	_, migCapabilities, err := get.MIGCapabilities(inittools.APIClient, WorkerNodeSelector)
+	_, migCapabilities, err := mig.MIGCapabilities(inittools.APIClient, WorkerNodeSelector)
 	if err != nil {
 		glog.V(gpuparams.GpuLogLevel).Infof("Could not discover MIG configurations: %v", err)
 	} else {
@@ -1531,7 +1531,7 @@ func testGPUBurnWithMIGConfiguration() {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Creating pod with MIG profile '%s' requesting %d instances",
 		useMigProfile, migCapabilities[useMigIndex].Available)
 
-	gpuBurnMigPod, err := gpuburn.CreateGPUBurnPodWithMIG(inittools.APIClient, burn.Namespace, burn.Namespace,
+	gpuBurnMigPod, err := gpuburn.CreateGPUBurnPodWithMIG(inittools.APIClient, burn.PodName, burn.Namespace,
 		BurnImageName[clusterArch], useMigProfile, migCapabilities[useMigIndex].Available, nvidiagpu.BurnPodCreationTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Error creating gpu burn pod with MIG: %v", err)
 
