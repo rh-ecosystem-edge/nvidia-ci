@@ -82,6 +82,9 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
    [RFC 6902](http://tools.ietf.org/html/rfc6902) (also see [kubectl patch](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_patch/)) - _optional_
 - `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
 
+NVIDIA MIG parameters for the script are controlled by the following environment variables:
+- `NVIDIAGPU_SINGLE_MIG_PROFILE`: Index number, that chooses the MIG profile from list of available MIG profiles (e.g. 1g.5gb is usually referenced with index 0).  If not specified, a valid random number is used. Typically values 0-5. - _optional_
+
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
 - `NVIDIANETWORK_CATALOGSOURCE`: custom catalogsource to be used.  If not specified, the default "certified-operators" catalog is used - _optional_
 - `NVIDIANETWORK_SUBSCRIPTION_CHANNEL`: specific subscription channel to be used.  If not specified, the latest channel is used - _optional_
@@ -107,9 +110,6 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE`: MacvlanNetwork Custom Resource instance IPAM or IP Address/Subnet mask range for Eth or IB interface - _required_
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - _required_
 - `NVIDIANETWORK_RDMA_GPUDIRECT`: Boolean flag to run RDMA workload with 1 nvidia.com/gpu resource - _optional_
-
-NVIDIA MIG parameters for the script are controlled by the following environment variables:
-- `NVIDIAGPU_SINGLE_MIG_PROFILE`: Index number, that chooses the MIG profile from list of available MIG profiles.  If not specified, a valid random number is used. Typically values 0-5. - _optional_
 
 ### Testing MPS with GPU Operator
 
@@ -179,7 +179,7 @@ $ export NVIDIAGPU_CLEANUP=false
 $ NVIDIAGPU_SINGLE_MIG_PROFILE=1  ## any value of int type, usually 0-5 are valid
 $ make run-tests
 ```
-2. Run only mig testcase(s) on an existing cluster which has GPU operator installed,
+2. Running only MIG testcase(s) on an existing cluster which has GPU operator installed,
 e.g. after executing step 1. MIG testcase(s) can be used from either nvidiagpu or
 mig package. MIG is used in this example. In the other case, use `TEST_FEATURES="nvidiagpu"`
 to execute the testcase from nvidiagpu package.
@@ -198,13 +198,13 @@ $ make run-tests
 
 #### Cleanup:
 
-If the GPU operator needs to be cleaned up, just set the cleanup parameter to true
+If the GPU operator and gpu burn pod needs to be cleaned up, just set the cleanup parameter to true
 in the last execution of either steps 1 or 2
 ```
 $ export NVIDIAGPU_CLEANUP=true
 ```
 
-#### Examples:
+## Examples:
 
 Example running the end-to-end GPU Operator test case:
 ```
@@ -212,7 +212,7 @@ $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
 $ export TEST_FEATURES="nvidiagpu"
-$ export TEST_LABELS='nvidia-ci,gpu'
+$ export TEST_LABELS='nvidia-ci,gpu,single-mig'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE="g4dn.xlarge"
@@ -221,7 +221,7 @@ $ export NVIDIAGPU_SUBSCRIPTION_CHANNEL="v23.9"
 $ make run-tests
 Executing nvidiagpu test-runner script
 scripts/test-runner.sh
-ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu" ./tests/nvidiagpu
+ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,single-mig" ./tests/nvidiagpu
 ```
 
 Example running the GPU Operator upgrade testcase (from v23.6 to v24.3) after the end-end testcase.

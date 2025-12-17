@@ -77,7 +77,7 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 			mig.CleanupGPUOperatorResources(cleanupAfterTest, burn.Namespace)
 		})
 
-		It("Test GPU Burn with single strategy MIG Configuration", Label("gpu-burn-mig"), func() {
+		It("Test GPU Burn with single strategy MIG Configuration", Label("single-mig"), func() {
 			mig.TestSingleMIGGPUBurn(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
 		})
 
