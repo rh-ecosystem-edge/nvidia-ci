@@ -98,6 +98,17 @@ jobs:
           clean: false
           force: false
 
+      - name: Delete merged branch
+        if: |
+          github.event_name == 'pull_request_target' &&
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.user.login == 'github-actions[bot]'
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          echo "Deleting merged branch: $BRANCH"
+          git push origin --delete "$BRANCH" || echo "Branch $BRANCH already deleted or doesn't exist"
+
       - name: Notify on failure
         if: failure()
         uses: ./.github/actions/notify-failure
