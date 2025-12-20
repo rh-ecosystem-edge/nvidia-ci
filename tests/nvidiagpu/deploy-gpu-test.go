@@ -81,16 +81,16 @@ var (
 
 	CustomCatalogsourceIndexImage = UndefinedValue
 
-	SubscriptionChannel                      = UndefinedValue
-	DefaultSubscriptionChannel               = UndefinedValue
-	OperatorUpgradeToChannel                 = UndefinedValue
-	cleanupAfterTest                         = true
-	deployFromBundle                         = false
-	operatorBundleImage                      = ""
-	CurrentCSV                               = ""
-	CurrentCSVVersion                        = ""
-	clusterArchitecture                      = UndefinedValue
-	labelsToCheck                            = []string{}
+	SubscriptionChannel        = UndefinedValue
+	DefaultSubscriptionChannel = UndefinedValue
+	OperatorUpgradeToChannel   = UndefinedValue
+	cleanupAfterTest           = true
+	deployFromBundle           = false
+	operatorBundleImage        = ""
+	CurrentCSV                 = ""
+	CurrentCSVVersion          = ""
+	clusterArchitecture        = UndefinedValue
+	labelsToCheck              = []string{}
 	QuickTimeout               time.Duration = 300 * time.Second
 	QuickInterval              time.Duration = 5 * time.Second
 )
