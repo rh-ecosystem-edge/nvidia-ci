@@ -1354,7 +1354,7 @@ func testWorkloadWithSingleMig() {
 	}
 
 	glog.V(gpuparams.Gpu100LogLevel).Infof("Waiting for ClusterPolicy to be notReady after setting MIG node labels")
-	wait.ClusterPolicyNotReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
+	_ = wait.ClusterPolicyNotReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
 		nvidiagpu.ClusterPolicyNotReadyCheckInterval, nvidiagpu.ClusterPolicyNotReadyTimeout)
 
 	By(fmt.Sprintf("Wait up to %s for ClusterPolicy to be ready after node label changes",

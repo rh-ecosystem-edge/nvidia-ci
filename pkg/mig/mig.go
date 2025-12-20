@@ -426,7 +426,7 @@ func ResetMIGLabelsToDisabled(WorkerNodeSelector map[string]string) {
 	}
 
 	// Wait for ClusterPolicy to be notReady
-	wait.ClusterPolicyNotReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
+	_ = wait.ClusterPolicyNotReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
 		nvidiagpu.ClusterPolicyNotReadyCheckInterval, nvidiagpu.ClusterPolicyNotReadyTimeout)
 
 	glog.V(gpuparams.GpuLogLevel).Infof("Waiting for ClusterPolicy to be ready after setting MIG node labels")
