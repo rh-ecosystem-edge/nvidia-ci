@@ -40,7 +40,7 @@ var (
 	SingleMigProfile    = UndefinedValue
 	MixedMigProfile     = UndefinedValue
 
-	cleanupAfterTest = true
+	cleanupAfterTest = false
 )
 
 var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
@@ -54,7 +54,7 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 
 			cleanupAfterTest = nvidiaGPUConfig.CleanupAfterTest
 			By("Report OpenShift version")
-			mig.ReportOpenShiftVersionAndEnsureNFD(nfdInstance)
+			ReportOpenShiftVersionAndEnsureNFD(nfdInstance)
 		})
 
 		BeforeEach(func() {
@@ -77,13 +77,30 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 			mig.CleanupGPUOperatorResources(cleanupAfterTest, burn.Namespace)
 		})
 
-		It("Test GPU Burn with single strategy MIG Configuration", Label("single-mig"), func() {
-			mig.TestSingleMIGGPUBurn(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
+		It("Test GPU workload with single strategy MIG Configuration", Label("single-mig"), func() {
+			mig.TestSingleMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
 		})
 
-		It("Test GPU Burn with mixed strategy MIG Configuration", Label("gpu-mixed-mig"), func() {
+		It("Test GPU workload with mixed strategy MIG Configuration", Label("gpu-mixed-mig"), func() {
 			glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-mixed-mig testcase not yet implemented")
-			// mig.TestMixedMIGGPUBurn(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
+			// mig.TestMixedMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
 		})
 	})
 })
+
+// reportOpenShiftVersionAndEnsureNFD reports the OpenShift version, writes it to a report file,
+// and ensures that Node Feature Discovery (NFD) is installed.
+func ReportOpenShiftVersionAndEnsureNFD(nfdInstance *operatorconfig.CustomConfig) {
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Report OpenShift version and ensure NFD")
+	ocpVersion, err := inittools.GetOpenShiftVersion()
+	glog.V(gpuparams.GpuLogLevel).Infof("Current OpenShift cluster version is: '%s'", ocpVersion)
+
+	if err != nil {
+		glog.Error("Error getting OpenShift version: ", err)
+	} else if err := inittools.GeneralConfig.WriteReport(OpenShiftVersionFile, []byte(ocpVersion)); err != nil {
+		glog.Error("Error writing an OpenShift version file: ", err)
+	}
+
+	nfd.EnsureNFDIsInstalled(inittools.APIClient, nfdInstance, ocpVersion, gpuparams.GpuLogLevel)
+}
+
