@@ -91,8 +91,6 @@ var (
 	CurrentCSVVersion          = ""
 	clusterArchitecture        = UndefinedValue
 	labelsToCheck              = []string{}
-	QuickTimeout               time.Duration = 300 * time.Second
-	QuickInterval              time.Duration = 5 * time.Second
 )
 
 var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
@@ -1355,10 +1353,9 @@ func testWorkloadWithSingleMig() {
 		glog.V(gpuparams.GpuLogLevel).Infof("Successfully set MIG configuration label on node '%s' with %s", nodeBuilder.Definition.Name, MigProfile)
 	}
 
-	By(fmt.Sprintf("Wait up to %s for ClusterPolicy to be notReady after node label changes", QuickTimeout))
 	glog.V(gpuparams.Gpu100LogLevel).Infof("Waiting for ClusterPolicy to be notReady after setting MIG node labels")
-	_ = wait.ClusterPolicyNotReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
-		QuickInterval, QuickTimeout)
+	wait.ClusterPolicyNotReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
+		nvidiagpu.ClusterPolicyNotReadyCheckInterval, nvidiagpu.ClusterPolicyNotReadyTimeout)
 
 	By(fmt.Sprintf("Wait up to %s for ClusterPolicy to be ready after node label changes",
 		nvidiagpu.ClusterPolicyReadyTimeout))
@@ -1372,7 +1369,7 @@ func testWorkloadWithSingleMig() {
 	migSingleLabel := "nvidia.com/mig.strategy"
 	expectedLabelValue := "single"
 	err = wait.NodeLabelExists(inittools.APIClient, migSingleLabel, expectedLabelValue,
-		labels.Set(WorkerNodeSelector), QuickInterval, QuickTimeout)
+		labels.Set(WorkerNodeSelector), nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Could not find at least one node with label '%s' set to '%s'", migSingleLabel, expectedLabelValue)
 	glog.V(gpuparams.Gpu10LogLevel).Infof("MIG single strategy label found, proceeding with test")
 
@@ -1441,7 +1438,8 @@ func testWorkloadWithSingleMig() {
 	glog.V(gpuparams.Gpu10LogLevel).Infof(
 		"After updating ClusterPolicy, MIG strategy is now '%v'",
 		updatedClusterPolicyBuilder.Definition.Spec.MIG.Strategy)
-	err = wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.strategy", "single", labels.Set(WorkerNodeSelector), 15*time.Second, 5*time.Minute)
+	err = wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.strategy", "single", labels.Set(WorkerNodeSelector),
+		nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Error checking MIG strategy on nodes: %v", err)
 
 	By("Pull the ready ClusterPolicy with MIG configuration from cluster")
