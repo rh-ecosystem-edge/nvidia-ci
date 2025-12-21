@@ -1137,12 +1137,14 @@ func cleanupGPUOperatorResources() {
 // cleanupClusterPolicy deletes the ClusterPolicy resource
 func cleanupClusterPolicy() {
 	By("Deleting ClusterPolicy")
-	// Since this is out of defer functions, the ClusterPolicy need to be pulled before deleting it.
 	clusterPolicyBuilder, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
-	Expect(err).ToNot(HaveOccurred(), "Error pulling ClusterPolicy: %v", err)
-	_, err = clusterPolicyBuilder.Delete()
-	Expect(err).ToNot(HaveOccurred(), "Error deleting ClusterPolicy: %v", err)
-	glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy deleted successfully")
+	if err == nil && clusterPolicyBuilder.Exists() {
+		_, err = clusterPolicyBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting ClusterPolicy: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy deleted successfully")
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy not found or already deleted")
+	}
 }
 
 // cleanupCSV deletes the ClusterServiceVersion resources
@@ -1163,33 +1165,40 @@ func cleanupCSV() {
 // cleanupSubscription deletes the Subscription resource
 func cleanupSubscription() {
 	By("Deleting Subscription")
-	// Since this is out of defer functions, the Subscription need to be pulled before deleting it.
 	subBuilder, err := olm.PullSubscription(inittools.APIClient, nvidiagpu.SubscriptionName, nvidiagpu.SubscriptionNamespace)
-	Expect(err).ToNot(HaveOccurred(), "Error pulling Subscription: %v", err)
-	err = subBuilder.Delete()
-	Expect(err).ToNot(HaveOccurred(), "Error deleting Subscription: %v", err)
-	glog.V(gpuparams.GpuLogLevel).Infof("Subscription deleted successfully")
+	if err == nil && subBuilder.Exists() {
+		err = subBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting Subscription: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("Subscription deleted successfully")
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("Subscription not found or already deleted")
+	}
 }
 
 // cleanupOperatorGroup deletes the OperatorGroup resource
 func cleanupOperatorGroup() {
 	By("Deleting OperatorGroup")
-	// Since this is out of defer functions, the OperatorGroup need to be pulled before deleting it.
 	ogBuilder, err := olm.PullOperatorGroup(inittools.APIClient, nvidiagpu.OperatorGroupName, nvidiagpu.SubscriptionNamespace)
-	Expect(err).ToNot(HaveOccurred(), "Error pulling OperatorGroup: %v", err)
-	err = ogBuilder.Delete()
-	Expect(err).ToNot(HaveOccurred(), "Error deleting OperatorGroup: %v", err)
-	glog.V(gpuparams.GpuLogLevel).Infof("OperatorGroup deleted successfully")
+	if err == nil && ogBuilder.Exists() {
+		err = ogBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting OperatorGroup: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("OperatorGroup deleted successfully")
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("OperatorGroup not found or already deleted")
+	}
 }
 
 // cleanupGPUOperatorNamespace deletes the GPU Operator namespace
 func cleanupGPUOperatorNamespace() {
 	By("Deleting GPU Operator Namespace")
 	nsBuilder, err := namespace.Pull(inittools.APIClient, nvidiagpu.SubscriptionNamespace)
-	Expect(err).ToNot(HaveOccurred(), "Error pulling Namespace: %v", err)
-	err = nsBuilder.Delete()
-	Expect(err).ToNot(HaveOccurred(), "Error deleting namespace: %v", err)
-	glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s deleted successfully", nvidiagpu.SubscriptionNamespace)
+	if err == nil && nsBuilder.Exists() {
+		err = nsBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting namespace: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s deleted successfully", nvidiagpu.SubscriptionNamespace)
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s not found or already deleted", nvidiagpu.SubscriptionNamespace)
+	}
 }
 
 // cleanupGPUBurnPod deletes the GPU Burn pod
@@ -1213,7 +1222,6 @@ func cleanupGPUBurnConfigmap() {
 	if err == nil {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Found existing gpu-burn configmap '%s', deleting it", burn.ConfigMapName)
 		err = existingConfigmapBuilder.Delete()
-		glog.V(gpuparams.GpuLogLevel).Infof("Successfully deleted gpu-burn configmap '%s'", burn.ConfigMapName)
 		Expect(err).ToNot(HaveOccurred(), "Error deleting gpu-burn configmap: %v", err)
 		glog.V(gpuparams.GpuLogLevel).Infof("Successfully deleted gpu-burn configmap '%s'", burn.ConfigMapName)
 	}
@@ -1510,8 +1518,8 @@ func testWorkloadWithSingleMig() {
 		glog.V(gpuparams.Gpu100LogLevel).Infof("defer11 (configmapBuilder) sleeping for 15 seconds")
 		if cleanupAfterTest {
 			err := configmapBuilder.Delete()
-			time.Sleep(time.Second * 15)
 			Expect(err).ToNot(HaveOccurred())
+			time.Sleep(time.Second * 15)
 		}
 	}()
 
@@ -1576,14 +1584,11 @@ func testWorkloadWithSingleMig() {
 
 	// Need to add checking for other possible GPU's
 	By("Parse the gpu-burn pod logs and check for successful execution with MIG")
-	// migCapabilities[useMigIndex].Available
 	for i := 0; i < migCapabilities[useMigIndex].Total; i++ {
 		match1Mig := strings.Contains(gpuBurnMigLogs, fmt.Sprintf("GPU %d: OK", i))
-		// match2Mig := strings.Contains(gpuBurnMigLogs, fmt.Sprintf("100.0%  proc'd: %d", i))
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Checking if GPU %d: OK is present in logs: %v", i, match1Mig)
 		Expect(match1Mig).ToNot(BeFalse(), "gpu-burn pod execution with MIG was FAILED")
 	}
-	// match1Mig := strings.Contains(gpuBurnMigLogs, "GPU 0: OK")
 	match2Mig := strings.Contains(gpuBurnMigLogs, "100.0%  proc'd:")
 
 	Expect(match2Mig).ToNot(BeFalse(), "gpu-burn pod execution with MIG was FAILED")

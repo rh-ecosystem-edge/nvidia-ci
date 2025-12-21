@@ -123,7 +123,6 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	gpuBurnNsBuilder := namespace.NewBuilder(inittools.APIClient, burn.Namespace)
 	if !gpuBurnNsBuilder.Exists() {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Creating the gpu burn namespace '%s'", burn.Namespace)
-		gpuBurnNsBuilder := namespace.NewBuilder(inittools.APIClient, burn.Namespace)
 		_, err = gpuBurnNsBuilder.Create()
 		Expect(err).ToNot(HaveOccurred(), "error creating gpu burn "+
 			"namespace '%s' : %v ", burn.Namespace, err)
@@ -400,7 +399,6 @@ func SetMIGLabelsOnNodes(migCapabilities []MIGProfileInfo, useMigIndex int, Work
 		_, err = nodeBuilder.Update()
 		Expect(err).ToNot(HaveOccurred(), "Error updating node '%s' with MIG label: %v", nodeBuilder.Definition.Name, err)
 		glog.V(gpuparams.GpuLogLevel).Infof("Successfully set MIG %s strategy label on node '%s'", strategy, nodeBuilder.Definition.Name)
-		glog.V(gpuparams.Gpu10LogLevel).Infof("NOT setting or removing MIG strategy label on node '%s')", nodeBuilder.Definition.Name)
 
 		glog.V(gpuparams.GpuLogLevel).Infof("Setting MIG configuration label %s on node '%s' (overwrite=true)", MigProfile, nodeBuilder.Definition.Name)
 		nodeBuilder = nodeBuilder.WithLabel("nvidia.com/mig.config", MigProfile)
@@ -423,6 +421,7 @@ func ResetMIGLabelsToDisabled(WorkerNodeSelector map[string]string) {
 		_, err = nodeBuilder.Update()
 		Expect(err).ToNot(HaveOccurred(), "Error updating node '%s' with MIG label: %v", nodeBuilder.Definition.Name, err)
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Successfully set MIG configuration label on node '%s'", nodeBuilder.Definition.Name)
+		// Nitpick comment: Deleting strategy label does not help, it reappears after a while on its own
 	}
 
 	// Wait for ClusterPolicy to be notReady
@@ -580,12 +579,6 @@ func CheckGPUBurnPodLogs(gpuBurnMigLogs string, migInstanceCount int) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Gpu-burn pod execution with MIG configuration was successful")
 }
 
-// colorLog returns a colored log message with ANSI escape codes
-// Usage: glog.V(level).Infof("%s", colorLog(colorCyan+colorBold, "Your message"))
-// func colorLog(color, message string) string {
-// 	return fmt.Sprintf("%s%s%s", color, message, colorReset)
-// }
-
 var useColors = os.Getenv("NO_COLOR") == ""
 
 func colorLog(color, message string) string {
@@ -613,6 +606,7 @@ func MIGProfiles(apiClient *clients.Settings, nodeSelector map[string]string) (b
 		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
 	})
 	Expect(err).ToNot(HaveOccurred(), "Error listing driver pods: %v", err)
+	Expect(len(driverPods.Items)).ToNot(BeZero(), "No driver pods found on node %s", nodeName)
 
 	driverPod := driverPods.Items[0]
 	podName := driverPod.Name
@@ -689,6 +683,8 @@ func ExecCmdInPod(apiClient *clients.Settings, podName, namespace string, comman
 	}
 	resultChan := make(chan result, 1)
 
+	// Note: On timeout, the spawned goroutine continues until ExecCommand completes,
+	// but its result is discarded. This is acceptable in test contexts.
 	go func() {
 		outputBuffer, err := podBuilder.ExecCommand(command, containerName)
 		resultChan <- result{buffer: outputBuffer, err: err}
@@ -720,7 +716,7 @@ func parseMIGProfiles(output string) []MIGProfileInfo {
 	line2Regex := regexp.MustCompile(`\|\s+(\d+)\s+(\d+)\s+(\d+)\s+\|`)
 	excludeRegex := regexp.MustCompile(`\|\s+\d+\s+MIG\s+\d+g\.\d+gb\+me`)
 	flavor := "gpu"
-	var exclude bool = true
+	exclude := true
 
 	lines := strings.Split(output, "\n")
 	for _, line := range lines {
