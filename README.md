@@ -63,10 +63,11 @@ The test-runner [script](scripts/test-runner.sh) is the recommended way for exec
 
 General Parameters for the script are controlled by the following environment variables:
 - `TEST_FEATURES`: list of features to be tested.  Subdirectories under `tests` dir that match a feature will be included (internal directories are excluded).  When we have more than one subdirectlory ot tests, they can be listed comma separated.- _required_
-- `TEST_LABELS`: ginkgo query passed to the label-filter option for including/excluding tests - _optional_
+- `TEST_LABELS`: ginkgo query passed to the label-filter option for including/excluding tests. Supports comma-separated labels (AND logic) and `||` operator (OR logic). Examples: `'nvidia-ci,gpu'`, `'nvidia-ci,mps'`, `'nvidia-ci,mig'`, `'deploy || rdma-legacy-sriov'` - _optional_
 - `TEST_VERBOSE`: executes ginkgo with verbose test output - _optional_
 - `TEST_TRACE`: includes full stack trace from ginkgo tests when a failure occurs - _optional_
 - `VERBOSE_SCRIPT`: prints verbose script information when executing the script - _optional_
+- `NO_COLOR`: when used, omits the coloring of logs that appear on beginning of the functions. However it does not affect on the coloring of the logs that ginkgo framework generates. - _optional_
 
 NVIDIA GPU Operator-specific parameters for the script are controlled by the following environment variables:
 - `NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE`: Use only when OCP is on a public cloud, and when you need to scale the cluster to add a GPU-enabled compute node. If cluster already has a GPU enabled worker node, this variable should be unset.
@@ -81,6 +82,9 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 - `NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH`: a JSON patch to apply to a default cluster policy from ALM examples, written according to
    [RFC 6902](http://tools.ietf.org/html/rfc6902) (also see [kubectl patch](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_patch/)) - _optional_
 - `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
+
+NVIDIA MIG parameters for the script are controlled by the following environment variables:
+- `NVIDIAGPU_SINGLE_MIG_PROFILE`: Index number, that chooses the MIG profile from list of available MIG profiles (e.g. 1g.5gb is usually referenced with index 0).  If not specified, a valid random number is used. Typically values 0-5. - _optional_
 
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
 - `NVIDIANETWORK_CATALOGSOURCE`: custom catalogsource to be used.  If not specified, the default "certified-operators" catalog is used - _optional_
@@ -107,6 +111,7 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE`: MacvlanNetwork Custom Resource instance IPAM or IP Address/Subnet mask range for Eth or IB interface - _required_
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - _required_
 - `NVIDIANETWORK_RDMA_GPUDIRECT`: Boolean flag to run RDMA workload with 1 nvidia.com/gpu resource - _optional_
+
 ### Testing MPS with GPU Operator
 
 To test the Multi-Process Service (MPS) functionality, you need to first deploy the GPU Operator and then run the MPS tests without cleaning up the GPU Operator deployment between test suites.
@@ -154,13 +159,61 @@ $ make run-tests
 ```
 This will remove all resources created by both the GPU Operator deployment and MPS tests.
 
+### Testing MIG with GPU Operator
+
+To test the Multi-Instance GPU (MIG) functionality, you need to first deploy the GPU Operator and then run the MIG tests without cleaning up the GPU Operator deployment between test suites.
+
+It is recommended to execute the runner script through the `make run-tests` make target.
+
+#### Steps to run MIG tests:
+
+1. Run mig testcase(s) with nvidia-ci on any cluster
+```
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DUMP_FAILED_TESTS=true
+$ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
+$ export TEST_FEATURES="nvidiagpu"
+$ export TEST_LABELS='nvidia-ci,gpu,gpu-burn-mig,single-mig'
+$ export TEST_TRACE=true
+$ export VERBOSE_LEVEL=100
+$ export NVIDIAGPU_CLEANUP=false
+$ NVIDIAGPU_SINGLE_MIG_PROFILE=1  ## any value of int type, usually 0-5 are valid
+$ make run-tests
+```
+2. Running only MIG testcase(s) on an existing cluster which has GPU operator installed,
+e.g. after executing step 1. MIG testcase(s) can be used from either nvidiagpu or
+mig package. MIG is used in this example. In the other case, use `TEST_FEATURES="nvidiagpu"`
+to execute the testcase from nvidiagpu package.
+```
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DUMP_FAILED_TESTS=true
+$ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
+$ export TEST_FEATURES="mig"
+$ export TEST_LABELS='gpu,single-mig'
+$ export TEST_TRACE=true
+$ export VERBOSE_LEVEL=100
+$ export NVIDIAGPU_SINGLE_MIG_PROFILE=1
+$ export NVIDIAGPU_CLEANUP=false
+$ make run-tests
+```
+
+#### Cleanup:
+
+If the GPU operator and gpu burn pod needs to be cleaned up, just set the cleanup parameter to true
+in the last execution of either steps 1 or 2
+```
+$ export NVIDIAGPU_CLEANUP=true
+```
+
+## Examples:
+
 Example running the end-to-end GPU Operator test case:
 ```
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
 $ export TEST_FEATURES="nvidiagpu"
-$ export TEST_LABELS='nvidia-ci,gpu'
+$ export TEST_LABELS='nvidia-ci,gpu,single-mig'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE="g4dn.xlarge"
@@ -169,7 +222,7 @@ $ export NVIDIAGPU_SUBSCRIPTION_CHANNEL="v23.9"
 $ make run-tests
 Executing nvidiagpu test-runner script
 scripts/test-runner.sh
-ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu" ./tests/nvidiagpu
+ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,single-mig" ./tests/nvidiagpu
 ```
 
 Example running the GPU Operator upgrade testcase (from v23.6 to v24.3) after the end-end testcase.

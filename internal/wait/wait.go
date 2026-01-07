@@ -8,8 +8,11 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nodes"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -39,6 +42,39 @@ func ClusterPolicyReady(apiClient *clients.Settings, clusterPolicyName string, p
 			}
 
 			glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy %s in now in %s state",
+				clusterPolicy.Object.Name, clusterPolicy.Object.Status.State)
+
+			return false, nil
+		})
+}
+
+// ClusterPolicyNotReady Waits until clusterPolicy is NotReady.
+func ClusterPolicyNotReady(apiClient *clients.Settings, clusterPolicyName string, pollInterval,
+	timeout time.Duration) error {
+	glog.V(gpuparams.Gpu10LogLevel).Infof("wait.ClusterPolicyNotReady: %s", clusterPolicyName)
+	return wait.PollUntilContextTimeout(
+		context.TODO(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			clusterPolicy, err := nvidiagpu.Pull(apiClient, clusterPolicyName)
+
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy pull from cluster error: %s\n", err)
+
+				return false, err
+			}
+
+			if clusterPolicy.Object != nil && clusterPolicy.Object.Status.State == "notReady" {
+				glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy %s is now in %s state",
+					clusterPolicy.Object.Name, clusterPolicy.Object.Status.State)
+
+				// this exits out of the PollUntilContextTimeout()
+				return true, nil
+			}
+			if clusterPolicy.Object == nil {
+				glog.V(gpuparams.GpuLogLevel).Info("ClusterPolicy object is nil")
+				return false, nil
+			}
+
+			glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy %s is currently in %s state",
 				clusterPolicy.Object.Name, clusterPolicy.Object.Status.State)
 
 			return false, nil
@@ -102,4 +138,37 @@ func DeploymentCreated(apiClient *clients.Settings, deploymentName, deploymentNa
 		})
 
 	return err == nil
+}
+
+// NodeLabelExists waits for at least one node with the specified label selector to have a label with the given key and value.
+func NodeLabelExists(apiClient *clients.Settings, labelKey, labelValue string, nodeSelector labels.Set, pollInterval,
+	timeout time.Duration) error {
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Waiting for node label '%s'='%s' on nodes with selector: %v", labelKey, labelValue, nodeSelector)
+	return wait.PollUntilContextTimeout(
+		context.TODO(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			nodeBuilders, err := nodes.List(apiClient, metav1.ListOptions{LabelSelector: nodeSelector.String()})
+
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("Error listing nodes: %v", err)
+
+				return false, err
+			}
+
+			for _, node := range nodeBuilders {
+				glog.V(gpuparams.Gpu10LogLevel).Infof("Checking node '%s' for label '%s'", node.Object.Name, labelKey)
+				if value, ok := node.Object.Labels[labelKey]; ok && value == labelValue {
+					glog.V(gpuparams.Gpu100LogLevel).Infof("Found label '%s' with value '%s' on node '%s'", labelKey, labelValue, node.Object.Name)
+
+					// this exits out of the PollUntilContextTimeout()
+					return true, nil
+				} else {
+					glog.V(gpuparams.Gpu10LogLevel).Infof("Label '%s'='%s' not found on node '%s'", labelKey, labelValue, node.Object.Name)
+					return false, nil
+				}
+			}
+
+			glog.V(gpuparams.Gpu10LogLevel).Infof("Label '%s'='%s' not found yet, retrying...", labelKey, labelValue)
+
+			return false, nil
+		})
 }
