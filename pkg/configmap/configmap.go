@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
@@ -12,6 +13,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	corev1Typed "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
@@ -139,6 +141,39 @@ func (builder *Builder) Delete() error {
 	builder.Object = nil
 
 	return nil
+}
+
+// WaitUntilDeleted waits for the duration of the defined timeout or until the configmap is deleted.
+func (builder *Builder) WaitUntilDeleted(timeout time.Duration) error {
+	if valid, err := builder.validate(); !valid {
+		return err
+	}
+
+	glog.V(100).Infof("Waiting for the defined period until configmap %s in namespace %s is deleted",
+		builder.Definition.Name, builder.Definition.Namespace)
+
+	err := wait.PollUntilContextTimeout(
+		context.TODO(), time.Second, timeout, false, func(ctx context.Context) (bool, error) {
+			_, err := builder.apiClient.ConfigMaps(builder.Definition.Namespace).Get(
+				ctx, builder.Definition.Name, metav1.GetOptions{})
+			if err == nil {
+				glog.V(100).Infof("configmap %s/%s still present", builder.Definition.Namespace, builder.Definition.Name)
+
+				return false, nil
+			}
+
+			if k8serrors.IsNotFound(err) {
+				glog.V(100).Infof("configmap %s/%s is gone", builder.Definition.Namespace, builder.Definition.Name)
+
+				return true, nil
+			}
+
+			glog.V(100).Infof("failed to get configmap %s/%s: %v", builder.Definition.Namespace, builder.Definition.Name, err)
+
+			return false, err
+		})
+
+	return err
 }
 
 // Exists checks whether the given configmap exists.

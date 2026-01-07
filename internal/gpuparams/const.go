@@ -5,5 +5,8 @@ const (
 	Label = "gpu"
 
 	// GpuLogLevel custom loglevel of GPU related functions.
-	GpuLogLevel = 90
+	GpuLogLevel    = 90
+	Gpu10LogLevel  = 10
+	Gpu50LogLevel  = 50
+	Gpu100LogLevel = 100
 )

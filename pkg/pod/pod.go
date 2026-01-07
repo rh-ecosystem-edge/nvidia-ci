@@ -292,7 +292,7 @@ func (builder *Builder) WaitUntilDeleted(timeout time.Duration) error {
 	err := wait.PollUntilContextTimeout(
 		context.TODO(), time.Second, timeout, false, func(ctx context.Context) (bool, error) {
 			_, err := builder.apiClient.Pods(builder.Definition.Namespace).Get(
-				context.TODO(), builder.Definition.Name, metav1.GetOptions{})
+				ctx, builder.Definition.Name, metav1.GetOptions{})
 			if err == nil {
 				glog.V(100).Infof("pod %s/%s still present", builder.Definition.Namespace, builder.Definition.Name)
 
