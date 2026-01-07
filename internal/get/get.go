@@ -56,6 +56,13 @@ func CurrentCSVFromSubscription(apiClient *clients.Settings, gpuSubscriptionName
 func GetFirstPodNameWithLabel(apiClient *clients.Settings, podNamespace, podLabelSelector string) (string, error) {
 	podList, err := pod.List(apiClient, podNamespace, v1.ListOptions{LabelSelector: podLabelSelector})
 
+	if err != nil {
+		return "", err
+	}
+
+	if len(podList) == 0 {
+		return "", fmt.Errorf("no pods found in namespace %s with label selector %s", podNamespace, podLabelSelector)
+	}
 	glog.V(gpuparams.GpuLogLevel).Infof("Length of podList matching podLabelSelector is '%v'", len(podList))
 	glog.V(gpuparams.GpuLogLevel).Infof("podList[0] matching podLabelSelector is '%v'",
 		podList[0].Definition.Name)
@@ -92,3 +99,4 @@ func GetClusterArchitecture(apiClient *clients.Settings, nodeSelector map[string
 
 	return "", err
 }
+

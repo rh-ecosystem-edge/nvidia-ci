@@ -42,8 +42,8 @@ const (
 
 	OperatorDeploymentReadyTimeout = 4 * time.Minute
 
-    CsvSucceededCheckInterval = 60 * time.Second
-    CsvSucceededTimeout       = 15 * time.Minute
+	CsvSucceededCheckInterval = 60 * time.Second
+	CsvSucceededTimeout       = 15 * time.Minute
 
 	ClusterPolicyReadyCheckInterval = 60 * time.Second
 	ClusterPolicyReadyTimeout       = 12 * time.Minute
@@ -62,4 +62,10 @@ const (
 	RedeployedBurnPodRunningTimeout   = 3 * time.Minute
 	RedeployedBurnPodSuccessTimeout   = 8 * time.Minute
 	RedeployedBurnLogCollectionPeriod = 500 * time.Second
+
+	ClusterPolicyNotReadyCheckInterval = 15 * time.Second
+	ClusterPolicyNotReadyTimeout       = 3 * time.Minute
+
+	LabelCheckInterval = 15 * time.Second
+	LabelCheckTimeout  = 3 * time.Minute
 )

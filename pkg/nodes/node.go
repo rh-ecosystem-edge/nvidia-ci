@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
@@ -200,6 +201,7 @@ func (builder *Builder) Delete() error {
 }
 
 // WithNewLabel defines the new label placed in the Node metadata.
+// This method will NOT overwrite existing labels - use WithLabel() for that.
 func (builder *Builder) WithNewLabel(key, value string) *Builder {
 	if valid, _ := builder.validate(); !valid {
 		return builder
@@ -225,6 +227,30 @@ func (builder *Builder) WithNewLabel(key, value string) *Builder {
 		} else {
 			builder.errorMsg = fmt.Sprintf("cannot overwrite existing node label: %s", key)
 		}
+	}
+
+	return builder
+}
+
+// WithLabel sets a label on the Node metadata, overwriting if it already exists.
+// Equivalent to: kubectl label node <name> <key>=<value> --overwrite
+func (builder *Builder) WithLabel(key, value string) *Builder {
+	if valid, _ := builder.validate(); !valid {
+		return builder
+	}
+
+	glog.V(gpuparams.Gpu100LogLevel).Infof("Setting label %s=%s on node %s (overwrite=true)", key, value, builder.Definition.Name)
+
+	if key == "" {
+		builder.errorMsg = "error to set empty key to node"
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Failed to apply label with an empty key to node %s", builder.Definition.Name)
+		return builder
+	}
+
+	if builder.Definition.Labels == nil {
+		builder.Definition.Labels = map[string]string{key: value}
+	} else {
+		builder.Definition.Labels[key] = value
 	}
 
 	return builder
