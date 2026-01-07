@@ -36,7 +36,7 @@ import (
 )
 
 // ANSI color constants for console output highlighting
-// colors are /033[31m - red through /033[37m - white
+// colors are \033[31m - red through \033[37m - white
 const (
 	colorReset = "\033[0m"
 	colorCyan  = "\033[36m"
@@ -579,7 +579,7 @@ func CheckGPUBurnPodLogs(gpuBurnMigLogs string, migInstanceCount int) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Gpu-burn pod execution with MIG configuration was successful")
 }
 
-var useColors = os.Getenv("NO_COLOR") == ""
+var useColors = os.Getenv("NO_COLOR") != "true"
 
 func colorLog(color, message string) string {
 	if !useColors {

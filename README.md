@@ -67,6 +67,7 @@ General Parameters for the script are controlled by the following environment va
 - `TEST_VERBOSE`: executes ginkgo with verbose test output - _optional_
 - `TEST_TRACE`: includes full stack trace from ginkgo tests when a failure occurs - _optional_
 - `VERBOSE_SCRIPT`: prints verbose script information when executing the script - _optional_
+- `NO_COLOR`: when used, omits the coloring of logs that appear on beginning of the functions. However it does not affect on the coloring of the logs that ginkgo framework generates. - _optional_
 
 NVIDIA GPU Operator-specific parameters for the script are controlled by the following environment variables:
 - `NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE`: Use only when OCP is on a public cloud, and when you need to scale the cluster to add a GPU-enabled compute node. If cluster already has a GPU enabled worker node, this variable should be unset.
