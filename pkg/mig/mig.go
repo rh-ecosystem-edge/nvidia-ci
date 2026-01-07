@@ -44,7 +44,12 @@ const (
 )
 
 // TestSingleMIGGPUBurn performs the GPU Burn test with single strategy MIG Configuration
-// Check mig.capable label
+// Check mig.capable label (label might not exist after preceding tests, but it should reappear as either true or false)
+//
+//	therefore have to use the wait.NodeLabelExists() function to check for the label and value
+//	If the label is not found, skip the test
+//	If the label is found and value is false, skip the test
+//
 // Clean up existing GPU workload resources, if any
 // Read MIG parameters from environment variable, returns -1 for random selection
 // Query MIG profiles from hardware and select one of them as a strategy label for the GPU node
@@ -64,7 +69,11 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	By("Check mig.capability on GPU nodes")
 	err := wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.capable", "true", labels.Set(WorkerNodeSelector),
 		nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
-	Expect(err).ToNot(HaveOccurred(), "Error checking MIG capability on nodes: %v", err)
+	if err != nil {
+		glog.V(gpuparams.GpuLogLevel).Infof("Error checking MIG capability on nodes: %v", err)
+		Skip("Skipping test: mig.capable label not found on at least 1 GPU node or value is not true")
+	}
+	glog.V(gpuparams.Gpu100LogLevel).Infof("mig.capable label found on at least 1 GPU node with value 'true', proceeding with test")
 
 	// ***** Cleaning up previous GPU Burn resources
 	By("Cleanup if necessary")

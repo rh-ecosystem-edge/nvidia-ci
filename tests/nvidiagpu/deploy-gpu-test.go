@@ -1264,8 +1264,10 @@ func testWorkloadWithSingleMig() {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Found %t label '%s' with value '%s' on node '%s'", migCapableAvailable, migCapableLabel, labelValue, node.Object.Name)
 		break
 	}
-	Expect(migCapableAvailable).To(BeTrue(), "mig.capable label not found on at least 1 GPU nodes")
-	Expect(migCapableValue).To(Equal("true"), "mig.capable label value is not true")
+	if !migCapableAvailable || migCapableValue != "true" {
+		glog.V(gpuparams.GpuLogLevel).Infof("Skipping test:  mig.capable label not found on at least 1 GPU nodes or value is not true")
+		Skip("No GPU labeled worker nodes were found and not scaling current cluster")
+	}
 	glog.V(gpuparams.Gpu100LogLevel).Infof("mig.capable label found on at least 1 GPU node with value '%s', proceeding with test", migCapableValue)
 
 	By("Starting GPU Burn with single strategy MIG Configuration testcase")

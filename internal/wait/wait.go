@@ -161,6 +161,9 @@ func NodeLabelExists(apiClient *clients.Settings, labelKey, labelValue string, n
 
 					// this exits out of the PollUntilContextTimeout()
 					return true, nil
+				} else {
+					glog.V(gpuparams.Gpu10LogLevel).Infof("Label '%s'='%s' not found on node '%s'", labelKey, labelValue, node.Object.Name)
+					return false, nil
 				}
 			}
 
