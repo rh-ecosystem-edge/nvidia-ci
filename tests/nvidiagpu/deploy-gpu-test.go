@@ -1109,10 +1109,20 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 		})
 
 		It("Test GPU Workload with single strategy MIG Configuration", Label("gpu-burn-mig"), func() {
+			// Skip if gpu-burn-mig label is not in the ginkgo label filter
+			if !mig.IsLabelInFilter("gpu-burn-mig") {
+				glog.V(gpuparams.GpuLogLevel).Infof("Skipping test: 'gpu-burn-mig' label not present in ginkgo label filter")
+				Skip("Test skipped: 'gpu-burn-mig' label not present in ginkgo label filter")
+			}
 			testWorkloadWithSingleMig()
 		})
 
 		It("Test GPU Workload with single strategy MIG Configuration in mig package", Label("single-mig"), func() {
+			// Skip if single-mig label is not in the ginkgo label filter
+			if !mig.IsLabelInFilter("single-mig") {
+				glog.V(gpuparams.GpuLogLevel).Infof("Skipping test: 'single-mig' label not present in ginkgo label filter")
+				Skip("Test skipped: 'single-mig' label not present in ginkgo label filter")
+			}
 			cleanup := cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck)
 			mig.TestSingleMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanup)
 		})
@@ -1264,10 +1274,8 @@ func testWorkloadWithSingleMig() {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Found %t label '%s' with value '%s' on node '%s'", migCapableAvailable, migCapableLabel, labelValue, node.Object.Name)
 		break
 	}
-	if !migCapableAvailable || migCapableValue != "true" {
-		glog.V(gpuparams.GpuLogLevel).Infof("Skipping test:  mig.capable label not found on at least 1 GPU nodes or value is not true")
-		Skip("No GPU labeled worker nodes were found and not scaling current cluster")
-	}
+	Expect(migCapableAvailable).To(BeTrue(), "mig.capable label not found on at least 1 GPU nodes")
+	Expect(migCapableValue).To(Equal("true"), "mig.capable label value is not true")
 	glog.V(gpuparams.Gpu100LogLevel).Infof("mig.capable label found on at least 1 GPU node with value '%s', proceeding with test", migCapableValue)
 
 	By("Starting GPU Burn with single strategy MIG Configuration testcase")

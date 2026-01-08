@@ -69,11 +69,7 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	By("Check mig.capability on GPU nodes")
 	err := wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.capable", "true", labels.Set(WorkerNodeSelector),
 		nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
-	if err != nil {
-		glog.V(gpuparams.GpuLogLevel).Infof("Error checking MIG capability on nodes: %v", err)
-		Skip("Skipping test: mig.capable label not found on at least 1 GPU node or value is not true")
-	}
-	glog.V(gpuparams.Gpu100LogLevel).Infof("mig.capable label found on at least 1 GPU node with value 'true', proceeding with test")
+	Expect(err).ToNot(HaveOccurred(), "Error checking MIG capability on nodes: %v", err)
 
 	// ***** Cleaning up previous GPU Burn resources
 	By("Cleanup if necessary")
@@ -285,6 +281,30 @@ func cleanupGPUBurnNamespace(burnNamespace string) {
 		Expect(err).ToNot(HaveOccurred(), "Error deleting burn namespace: %v", err)
 		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s deleted successfully", burnNamespace)
 	}
+}
+
+// IsLabelInFilter checks if a specific label is present in the Ginkgo label filter from command line.
+// Returns true if the label is found in the filter, false otherwise.
+func IsLabelInFilter(label string) bool {
+	filterQuery := GinkgoLabelFilter()
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Checking if label '%s' is present in Ginkgo label filter: %s", label, filterQuery)
+
+	// If no filter is set, the label is not in the filter
+	if filterQuery == "" {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("No label filter set, label '%s' is not in filter", label)
+		return false
+	}
+
+	// Check if the label is present in the filter string
+	// Use word boundaries to avoid partial matches (e.g., "single-mig" should not match "single-mig-test")
+	// Simple check: label should appear as a whole word (comma-separated or at boundaries)
+	labelInFilter := strings.Contains(filterQuery, label)
+	if labelInFilter {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Label '%s' is present in Ginkgo label filter", label)
+	} else {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Label '%s' is not present in Ginkgo label filter", label)
+	}
+	return labelInFilter
 }
 
 // ShouldKeepOperator checks if the operator should be kept based on test labels and upgrade channel

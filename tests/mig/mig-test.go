@@ -78,6 +78,11 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 		})
 
 		It("Test GPU workload with single strategy MIG Configuration", Label("single-mig"), func() {
+			// Skip if single-mig label is not in the ginkgo label filter
+			if !mig.IsLabelInFilter("single-mig") {
+				glog.V(gpuparams.GpuLogLevel).Infof("Skipping test: 'single-mig' label not present in ginkgo label filter")
+				Skip("Test skipped: 'single-mig' label not present in ginkgo label filter")
+			}
 			mig.TestSingleMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
 		})
 
