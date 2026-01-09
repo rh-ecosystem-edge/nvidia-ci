@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"strings"
 	"time"
 
@@ -40,6 +41,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/mig"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -86,6 +88,7 @@ var (
 	CurrentCSV                 = ""
 	CurrentCSVVersion          = ""
 	clusterArchitecture        = UndefinedValue
+	labelsToCheck              = []string{}
 )
 
 var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
@@ -102,6 +105,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 	Context("DeployGpu", Label("deploy-gpu-with-dtk"), func() {
 
 		BeforeAll(func() {
+			glog.V(0).Infof("Start of the test case, BeforeAll")
 			if nvidiaGPUConfig.InstanceType == "" {
 				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE" +
 					" is not set, skipping scaling cluster")
@@ -142,11 +146,17 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			cleanupAfterTest = nvidiaGPUConfig.CleanupAfterTest
+			glog.V(0).Infof("CleanupAfterTest: %v", cleanupAfterTest)
 
-			if cleanupAfterTest {
+			// if any of the following labels are present, the operator should be kept
+			labelsToCheck = []string{"operator-upgrade", "single-mig"}
+			glog.V(0).Infof("LabelsToCheck: %v", labelsToCheck)
+
+			if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 				glog.V(gpuparams.GpuLogLevel).Info("NVIDIAGPU_CLEANUP is not set or is set to true; cleaning up resources after test case execution.")
 			} else {
 				glog.V(gpuparams.GpuLogLevel).Infof("NVIDIAGPU_CLEANUP is set to '%v'; skipping cleanup after test case execution.", cleanupAfterTest)
+				glog.V(gpuparams.GpuLogLevel).Infof("... or labels prevent immediate cleanup")
 			}
 
 			if nvidiaGPUConfig.DeployFromBundle {
@@ -238,7 +248,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 		})
 
 		BeforeEach(func() {
-
+			glog.V(0).Infof(
+				"Verboselevel: %s GPUloglevel: %d",
+				inittools.GeneralConfig.VerboseLevel, gpuparams.GpuLogLevel)
 		})
 
 		AfterEach(func() {
@@ -246,10 +258,14 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 		})
 
 		AfterAll(func() {
-
+			glog.V(gpuparams.Gpu10LogLevel).Infof("cleanup in AfterAll")
 			if nfdInstance.CleanupAfterInstall && cleanupAfterTest {
 				err := nfd.Cleanup(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "Error cleaning up NFD resources: %v", err)
+			}
+			// Cleanup GPU Operator Resources, if requested
+			if cleanupAfterTest {
+				cleanupGPUOperatorResources()
 			}
 		})
 
@@ -317,7 +333,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					pulledMachineSetBuilder.Definition.ObjectMeta.Name, err)
 
 				defer func() {
-					if cleanupAfterTest {
+					defer GinkgoRecover()
+					if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 						err := pulledMachineSetBuilder.Delete()
 						Expect(err).ToNot(HaveOccurred())
 					}
@@ -461,7 +478,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			defer func() {
-				if cleanupAfterTest {
+				defer GinkgoRecover()
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					err := nsBuilder.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -496,7 +514,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				}
 
 				defer func() {
-					if cleanupAfterTest {
+					defer GinkgoRecover()
+					if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 						err := ogBuilder.Delete()
 						Expect(err).ToNot(HaveOccurred())
 					}
@@ -534,7 +553,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				}
 
 				defer func() {
-					if cleanupAfterTest {
+					defer GinkgoRecover()
+					if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 						err := createdSub.Delete()
 						Expect(err).ToNot(HaveOccurred())
 					}
@@ -621,7 +641,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				"succeeded")
 
 			defer func() {
-				if cleanupAfterTest {
+				defer GinkgoRecover()
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					err := clusterCSV.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -651,7 +672,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				createdClusterPolicyBuilder.Definition.Name)
 
 			defer func() {
-				if cleanupAfterTest {
+				defer GinkgoRecover()
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					_, err := createdClusterPolicyBuilder.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -732,11 +754,29 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			defer func() {
-				if cleanupAfterTest {
+				defer GinkgoRecover()
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					err := gpuBurnNsBuilder.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
 			}()
+
+			// If there is a previously deployed gpu-burn pod, delete it.
+			// Any error is ignored, as the pod is expected to not be found.
+
+			By("Pull the possibly existing gpu-burn pod object from the cluster")
+			currentGpuBurnPodPulled, _ := pod.Pull(inittools.APIClient, burn.PodName, burn.Namespace)
+
+			currentGpuBurnPodName, _ := get.GetFirstPodNameWithLabel(inittools.APIClient, burn.Namespace,
+				burn.PodLabel)
+			glog.V(gpuparams.GpuLogLevel).Infof("gpuPodName is %s ", currentGpuBurnPodName)
+
+			// If pod name is not nil, delete it.
+			if currentGpuBurnPodPulled != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("Deleting gpu-burn pod")
+				_, deleteErr := currentGpuBurnPodPulled.Delete()
+				Expect(deleteErr).ToNot(HaveOccurred(), "Error deleting gpu-burn pod: %v", deleteErr)
+			}
 
 			By("Deploy GPU Burn configmap in test-gpu-burn namespace")
 			gpuBurnConfigMap, err := gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName,
@@ -754,7 +794,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				configmapBuilder.Definition.Name)
 
 			defer func() {
-				if cleanupAfterTest {
+				defer GinkgoRecover()
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					err := configmapBuilder.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -764,7 +805,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod image name is: '%s', in namespace '%s'",
 				BurnImageName[clusterArchitecture], burn.Namespace)
 
-			gpuBurnPod, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.Namespace, burn.Namespace,
+			gpuBurnPod, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.PodName, burn.Namespace,
 				BurnImageName[(clusterArchitecture)], nvidiagpu.BurnPodCreationTimeout)
 			Expect(err).ToNot(HaveOccurred(), "Error creating gpu burn pod: %v", err)
 
@@ -792,7 +833,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Cleanup gpu-burn pod only if cleanupAfterTest is true and OperatorUpgradeToChannel is undefined")
 			defer func() {
-				if cleanupAfterTest && OperatorUpgradeToChannel == UndefinedValue {
+				defer GinkgoRecover()
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) && OperatorUpgradeToChannel == UndefinedValue {
 					_, err := gpuPodPulled.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -968,7 +1010,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				"in json: %v", string(cpReadyAgainJSON))
 
 			By("Pull the previously deployed gpu-burn pod object from the cluster")
-			currentGpuBurnPodPulled, err := pod.Pull(inittools.APIClient, burn.Namespace, burn.Namespace)
+			currentGpuBurnPodPulled, err := pod.Pull(inittools.APIClient, burn.PodName, burn.Namespace)
 			Expect(err).ToNot(HaveOccurred(), "error pulling previously deployed and completed "+
 				"gpu-burn pod from namespace '%s' :  %v ", burn.Namespace, err)
 
@@ -998,7 +1040,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("cluster architecture for GPU enabled worker node is: %s",
 				clusterArch)
 
-			gpuBurnPod2, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.Namespace, burn.Namespace,
+			gpuBurnPod2, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.PodName, burn.Namespace,
 				BurnImageName[(clusterArch)], nvidiagpu.BurnPodPostUpgradeCreationTimeout)
 			Expect(err).ToNot(HaveOccurred(), "Error re-building gpu burn pod object after "+
 				"upgrade: %v", err)
@@ -1026,7 +1068,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				"namespace '%s' :  %v ", burn.Namespace, err)
 
 			defer func() {
-				if cleanupAfterTest {
+				defer GinkgoRecover()
+				if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 					_, err := gpuBurnPod2Pulled.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -1063,5 +1106,133 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 		})
 
+		It("Test GPU Workload with single strategy MIG Configuration in mig package", Label("single-mig"), func() {
+			// Skip if single-mig label is not in the ginkgo label filter
+			if !mig.IsLabelInFilter("single-mig") {
+				glog.V(gpuparams.GpuLogLevel).Infof("Skipping test: 'single-mig' label not present in ginkgo label filter")
+				Skip("Test skipped: 'single-mig' label not present in ginkgo label filter")
+			}
+			cleanup := cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck)
+			mig.TestSingleMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanup)
+		})
 	})
 })
+
+// cleanupGPUOperatorResources performs cleanup of GPU Operator resources
+// It checks if cleanup should run based on cleanupAfterTest and cleanup label
+func cleanupGPUOperatorResources() {
+	cleanupClusterPolicy()
+	cleanupCSV()
+	cleanupSubscription()
+	cleanupOperatorGroup()
+	cleanupGPUOperatorNamespace()
+	cleanupGPUBurnPod()
+	cleanupGPUBurnConfigmap()
+	cleanupGPUBurnNamespace()
+
+	glog.V(gpuparams.GpuLogLevel).Infof("Completed cleanup of GPU Operator Resources")
+}
+
+// cleanupClusterPolicy deletes the ClusterPolicy resource
+func cleanupClusterPolicy() {
+	By("Deleting ClusterPolicy")
+	clusterPolicyBuilder, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
+	if err == nil && clusterPolicyBuilder.Exists() {
+		_, err = clusterPolicyBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting ClusterPolicy: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy deleted successfully")
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy not found or already deleted")
+	}
+}
+
+// cleanupCSV deletes the ClusterServiceVersion resources
+func cleanupCSV() {
+	By("Deleting CSV")
+	// Since this is out of defer functions, the CSV need to be listed before deleting gpu-operator CSV.
+	csvList, err := olm.ListClusterServiceVersion(inittools.APIClient, nvidiagpu.SubscriptionNamespace)
+	Expect(err).ToNot(HaveOccurred(), "Error listing CSV: %v", err)
+	for _, csv := range csvList {
+		if strings.Contains(csv.Definition.Name, "gpu-operator") {
+			err := csv.Delete()
+			Expect(err).ToNot(HaveOccurred(), "Error deleting CSV: %v", err)
+			glog.V(gpuparams.GpuLogLevel).Infof("CSV %s deleted successfully", csv.Definition.Name)
+		}
+	}
+}
+
+// cleanupSubscription deletes the Subscription resource
+func cleanupSubscription() {
+	By("Deleting Subscription")
+	subBuilder, err := olm.PullSubscription(inittools.APIClient, nvidiagpu.SubscriptionName, nvidiagpu.SubscriptionNamespace)
+	if err == nil && subBuilder.Exists() {
+		err = subBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting Subscription: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("Subscription deleted successfully")
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("Subscription not found or already deleted")
+	}
+}
+
+// cleanupOperatorGroup deletes the OperatorGroup resource
+func cleanupOperatorGroup() {
+	By("Deleting OperatorGroup")
+	ogBuilder, err := olm.PullOperatorGroup(inittools.APIClient, nvidiagpu.OperatorGroupName, nvidiagpu.SubscriptionNamespace)
+	if err == nil && ogBuilder.Exists() {
+		err = ogBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting OperatorGroup: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("OperatorGroup deleted successfully")
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("OperatorGroup not found or already deleted")
+	}
+}
+
+// cleanupGPUOperatorNamespace deletes the GPU Operator namespace
+func cleanupGPUOperatorNamespace() {
+	By("Deleting GPU Operator Namespace")
+	nsBuilder, err := namespace.Pull(inittools.APIClient, nvidiagpu.SubscriptionNamespace)
+	if err == nil && nsBuilder.Exists() {
+		err = nsBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting namespace: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s deleted successfully", nvidiagpu.SubscriptionNamespace)
+	} else {
+		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s not found or already deleted", nvidiagpu.SubscriptionNamespace)
+	}
+}
+
+// cleanupGPUBurnPod deletes the GPU Burn pod
+func cleanupGPUBurnPod() {
+	By("Deleting GPU Burn Pod")
+	gpuBurnPodName, err := get.GetFirstPodNameWithLabel(inittools.APIClient, burn.Namespace, burn.PodLabel)
+	if err == nil {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Found existing gpu-burn pod '%s', deleting it", gpuBurnPodName)
+		existingPodBuilder, err := pod.Pull(inittools.APIClient, gpuBurnPodName, burn.Namespace)
+		Expect(err).ToNot(HaveOccurred(), "Error pulling gpu-burn pod: %v", err)
+		_, err = existingPodBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting gpu-burn pod: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("Successfully deleted gpu-burn pod '%s'", gpuBurnPodName)
+	}
+}
+
+// cleanupGPUBurnConfigmap deletes the GPU Burn configmap
+func cleanupGPUBurnConfigmap() {
+	By("Deleting GPU Burn Configmap")
+	existingConfigmapBuilder, err := configmap.Pull(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
+	if err == nil {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Found existing gpu-burn configmap '%s', deleting it", burn.ConfigMapName)
+		err = existingConfigmapBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting gpu-burn configmap: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("Successfully deleted gpu-burn configmap '%s'", burn.ConfigMapName)
+	}
+}
+
+// cleanupGPUBurnNamespace deletes the GPU Burn namespace
+func cleanupGPUBurnNamespace() {
+	By("Deleting GPU Burn Namespace")
+	burnNsBuilder, err := namespace.Pull(inittools.APIClient, burn.Namespace)
+	if err == nil {
+		err = burnNsBuilder.Delete()
+		Expect(err).ToNot(HaveOccurred(), "Error deleting burn namespace: %v", err)
+		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s deleted successfully", burn.Namespace)
+	}
+}
