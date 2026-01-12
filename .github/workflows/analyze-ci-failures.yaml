@@ -1,0 +1,277 @@
+name: Summarize CI Failures
+
+on:
+  # Automatically trigger when Prow job status is reported
+  status:
+
+  # Allow manual re-analysis of any failed job
+  workflow_dispatch:
+    inputs:
+      prow_url:
+        description: 'Prow job URL to analyze (e.g., https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/...)'
+        required: true
+        type: string
+      comment_on_pr:
+        description: '(Optional) Override PR number for comment - for testing only'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: read
+
+jobs:
+  summarize-failure:
+    # Run for:
+    # 1. Manual dispatch (workflow_dispatch), OR
+    # 2. Status events that are failures from Prow nvidia-gpu-operator jobs
+    # Note: We use startsWith to match Prow CI job context format (ci/prow/...)
+    # This is more secure than contains() as it prevents context spoofing
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'status' &&
+       github.event.state == 'failure' &&
+       startsWith(github.event.context, 'ci/prow/') &&
+       contains(github.event.context, 'nvidia-gpu-operator'))
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # Allow time for model download + slow CPU inference
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: workflows/ci_failure_summarizer/requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r workflows/ci_failure_summarizer/requirements.txt
+
+      # Cache Ollama binary (~100MB) and models (~1GB for llama3.2:1b)
+      - name: Cache Ollama binary
+        id: cache-ollama-bin
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/ollama
+          key: ollama-bin-v0.13.5
+      
+      - name: Cache Ollama models
+        id: cache-ollama-models
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama
+          key: ollama-models-llama3.2-1b-v1
+
+      - name: Install Ollama
+        if: steps.cache-ollama-bin.outputs.cache-hit != 'true'
+        run: |
+          # Install pinned Ollama version with checksum verification for security
+          # Avoid piping remote scripts to shell - download and verify instead
+          OLLAMA_VERSION="v0.13.5"
+          
+          echo "Downloading Ollama ${OLLAMA_VERSION}..."
+          curl -fsSL -o ollama-linux-amd64.tgz \
+            "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tgz"
+          curl -fsSL -o sha256sum.txt \
+            "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/sha256sum.txt"
+          
+          echo "Verifying checksum..."
+          # Extract just the line for our file and verify
+          grep "ollama-linux-amd64.tgz" sha256sum.txt | sed 's|./||' > ollama.sha256
+          sha256sum -c ollama.sha256
+          
+          echo "Extracting and installing Ollama..."
+          tar -xzf ollama-linux-amd64.tgz
+          sudo install -m 755 bin/ollama /usr/local/bin/ollama
+          
+          # Clean up
+          rm -rf ollama-linux-amd64.tgz sha256sum.txt ollama.sha256 bin/ lib/
+          
+          # Verify installation
+          ollama --version
+      
+      - name: Verify Ollama installation
+        if: steps.cache-ollama-bin.outputs.cache-hit == 'true'
+        run: |
+          echo "Using cached Ollama binary"
+          ollama --version
+
+      - name: Pull Ollama model
+        run: |
+          # Start Ollama server temporarily to pull model
+          ollama serve &
+          OLLAMA_PID=$!
+          
+          # Wait for server to be ready
+          SERVER_READY=false
+          for i in {1..30}; do
+            if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+              echo "Ollama server is ready"
+              SERVER_READY=true
+              break
+            fi
+            echo "Waiting for Ollama server... ($i/30)"
+            sleep 1
+          done
+          
+          if [ "$SERVER_READY" != "true" ]; then
+            echo "::error::Ollama server failed to start"
+            exit 1
+          fi
+          
+          # Pull model (will be fast if cached)
+          echo "Pulling llama3.2:1b model..."
+          ollama pull llama3.2:1b
+          
+          # Verify model is available
+          ollama list
+          
+          # Stop server (will restart in summarize step)
+          kill $OLLAMA_PID 2>/dev/null || true
+
+      - name: Parse job info
+        id: parse
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PROW_URL: ${{ inputs.prow_url }}
+          STATUS_TARGET_URL: ${{ github.event.target_url }}
+          STATUS_CONTEXT: ${{ github.event.context }}
+        run: |
+          python3 << 'EOF'
+          import re
+          import os
+          import uuid
+
+          def set_output(name, value):
+              """Write output using multiline delimiter to prevent injection."""
+              # Sanitize: strip newlines and control chars from value
+              safe_value = ''.join(c for c in str(value) if c.isprintable() or c == ' ')
+              delimiter = f"ghadelimiter_{uuid.uuid4().hex}"
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                  f.write(f"{name}<<{delimiter}\n{safe_value}\n{delimiter}\n")
+
+          event_name = os.environ.get("EVENT_NAME", "")
+          
+          # Get URL from either manual input or status event
+          if event_name == "workflow_dispatch":
+              url = os.environ.get("INPUT_PROW_URL", "")
+              print(f"Manual trigger with URL: {url}")
+          else:
+              url = os.environ.get("STATUS_TARGET_URL", "")
+              context = os.environ.get("STATUS_CONTEXT", "")
+              print(f"Status event - Context: {context}")
+              print(f"Status event - URL: {url}")
+
+          # Parse: .../pr-logs/pull/org_repo/PR/job-name/build-id
+          match = re.search(r'/pr-logs/pull/([^/]+)/(\d+)/([^/]+)/(\d+)', url)
+
+          # Expected org_repo for this workflow (must match to prevent cross-repo issues)
+          EXPECTED_ORG_REPO = "rh-ecosystem-edge_nvidia-ci"
+
+          if match:
+              org_repo, pr_number, job_name, build_id = match.groups()
+              print(f"Parsed: org_repo={org_repo}, PR={pr_number}, Job={job_name}, Build={build_id}")
+
+              # Validate org_repo matches this repository to prevent commenting on wrong PRs
+              if org_repo != EXPECTED_ORG_REPO:
+                  print(f"::error::Prow URL is for '{org_repo}', expected '{EXPECTED_ORG_REPO}'")
+                  print("This workflow only supports PRs from the nvidia-ci repository")
+                  set_output("parsed", "false")
+                  exit(1)
+
+              set_output("org_repo", org_repo)
+              set_output("pr_number", pr_number)
+              set_output("job_name", job_name)
+              set_output("build_id", build_id)
+              set_output("prow_url", url)
+              set_output("parsed", "true")
+          else:
+              print(f"::error::Could not parse Prow URL: {url}")
+              set_output("parsed", "false")
+              exit(1)
+          EOF
+
+      - name: Generate AI summary
+        id: summarize
+        env:
+          PROW_URL: ${{ steps.parse.outputs.prow_url }}
+        run: |
+          # Start Ollama server (model is already cached)
+          echo "Starting Ollama server..."
+          ollama serve &
+          
+          # Wait for server to be ready
+          for i in {1..30}; do
+            if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+              echo "Ollama server is ready"
+              break
+            fi
+            echo "Waiting for Ollama server... ($i/30)"
+            sleep 1
+          done
+          
+          # Verify server is running
+          if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+            echo "::error::Ollama server failed to start"
+            exit 1
+          fi
+          
+          # Debug: List available models
+          echo "Available models:"
+          ollama list
+          
+          # Debug: Check if model is loaded
+          echo "Testing model availability..."
+          curl -s http://localhost:11434/api/tags | head -c 500
+          echo ""
+          
+          # Run the summarizer
+          python -m workflows.ci_failure_summarizer.summarize
+
+      - name: Post PR comment
+        if: steps.summarize.outputs.summary != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const summary = process.env.SUMMARY;
+            const prNumber = process.env.PR_NUMBER;
+
+            if (!prNumber) {
+              console.log('No PR number available, skipping comment');
+              return;
+            }
+
+            console.log(`Posting summary to PR #${prNumber}`);
+
+            try {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: parseInt(prNumber),
+                body: summary
+              });
+              console.log('Comment posted successfully');
+            } catch (error) {
+              console.log(`::warning::Failed to post comment to PR #${prNumber}: ${error.message}`);
+              console.log('This may happen if the PR is closed or permissions are insufficient');
+            }
+        env:
+          SUMMARY: ${{ steps.summarize.outputs.summary }}
+          PR_NUMBER: ${{ inputs.comment_on_pr || steps.summarize.outputs.pr_number || steps.parse.outputs.pr_number }}
+
+      - name: Report error
+        if: failure()
+        env:
+          SUMMARIZE_ERROR: ${{ steps.summarize.outputs.error }}
+        run: |
+          if [ -n "$SUMMARIZE_ERROR" ]; then
+            echo "::error::$SUMMARIZE_ERROR"
+          else
+            echo "::error::Workflow failed - check logs for details"
+          fi
