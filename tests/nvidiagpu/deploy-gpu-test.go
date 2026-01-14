@@ -1115,6 +1115,15 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			cleanup := cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck)
 			mig.TestSingleMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanup)
 		})
+
+		It("Test GPU workload with mixed strategy MIG Configuration", Label("mixed-mig"), func() {
+			// Skip if mixed-mig label is not in the ginkgo label filter
+			if !mig.IsLabelInFilter("mixed-mig") {
+				glog.V(gpuparams.GpuLogLevel).Infof("Skipping test: 'mixed-mig' label not present in ginkgo label filter")
+				Skip("Test skipped: 'mixed-mig' label not present in ginkgo label filter")
+			}
+			mig.TestMixedMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
+		})
 	})
 })
 

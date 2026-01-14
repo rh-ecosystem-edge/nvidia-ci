@@ -85,6 +85,9 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 
 NVIDIA MIG parameters for the script are controlled by the following environment variables:
 - `NVIDIAGPU_SINGLE_MIG_PROFILE`: Index number, that chooses the MIG profile from list of available MIG profiles (e.g. 1g.5gb is usually referenced with index 0).  If not specified, a valid random number is used. Typically values 0-5. - _optional_
+- `NVIDIAGPU_MIG_INSTANCES`: List of of numbers representing how many GPU slice instances are to be used for each profile when creating a pod. If there are 6 profiles, first 6 numbers (e.g. 2,1,1,0,0,0) indicate how many (2) GPU slices of profile 0, how many (1) GPU slice of profile 1 and how many (1) GPU slice of profile 2 and the rest are not used.
+- `NVIDIAGPU_DELAY_BETWEEN_PODS`: Default value 0, valid values 0 - 315 (seconds). In some MIG testcases there may be more than 1 pod launched. This parameter controls the delay between the pod launches. The lifetime of the pod is set to 300 seconds. This may be used to have the pods running completely simultaneously, mostly overlapping (e.g. 15-80), slightly overlapping (e.g. 200-280 seconds), or non overlapping (over 300 seconds). Values over valid values are reset to closest limit (either 0 or 315).
+
 
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
 - `NVIDIANETWORK_CATALOGSOURCE`: custom catalogsource to be used.  If not specified, the default "certified-operators" catalog is used - _optional_
@@ -167,33 +170,42 @@ It is recommended to execute the runner script through the `make run-tests` make
 
 #### Steps to run MIG tests:
 
-1. Run mig testcase(s) with nvidia-ci on any cluster
+1. Run mig testcase(s) after nvidia-ci on any cluster
 ```
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
 $ export TEST_FEATURES="nvidiagpu"
-$ export TEST_LABELS='nvidia-ci,gpu,gpu-burn-mig,single-mig'
+$ export TEST_LABELS='nvidia-ci,gpu,single-mig'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
-$ NVIDIAGPU_SINGLE_MIG_PROFILE=1  ## any value of int type, usually 0-5 are valid
+$ export NVIDIAGPU_SINGLE_MIG_PROFILE=1  ## any value of int type, usually 0-5 are valid
 $ make run-tests
 ```
-2. Running only MIG testcase(s) on an existing cluster which has GPU operator installed,
+2. Running only MIG testcases on an existing cluster which has GPU operator installed,
 e.g. after executing step 1. MIG testcase(s) can be used from either nvidiagpu or
 mig package. MIG is used in this example. In the other case, use `TEST_FEATURES="nvidiagpu"`
 to execute the testcase from nvidiagpu package.
+With these MIG parameters single-mig testcase would take MIG profile with index=1, mixed-mig
+testcase would use default instance amount for A100 GPU (2x 1g.5gb, 1x 2g.10gb and 1x 3g.20gb,
+leaving the 1g.10gb unused).
+mixed-mig testcase would wait 15 seconds between the pods launching with NVIDIAGPU_DELAY_BETWEEN_PODS set.
+mixed-mig testcase would wait 25 seconds between the pods launching with delay-label label
+Bigger value of the two is selected.
+Note: this is a sample of doing the same thing with 2 different approach.
 ```
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
 $ export TEST_FEATURES="mig"
-$ export TEST_LABELS='gpu,single-mig'
+$ export TEST_LABELS='single-mig,mixed-mig,delay-label=25'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_SINGLE_MIG_PROFILE=1
 $ export NVIDIAGPU_CLEANUP=false
+$ export NVIDIAGPU_MIG_INSTANCES="2,0,1,1"
+$ export NVIDIAGPU_DELAY_BETWEEN_PODS=15
 $ make run-tests
 ```
 

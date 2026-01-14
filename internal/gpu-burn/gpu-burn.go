@@ -70,7 +70,13 @@ func CreateGPUBurnPodWithMIG(apiClient *clients.Settings, podName, podNamespace 
 	// Construct MIG resource name using the migProfile.
 	// For single strategy MIGs, migProfile is "gpu" resulting in "nvidia.com/gpu".
 	// For other MIG profiles, migProfile is like "mig-1g.5gb" resulting in "nvidia.com/mig-1g.5gb".
-	migResourceName := fmt.Sprintf("nvidia.com/%s", migProfile)
+	var migResourceName string
+	switch migProfile {
+	case "gpu":
+		migResourceName = fmt.Sprintf("nvidia.com/%s", migProfile)
+	default:
+		migResourceName = fmt.Sprintf("nvidia.com/mig-%s", migProfile)
+	}
 
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
