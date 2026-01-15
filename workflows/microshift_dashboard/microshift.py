@@ -86,7 +86,9 @@ def get_job_finished_json(job_path: str) -> Dict[str, Any]:
     """
     found, content = gcp_get_file(f"{job_path}finished.json")
     if not found:
-        raise Exception(f"Failed to fetch finished.json for {job_path=}")
+        # When the job results are old enough, the dir might still exists but be empty.
+        logger.warning(f"Failed to fetch finished.json for {job_path=}")
+        return None
     return json.loads(content)
 
 
@@ -95,6 +97,8 @@ def get_job_result(job_run: Dict[str, Any]) -> Dict[str, Any]:
     Fetches the finished.json and returns a complete dictionary with the job results for dashboard creation.
     """
     finished = get_job_finished_json(job_run['path'])
+    if finished is None:
+        return None
     version = get_job_microshift_version(job_run['path'])
     return {
         "num": job_run['num'],
@@ -125,7 +129,7 @@ def get_all_results(job_limit: int) -> Dict[str, List[Dict[str, Any]]]:
                 f"Assuming that {version} is not being developed yet - stopping collecting the results")
             break
 
-        results = [get_job_result(run) for run in runs]
+        results = [get_job_result(run) for run in runs if run is not None]
         fin_results[version] = results
 
     duration = time.time() - start
