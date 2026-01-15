@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 
+import os
 import time
 from typing import Dict, List, Any, Tuple
 import argparse
@@ -8,6 +9,9 @@ import datetime
 import json
 import urllib
 import requests
+
+from gql import Client, gql
+from gql.transport.requests import RequestsHTTPTransport
 
 from workflows.common.utils import logger
 from workflows.common.templates import load_template
@@ -26,6 +30,42 @@ VERSION_JOB_NAME = {
 }
 
 GCP_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o/"
+
+GITHUB_PR_QUERY = """
+query get_prs($branch: String!, $limit: Int!) {
+    repository(owner: "openshift", name: "microshift") {
+      pullRequests(baseRefName: $branch, first: $limit,  states:[MERGED], orderBy:{field: CREATED_AT, direction: DESC}) {
+        nodes {
+          number
+          title
+          state
+          url
+          headRefName
+          mergedAt
+          commits(last: 1) {
+            nodes {
+              commit {
+                statusCheckRollup {
+                  state
+                  contexts(last: 30) {
+                    nodes {
+                      ... on StatusContext {
+                        context
+                        description
+                        state
+                        targetUrl
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+"""
 
 
 def gcp_list_dir(path: str) -> List[str]:
@@ -109,31 +149,124 @@ def get_job_result(job_run: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def get_results_from_presubmits(version: str, cutoff: datetime.datetime, limit: int) -> List[Dict[str, Any]]:
+    """
+    Fetches the results from presubmits for a given version.
+    """
+    token = os.getenv("GITHUB_TOKEN")
+    if token is None:
+        logger.warning(f"GITHUB_TOKEN env var is not set - GitHub GrapQL API requires authentication - skipping fetching job results from PRs")
+        return None
+
+    branch = f"release-{version}"
+    query = gql(GITHUB_PR_QUERY)
+    query.variable_values = {"branch": branch, "limit": limit}
+
+    client = Client(transport=RequestsHTTPTransport(url="https://api.github.com/graphql", headers={"Authorization": f"Bearer {token}"}))
+    result = client.execute(query)
+
+    job_results = []
+
+    prs = result['repository']['pullRequests']['nodes']
+    logger.info(f"[{version}] Found {len(prs)} PRs for {branch} branch: " + ', '.join([str(pr['number']) for pr in prs]))
+    for pr in prs:
+        merged_at = datetime.datetime.fromisoformat(pr['mergedAt'])
+        if cutoff and merged_at < cutoff:
+            # Response already includes PRs sorted newest first,
+            # so if we find a PR older than most recent periodic we can stop the loop.
+            logger.info(f"[{version}] PR {pr['number']} is older ({merged_at}) than the most recent periodic ({cutoff}) - stopping collecting results from PRs")
+            break
+
+        if len(pr['commits']['nodes']) == 0:
+            logger.info(f"[{version}] PR {pr['number']} has no commits? Skipping")
+            continue
+
+        last_commit = pr['commits']['nodes'][0]['commit']
+        last_commit_presubmits = last_commit['statusCheckRollup']['contexts']['nodes']
+        nvidia_presubmits = [presubmit for presubmit in last_commit_presubmits if 'nvidia-device-plugin' in presubmit['context'] or 'ai-model-serving' in presubmit['context']]
+        if len(nvidia_presubmits) == 0:
+            logger.info(f"[{version}] PR {pr['number']} has no NVIDIA Device Plugin or AI Model Serving presubmit")
+            continue
+
+        nvidia_presubmit = nvidia_presubmits[0]
+        if 'Overridden by' in nvidia_presubmit['description']:
+            logger.info(f"[{version}] NVIDIA Device Plugin or AI Model Serving job in PR {pr['number']} was overridden")
+            continue
+
+        prow_url = nvidia_presubmit['targetUrl']
+        if 'https://prow.ci.openshift.org/view/gs/test-platform-results/' not in prow_url:
+            logger.warning(f"[{version}] Unexpected targetUrl for a presubmit: {nvidia_presubmit['targetUrl']}. Commit status: {json.dumps(last_commit)}")
+            continue
+
+        gcp_path = prow_url.replace("https://prow.ci.openshift.org/view/gs/test-platform-results/", "") + "/"
+        num = gcp_path.split("/")[-2]
+        result = get_job_result( {"path": gcp_path, "num": int(num)} )
+        if result:
+            job_results.append(result)
+
+    return job_results
+
+
 def get_all_results(job_limit: int) -> Dict[str, List[Dict[str, Any]]]:
     """
     Fetches the job results for all versions of MicroShift starting from 4.14 until there are no job runs available for particular version.
     """
     logger.info("Fetching job results")
+
+    periodic_cutoff_diff = datetime.timedelta(days=60) # Most recent periodic job must be older than 60 days in order to inspect presubmits.
     fin_results = {}
     start = time.time()
+    got_results_for_at_least_one_version = False
+    durations = dict[str, float]()
 
     # To make the script easier to maintain, we start with oldest version and go up until there are no jobs detected.
     # That way it won't require an update everytime there's a new release.
     for minor in range(14, 100):
+        start_version = time.time()
         version = f"4.{minor}"
-        runs = get_job_runs_for_version(version, job_limit)
-        logger.info(f"Found {len(runs)} job runs for version {version}")
+        periodic_runs = get_job_runs_for_version(version, job_limit)
+        logger.info(f"[{version}] Found {len(periodic_runs)} periodic job runs")
 
-        if len(runs) == 0:
-            logger.info(
-                f"Assuming that {version} is not being developed yet - stopping collecting the results")
+        # Pretty soon, there will be no periodic job results for 4.14 but that should not cause the procedure to stop immediately.
+        if len(periodic_runs) == 0 and got_results_for_at_least_one_version:
+            logger.info(f"[{version}] Assuming that {version} is not being developed yet - stopping collecting the results")
             break
 
-        results = [get_job_result(run) for run in runs if run is not None]
-        fin_results[version] = results
+        results = []
+        for periodic_run in periodic_runs:
+            result = get_job_result(periodic_run)
+            if not result:
+                continue
+            results.append(result)
+
+        # Older versions do not run periodic jobs anymore to save on CI resources.
+        # Instead, we can get the results from presubmits against the release branch.
+
+        check_presubmits = False
+        most_recent = None
+        if len(results) == 0:
+            logger.info(f"[{version}] No periodic job results found - collecting results from presubmits")
+            check_presubmits = True
+        else:
+            results = sorted(results, key=lambda x: x["timestamp"], reverse=True)
+            most_recent = datetime.datetime.fromtimestamp(int(results[0]["timestamp"]), datetime.timezone.utc)
+            cutoff = datetime.datetime.now(datetime.timezone.utc) - periodic_cutoff_diff
+            if most_recent < cutoff:
+                logger.info(f"[{version}] The most recent periodic job is older ({most_recent.strftime('%Y-%m-%d')}) than 60 days ({cutoff.strftime('%Y-%m-%d')}) - collecting results from presubmits")
+                check_presubmits = True
+
+        if check_presubmits:
+            pr_results = get_results_from_presubmits(version, most_recent, job_limit)
+            if pr_results:
+                results = sorted(pr_results + results, key=lambda x: x["timestamp"], reverse=True)[:job_limit]
+
+        if results:
+            got_results_for_at_least_one_version = True
+            fin_results[version] = results
+        durations[version] = f"{time.time() - start_version:.0f}s"
 
     duration = time.time() - start
-    logger.info(f"Took {duration:.2f} seconds to fetch the job results")
+    logger.info(f"Took {duration:.2f} seconds to fetch the job results - {durations}")
     return dict(sorted(fin_results.items(), reverse=True))
 
 
