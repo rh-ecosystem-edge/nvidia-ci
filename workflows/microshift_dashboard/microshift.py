@@ -259,6 +259,9 @@ def get_all_results(job_limit: int) -> Dict[str, List[Dict[str, Any]]]:
             pr_results = get_results_from_presubmits(version, most_recent, job_limit)
             if pr_results:
                 results = sorted(pr_results + results, key=lambda x: x["timestamp"], reverse=True)[:job_limit]
+            else:
+                logger.critical(f"[{version}] No presubmits and (no periodics or latest periodic is too old) - assuming that version is no longer supported")
+                results = []
 
         if results:
             got_results_for_at_least_one_version = True
