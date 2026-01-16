@@ -182,8 +182,19 @@ def get_results_from_presubmits(version: str, cutoff: datetime.datetime, limit: 
             continue
 
         last_commit = pr['commits']['nodes'][0]['commit']
-        last_commit_presubmits = last_commit['statusCheckRollup']['contexts']['nodes']
-        nvidia_presubmits = [presubmit for presubmit in last_commit_presubmits if 'nvidia-device-plugin' in presubmit['context'] or 'ai-model-serving' in presubmit['context']]
+        status_rollup = last_commit.get('statusCheckRollup') or {}
+        contexts = (status_rollup.get('contexts') or {}).get('nodes') or []
+        if not contexts:
+            logger.info(f"[{version}] PR {pr['number']} has no status contexts to inspect")
+            continue
+
+        nvidia_presubmits = [
+            presubmit for presubmit in contexts
+            if presubmit.get('context') and (
+                'nvidia-device-plugin' in presubmit['context']
+                or 'ai-model-serving' in presubmit['context']
+            )
+        ]
         if len(nvidia_presubmits) == 0:
             logger.info(f"[{version}] PR {pr['number']} has no NVIDIA Device Plugin or AI Model Serving presubmit")
             continue
