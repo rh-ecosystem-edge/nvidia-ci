@@ -77,10 +77,12 @@ def gcp_list_dir(path: str) -> List[str]:
     return content['prefixes']
 
 
-def gcp_get_file(path: str) -> Tuple[bool, str]:
+def gcp_get_file(path: str) -> str:
     resp = requests.get(url=GCP_BASE_URL + urllib.parse.quote_plus(path),
                         params={"alt": "media"}, timeout=60)
-    return resp.status_code == 200, resp.content.decode("UTF-8").strip()
+    if resp.status_code not in [200, 404]:
+        raise Exception(f"Failed to fetch file {path}: ({resp.status_code}) {resp.content.decode('UTF-8')}")
+    return resp.content.decode("UTF-8").strip() if resp.status_code == 200 else None
 
 
 def get_job_runs_for_version(version: str, job_limit: int) -> List[Dict[str, Any]]:
@@ -111,12 +113,7 @@ def get_job_microshift_version(job_path: str) -> str:
             f"{job_path} does not contain artifacts that start with 'e2e-'")
         return ""
 
-    found, content = gcp_get_file(
-        f"{files[0]}openshift-microshift-e2e-bare-metal-tests/artifacts/microshift-version.txt")
-    # Some jobs don't have the file yet
-    if not found:
-        return ""
-    return content
+    return gcp_get_file(f"{files[0]}openshift-microshift-e2e-bare-metal-tests/artifacts/microshift-version.txt")
 
 
 def get_job_finished_json(job_path: str) -> Dict[str, Any]:
@@ -124,10 +121,11 @@ def get_job_finished_json(job_path: str) -> Dict[str, Any]:
     Fetches the finished.json file for particular job run described by job_path variable
     which is expected to be in the format 'logs/{job_name}/{job_run_number}/'.
     """
-    found, content = gcp_get_file(f"{job_path}finished.json")
-    if not found:
+    p = f"{job_path}finished.json"
+    content = gcp_get_file(p)
+    if content is None:
         # When the job results are old enough, the dir might still exists but be empty.
-        logger.warning(f"Failed to fetch finished.json for {job_path=}")
+        logger.warning(f"{p} does not exist")
         return None
     return json.loads(content)
 
@@ -140,6 +138,8 @@ def get_job_result(job_run: Dict[str, Any]) -> Dict[str, Any]:
     if finished is None:
         return None
     version = get_job_microshift_version(job_run['path'])
+    if version is None:
+        return None
     return {
         "num": job_run['num'],
         "timestamp": finished['timestamp'],
