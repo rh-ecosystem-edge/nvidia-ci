@@ -3,7 +3,7 @@
 
 import os
 import time
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Optional
 import argparse
 import datetime
 import json
@@ -77,7 +77,7 @@ def gcp_list_dir(path: str) -> List[str]:
     return content['prefixes']
 
 
-def gcp_get_file(path: str) -> str:
+def gcp_get_file(path: str) -> Optional[str]:
     resp = requests.get(url=GCP_BASE_URL + urllib.parse.quote_plus(path),
                         params={"alt": "media"}, timeout=60)
     if resp.status_code not in [200, 404]:
