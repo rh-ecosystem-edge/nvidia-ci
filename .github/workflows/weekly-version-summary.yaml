@@ -1,0 +1,55 @@
+name: Weekly Version Summary
+
+on:
+  schedule:
+    - cron: '0 14 * * 4'  # 2 pm UTC on Thursdays
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-summary:
+    if: github.repository == 'rh-ecosystem-edge/nvidia-ci'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Full git history needed for git log
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.13
+
+      - name: Generate weekly summary
+        run: PYTHONPATH=. python .github/scripts/weekly_summaries/weekly_summary.py
+        env:
+          VERSION_FILE_PATH: "workflows/gpu_operator_versions/versions.json"
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v6
+        with:
+          ref: gh-pages
+          path: gh-pages-work
+
+      - name: Create weekly-summaries directory and save summary
+        run: |
+          mkdir -p gh-pages-work/weekly-summaries
+          DATE=$(date +%Y-%m-%d)
+          cp weekly-summary.md "gh-pages-work/weekly-summaries/${DATE}-weekly-summary.md"
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: gh-pages-work
+          clean: false
+          force: false
+
+      - name: Notify on failure
+        if: failure()
+        uses: ./.github/actions/notify-failure
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
