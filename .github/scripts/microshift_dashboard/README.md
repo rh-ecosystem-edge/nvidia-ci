@@ -17,7 +17,7 @@ The MicroShift dashboard workflow:
 Install dependencies:
 
 ```console
-pip install -r workflows/microshift_dashboard/requirements.txt
+pip install -r .github/scripts/microshift_dashboard/requirements.txt
 ```
 
 ### Manual Execution
@@ -25,13 +25,13 @@ pip install -r workflows/microshift_dashboard/requirements.txt
 Fetch job data:
 
 ```console
-python -m workflows.microshift_dashboard.microshift fetch-data --output-data microshift_results.json
+PYTHONPATH=.github/scripts python -m microshift_dashboard.microshift fetch-data --output-data microshift_results.json
 ```
 
 Generate dashboard:
 
 ```console
-python -m workflows.microshift_dashboard.microshift generate-dashboard --input-data microshift_results.json --output-dashboard microshift.html
+PYTHONPATH=.github/scripts python -m microshift_dashboard.microshift generate-dashboard --input-data microshift_results.json --output-dashboard microshift.html
 ```
 
 ## GitHub Actions Integration

@@ -47,11 +47,11 @@ jobs:
         with:
           python-version: '3.13'
           cache: 'pip'
-          cache-dependency-path: workflows/ci_failure_summarizer/requirements.txt
+          cache-dependency-path: .github/scripts/ci_failure_summarizer/requirements.txt
 
       - name: Install Python dependencies
         run: |
-          pip install -r workflows/ci_failure_summarizer/requirements.txt
+          pip install -r .github/scripts/ci_failure_summarizer/requirements.txt
 
       # Cache Ollama binary (~100MB) and models (~1GB for llama3.2:1b)
       - name: Cache Ollama binary
@@ -232,7 +232,7 @@ jobs:
           echo ""
           
           # Run the summarizer
-          python -m workflows.ci_failure_summarizer.summarize
+          PYTHONPATH=.github/scripts python -m ci_failure_summarizer.summarize
 
       - name: Post PR comment
         if: steps.summarize.outputs.summary != ''

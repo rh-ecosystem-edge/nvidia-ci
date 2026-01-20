@@ -29,7 +29,7 @@ jobs:
     if: github.event_name != 'pull_request_target' || github.repository == 'rh-ecosystem-edge/nvidia-ci'
     runs-on: ubuntu-latest
     env:
-      DASHBOARD_OUTPUT_DIR: 'workflows/test_matrix_dashboard/output'
+      DASHBOARD_OUTPUT_DIR: '.github/scripts/test_matrix_dashboard/output'
     steps:
       - name: Set dynamic env vars
         run: |
@@ -67,12 +67,12 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install -r workflows/gpu_operator_dashboard/requirements.txt
+          pip install -r .github/scripts/gpu_operator_dashboard/requirements.txt
 
       - name: Fetch CI Data
         run: |
           echo "Processing PR: ${{ steps.determine_pr.outputs.PR_NUMBER }}"
-          python -m workflows.gpu_operator_dashboard.fetch_ci_data \
+          PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.fetch_ci_data \
             --pr_number "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
             --baseline_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
             --merged_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}"
@@ -85,7 +85,7 @@ jobs:
             echo "no changes"
           else
             cd "${{ github.workspace }}"
-            python -m workflows.gpu_operator_dashboard.generate_ci_dashboard \
+            PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.generate_ci_dashboard \
               --dashboard_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
               --dashboard_html_filepath "${{ env.DASHBOARD_HTML_FILEPATH }}"
           fi

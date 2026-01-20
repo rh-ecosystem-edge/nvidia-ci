@@ -4,10 +4,10 @@ import re
 import requests
 import semver
 
-from workflows.gpu_operator_versions.settings import Settings
+from gpu_operator_versions.settings import Settings
 from typing import Pattern, AnyStr
-from workflows.common.utils import logger
-from workflows.gpu_operator_versions.version_utils import max_version
+from common.utils import logger
+from gpu_operator_versions.version_utils import max_version
 
 RELEASE_URL_API = 'https://amd64.ocp.releases.ci.openshift.org/api/v1/releasestreams/accepted'
 

@@ -1,11 +1,11 @@
 import json
-from workflows.common.utils import logger
+from common.utils import logger
 
-from workflows.gpu_operator_versions.settings import Settings
-from workflows.gpu_operator_versions.openshift import fetch_ocp_versions
-from workflows.gpu_operator_versions.version_utils import get_latest_versions, get_earliest_versions
-from workflows.gpu_operator_versions.nvidia_gpu_operator import get_operator_versions, get_sha
-from workflows.gpu_operator_versions.catalog_checker import (
+from gpu_operator_versions.settings import Settings
+from gpu_operator_versions.openshift import fetch_ocp_versions
+from gpu_operator_versions.version_utils import get_latest_versions, get_earliest_versions
+from gpu_operator_versions.nvidia_gpu_operator import get_operator_versions, get_sha
+from gpu_operator_versions.catalog_checker import (
     fetch_gpu_operator_catalog_entries,
     is_available_in_catalog_entries
 )

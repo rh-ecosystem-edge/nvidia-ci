@@ -6,9 +6,9 @@ import semver
 from typing import Dict, List, Any
 from datetime import datetime, timezone
 
-from workflows.common.utils import logger
-from workflows.common.templates import load_template
-from workflows.gpu_operator_dashboard.fetch_ci_data import (
+from common.utils import logger
+from common.templates import load_template
+from gpu_operator_dashboard.fetch_ci_data import (
     OCP_FULL_VERSION, GPU_OPERATOR_VERSION, STATUS_ABORTED)
 
 

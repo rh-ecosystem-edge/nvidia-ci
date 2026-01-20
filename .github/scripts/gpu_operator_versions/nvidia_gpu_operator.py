@@ -4,9 +4,9 @@ import re
 import requests
 
 
-from workflows.gpu_operator_versions.settings import Settings
-from workflows.common.utils import logger
-from workflows.gpu_operator_versions.version_utils import max_version
+from gpu_operator_versions.settings import Settings
+from common.utils import logger
+from gpu_operator_versions.version_utils import max_version
 
 GPU_OPERATOR_NVCR_AUTH_URL = 'https://nvcr.io/proxy_auth?scope=repository:nvidia/gpu-operator:pull'
 GPU_OPERATOR_NVCR_TAGS_URL = 'https://nvcr.io/v2/nvidia/gpu-operator/tags/list'

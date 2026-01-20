@@ -1,6 +1,6 @@
 import unittest
 
-from workflows.gpu_operator_versions.version_utils import get_latest_versions, get_earliest_versions
+from gpu_operator_versions.version_utils import get_latest_versions, get_earliest_versions
 
 
 class TestGetLatestVersions(unittest.TestCase):
