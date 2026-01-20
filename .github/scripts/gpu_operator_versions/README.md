@@ -34,7 +34,7 @@ Environment variable `CHECK_CATALOG_AVAILABILITY`:
 ### Manual Check
 
 ```bash
-python -m workflows.gpu_operator_versions.catalog_checker 25.10.1 4.20 4.19
+PYTHONPATH=.github/scripts python -m gpu_operator_versions.catalog_checker 25.10.1 4.20 4.19
 ```
 
 ## Configuration
@@ -89,7 +89,7 @@ To move a version to maintenance mode, add it to `openshift_support` with status
 Install dependencies:
 
 ```console
-pip install -r workflows/gpu_operator_versions/requirements.txt
+pip install -r .github/scripts/gpu_operator_versions/requirements.txt
 ```
 
 ### Manual Execution
@@ -97,7 +97,7 @@ pip install -r workflows/gpu_operator_versions/requirements.txt
 Run the version update process:
 
 ```console
-python -m workflows.gpu_operator_versions.update_versions
+PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions
 ```
 
 ### Environment Variables
@@ -114,7 +114,7 @@ The workflow supports several environment variables:
 First, make sure `pytest` is installed. Then, run:
 
 ```console
-python -m pytest workflows/gpu_operator_versions/tests/ -v
+PYTHONPATH=.github/scripts python -m pytest .github/scripts/gpu_operator_versions/tests/ -v
 ```
 
 ## GitHub Actions Integration

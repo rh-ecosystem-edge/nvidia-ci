@@ -15,7 +15,7 @@ The dashboard workflow:
 ### Prerequisites
 
 ```console
-pip install -r workflows/gpu_operator_dashboard/requirements.txt
+pip install -r .github/scripts/gpu_operator_dashboard/requirements.txt
 ```
 
 **Important:** Before running fetch_ci_data.py, create the baseline data file and initialize it with an empty JSON object if it doesn't exist:
@@ -28,16 +28,16 @@ echo '{}' > data.json
 
 ```console
 # Process a specific PR
-python -m workflows.gpu_operator_dashboard.fetch_ci_data --pr_number "123" --baseline_data_filepath data.json --merged_data_filepath data.json
+PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.fetch_ci_data --pr_number "123" --baseline_data_filepath data.json --merged_data_filepath data.json
 
 # Process all merged PRs - limited to 100 most recent (default)
-python -m workflows.gpu_operator_dashboard.fetch_ci_data --pr_number "all" --baseline_data_filepath data.json --merged_data_filepath data.json
+PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.fetch_ci_data --pr_number "all" --baseline_data_filepath data.json --merged_data_filepath data.json
 ```
 
 ### Generate Dashboard
 
 ```console
-python -m workflows.gpu_operator_dashboard.generate_ci_dashboard --dashboard_data_filepath data.json --dashboard_html_filepath dashboard.html
+PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.generate_ci_dashboard --dashboard_data_filepath data.json --dashboard_html_filepath dashboard.html
 ```
 
 ### Running Tests
@@ -45,7 +45,7 @@ python -m workflows.gpu_operator_dashboard.generate_ci_dashboard --dashboard_dat
 First, make sure `pytest` is installed. Then, run:
 
 ```console
-python -m pytest workflows/gpu_operator_dashboard/tests/ -v
+PYTHONPATH=.github/scripts python -m pytest .github/scripts/gpu_operator_dashboard/tests/ -v
 ```
 
 ## GitHub Actions Integration

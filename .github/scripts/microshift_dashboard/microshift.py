@@ -13,8 +13,8 @@ import requests
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 
-from workflows.common.utils import logger
-from workflows.common.templates import load_template
+from common.utils import logger
+from common.templates import load_template
 
 # For MicroShift versions 4.19+ we are reusing AI Model Serving job which performs basic validation
 # of the device plugin and more. For older versions we have dedicated

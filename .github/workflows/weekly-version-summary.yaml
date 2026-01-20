@@ -24,9 +24,9 @@ jobs:
           python-version: 3.13
 
       - name: Generate weekly summary
-        run: PYTHONPATH=. python .github/scripts/weekly_summaries/weekly_summary.py
+        run: PYTHONPATH=.github/scripts python -m weekly_summaries.weekly_summary
         env:
-          VERSION_FILE_PATH: "workflows/gpu_operator_versions/versions.json"
+          VERSION_FILE_PATH: ".github/scripts/gpu_operator_versions/versions.json"
 
       - name: Checkout gh-pages branch
         uses: actions/checkout@v6

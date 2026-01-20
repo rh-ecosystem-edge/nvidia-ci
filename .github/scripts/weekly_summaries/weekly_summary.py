@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Set
 
-from workflows.common.utils import logger
+from common.utils import logger
 
 # Version type constants (matching update_versions.py)
 VERSION_GPU_MAIN_LATEST = "gpu-main-latest"
