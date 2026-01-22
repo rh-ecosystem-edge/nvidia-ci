@@ -8,7 +8,7 @@ from gpu_operator_versions.openshift import fetch_ocp_versions, RELEASE_URL_API
 
 
 class TestOpenShift(unittest.TestCase):
-    """Test cases for workflows/openshift.py functions."""
+    """Test cases for gpu_operator_versions/openshift.py functions."""
 
     @patch('gpu_operator_versions.openshift.Settings')
     @patch('gpu_operator_versions.openshift.requests.get')
