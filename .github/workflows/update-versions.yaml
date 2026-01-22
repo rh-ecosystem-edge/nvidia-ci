@@ -24,6 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.branch }}
+          token: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -48,6 +49,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
         with:
+          token: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
           title: "[Automatic] Update versions, run ID: ${{ github.run_id }}"
           commit-message: Update versions
           branch: update-versions/${{ github.run_id }}
