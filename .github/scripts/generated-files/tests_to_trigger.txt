@@ -1,0 +1,2 @@
+/test 4.14-stable-nvidia-gpu-operator-e2e-master
+/test 4.21-stable-nvidia-gpu-operator-e2e-master
