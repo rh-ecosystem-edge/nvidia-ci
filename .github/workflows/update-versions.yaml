@@ -23,7 +23,7 @@ jobs:
       - name: Check out the Repo
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.branch }}
+          ref: ${{ inputs.branch || 'main' }}
           token: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -73,4 +73,5 @@ jobs:
         uses: ./.github/actions/notify-failure
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          help-file: .github/workflows/update-versions-help.md
 
