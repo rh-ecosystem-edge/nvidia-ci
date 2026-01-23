@@ -149,7 +149,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(0).Infof("CleanupAfterTest: %v", cleanupAfterTest)
 
 			// if any of the following labels are present, the operator should be kept
-			labelsToCheck = []string{"operator-upgrade", "single-mig"}
+			labelsToCheck = []string{"operator-upgrade", "single-mig", "mixed-mig"}
 			glog.V(0).Infof("LabelsToCheck: %v", labelsToCheck)
 
 			if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {

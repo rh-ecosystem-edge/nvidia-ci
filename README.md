@@ -124,7 +124,7 @@ It is recommended to execute the runner script through the `make run-tests` make
 #### Steps to run MPS tests:
 
 1. First, deploy the GPU Operator with cleanup disabled for example:
-```
+```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
@@ -139,7 +139,7 @@ $ export NVIDIAGPU_CLEANUP=false  # Important: don't clean up after deployment
 $ make run-tests
 ```
 2. After the GPU Operator deployment completes successfully, run the MPS tests:
-```
+```bash
 $ export TEST_FEATURES="mps"
 $ export TEST_LABELS='nvidia-ci,mps'  # Run MPS-specific tests
 $ make run-tests
@@ -154,7 +154,7 @@ The test framework ensures that the GPU Operator deployment tests run before MPS
 
 After completing the MPS tests, you may want to clean up all resources by running:
 
-```
+```bash
 $ export TEST_FEATURES="nvidiagpu"
 $ export TEST_LABELS='nvidia-ci,cleanup'
 $ export NVIDIAGPU_CLEANUP=true
@@ -171,7 +171,7 @@ It is recommended to execute the runner script through the `make run-tests` make
 #### Steps to run MIG tests:
 
 1. Run mig testcase(s) after nvidia-ci on any cluster
-```
+```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
@@ -191,15 +191,15 @@ With these MIG parameters single-mig testcase would take MIG profile with index=
 testcase would use default instance amount for A100 GPU (2x 1g.5gb, 1x 2g.10gb and 1x 3g.20gb,
 leaving the 1g.10gb unused).
 mixed-mig testcase would wait 15 seconds between the pods launching with NVIDIAGPU_DELAY_BETWEEN_PODS set.
-mixed-mig testcase would wait 25 seconds between the pods launching with delay-label label
+mixed-mig testcase would wait 25 seconds between the pods launching with pod-delay label
 Bigger value of the two is selected.
 Note: this is a sample of doing the same thing with 2 different approach.
-```
+```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
 $ export TEST_FEATURES="mig"
-$ export TEST_LABELS='single-mig,mixed-mig,delay-label=25'
+$ export TEST_LABELS='single-mig,mixed-mig,pod-delay=25'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_SINGLE_MIG_PROFILE=1
@@ -213,14 +213,14 @@ $ make run-tests
 
 If the GPU operator and gpu burn pod needs to be cleaned up, just set the cleanup parameter to true
 in the last execution of either steps 1 or 2
-```
+```bash
 $ export NVIDIAGPU_CLEANUP=true
 ```
 
 ## Examples:
 
 Example running the end-to-end GPU Operator test case:
-```
+```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
@@ -241,7 +241,7 @@ Example running the GPU Operator upgrade testcase (from v23.6 to v24.3) after th
 Note:  you must run the end-to-end testcase first to deploy a previous version, set NVIDIAGPU_CLEANUP=false,
 and specify the channel to upgrade to NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL=v24.3, along with the label
 'operator-upgrade' in TEST_LABELS.  Otherwise, the upgrade testcase will not be executed:
-```
+```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
@@ -262,7 +262,7 @@ ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="
 
 Example running the end-to-end test case and creating custom catalogsources for NFD and GPU Operator packagmanifests
 when missing from their default catalogsources.
-```
+```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-gpu-ci-logs-dir
@@ -278,7 +278,7 @@ $ make run-tests
 
 Example running the end-to-end Network Operator test case, with the Legacy SRIOV RDMA testcase.  
 Note: both TEST_LABELS "deploy || rdma-legacy-sriov' are specified in examples below:
-```
+```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-nno-ci-logs-dir
