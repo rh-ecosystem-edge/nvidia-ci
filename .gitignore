@@ -1,4 +1,4 @@
-/workflows/generated-files/
+.github/scripts/generated-files/
 __pycache__/
 venv/
 *.pyc

@@ -23,7 +23,8 @@ jobs:
       - name: Check out the Repo
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.branch }}
+          ref: ${{ inputs.branch || 'main' }}
+          token: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -31,9 +32,9 @@ jobs:
       - name: Update OCP Version
         id: read_tests
         run: |
-          pip install -r workflows/gpu_operator_versions/requirements.txt
+          pip install -r .github/scripts/gpu_operator_versions/requirements.txt
           mkdir -p $(dirname ${TEST_TO_TRIGGER_FILE_PATH})
-          python -m workflows.gpu_operator_versions.update_versions
+          PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions
           {
            echo 'TEST_TRIGGERS<<EOF'
            cat ${TEST_TO_TRIGGER_FILE_PATH}
@@ -41,13 +42,14 @@ jobs:
           } >> $GITHUB_OUTPUT
 
         env:
-          VERSION_FILE_PATH: "workflows/gpu_operator_versions/versions.json"
-          SETTINGS_FILE_PATH: "workflows/gpu_operator_versions/settings.json"
-          TEST_TO_TRIGGER_FILE_PATH: "workflows/generated-files/tests_to_trigger.txt"
+          VERSION_FILE_PATH: ".github/scripts/gpu_operator_versions/versions.json"
+          SETTINGS_FILE_PATH: ".github/scripts/gpu_operator_versions/settings.json"
+          TEST_TO_TRIGGER_FILE_PATH: ".github/scripts/generated-files/tests_to_trigger.txt"
           CHECK_CATALOG_AVAILABILITY: "true"
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
         with:
+          token: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
           title: "[Automatic] Update versions, run ID: ${{ github.run_id }}"
           commit-message: Update versions
           branch: update-versions/${{ github.run_id }}
@@ -71,4 +73,5 @@ jobs:
         uses: ./.github/actions/notify-failure
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          help-file: .github/workflows/update-versions-help.md
 

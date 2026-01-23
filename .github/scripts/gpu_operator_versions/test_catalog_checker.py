@@ -5,7 +5,7 @@ Can be run locally to verify catalog checking works.
 """
 
 import sys
-from workflows.gpu_operator_versions.catalog_checker import (
+from gpu_operator_versions.catalog_checker import (
     fetch_gpu_operator_catalog_entries,
     is_available_in_catalog_entries
 )
