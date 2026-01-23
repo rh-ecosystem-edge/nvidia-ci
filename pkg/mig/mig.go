@@ -36,12 +36,12 @@ import (
 )
 
 var (
-	DelayLabel int
+	PodDelay int
 )
 
 func init() {
 	// Register flags before Ginkgo parses them
-	flag.IntVar(&DelayLabel, "delay-label", 0, "delay in seconds between pod creation on mixed-mig testcase")
+	flag.IntVar(&PodDelay, "pod-delay", 0, "delay in seconds between pod creation on mixed-mig testcase")
 }
 
 // TestSingleMIGGPUBurn performs the GPU Burn test with single strategy MIG Configuration
@@ -264,8 +264,8 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Updated MigCapabilities: %v", migCapabilities)
 	// Requesting for specific MIG profile and requesting 0 instances is a dry run (just changing labels etc) without any pod creation.
 	if SumOfMixedCnt == 0 {
-		glog.V(gpuparams.Gpu10LogLevel).Infof("%s: %d %s %s", colorLog(colorGreen+colorBold,
-			"Dry run, no pod creation because of parameter settings (strategy and instances): "),
+		glog.V(gpuparams.Gpu10LogLevel).Infof("%s strategy=%s instances=%s count=%d", colorLog(colorGreen+colorBold,
+			"Dry run, no pod creation because of parameter settings:"),
 			migStrategy, nvidiaGPUConfig.MIGInstances, SumOfMixedCnt)
 	}
 
@@ -415,18 +415,18 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	// Competed status is accepted as well in the isRunning function.
 	By("Ensure all pods get into Running state")
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Ensure all pods get into Running state"))
-	for _, pod := range migPodInfo {
-		if pod.Pod.Exists() {
-			isRunning(pod.Pod, burn.Namespace)
+	for _, podInfo := range migPodInfo {
+		if podInfo.Pod.Exists() {
+			isRunning(podInfo.Pod, burn.Namespace)
 		}
 	}
 
 	// Waiting until the pods are completed. Depending on the delay between the pods, this may take some time in each iteration.
 	By("Wait for GPU Burn pods to complete")
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Wait for GPU Burn pods to complete"))
-	for _, pod := range migPodInfo {
-		if pod.Pod.Exists() {
-			isCompleted(pod.Pod, burn.Namespace)
+	for _, podInfo := range migPodInfo {
+		if podInfo.Pod.Exists() {
+			isCompleted(podInfo.Pod, burn.Namespace)
 		}
 	}
 
@@ -435,11 +435,11 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	By("Get and check the gpu-burn pod logs")
 	maxPodIndex := len(migPodInfo) - 1
 	i := 0
-	for _, pod := range migPodInfo {
-		if pod.Pod.Exists() {
+	for _, podInfo := range migPodInfo {
+		if podInfo.Pod.Exists() {
 			// Second parameter guides on how old logs can be retrieved.
-			gpuBurnMigLogs := GetGPUBurnPodLogs(pod.Pod, maxPodIndex-i)
-			CheckGPUBurnPodLogs(gpuBurnMigLogs, pod.MigProfileInfo.MixedCnt)
+			gpuBurnMigLogs := GetGPUBurnPodLogs(podInfo.Pod, maxPodIndex-i)
+			CheckGPUBurnPodLogs(gpuBurnMigLogs, podInfo.MigProfileInfo.MixedCnt)
 		}
 		i++
 	}
@@ -660,37 +660,34 @@ func ReadMixedMIGStrategy(MixedMIGStrategy string) string {
 }
 
 // ReadDelayBetweenPods checks the DelayBetweenPods parameter and returns the delay between pods.
-// ReadDelayBetweenPods checks the Ginkgo CLI parameter delay-label and returns the delay between pods.
+// ReadDelayBetweenPods checks the Ginkgo CLI parameter pod-delay and returns the delay between pods.
 // Currently setting either will work and bigger value will be used.
 // It returns the delay between pods, or 0 if not set.
 func ReadDelayBetweenPods(delayBetweenPods int) int {
+	podDelay := 0
 	switch {
 	case delayBetweenPods < 0:
-		delayBetweenPods = 0
+		podDelay = 0
 	case delayBetweenPods > 315:
-		delayBetweenPods = 315
+		podDelay = 315
 	default:
 		// do nothing
 	}
 
 	switch {
-	case DelayLabel < 0:
-		DelayLabel = 0
-	case DelayLabel > 315:
-		DelayLabel = 315
+	case PodDelay < 0:
+		// Do nothing, value is already 0 or more
+	case PodDelay > 315:
+		// Exceeding value is reset to maximum value
+		podDelay = 315
 	default:
 		// do nothing
 	}
 
-	GinkgoWriter.Printf("Ginkgo CLI parameter delay-label value: %d seconds\n", DelayLabel)
-	if DelayLabel > delayBetweenPods {
-		delayBetweenPods = DelayLabel
-		glog.V(gpuparams.GpuLogLevel).Infof("%s: %d seconds", colorLog(colorCyan+colorBold, "delay-label"), delayBetweenPods)
-	} else {
-		glog.V(gpuparams.GpuLogLevel).Infof("%s: %d seconds", colorLog(colorGreen+colorBold, "NVIDIAGPU_DELAY_BETWEEN_PODS"), delayBetweenPods)
-	}
+	GinkgoWriter.Printf("Ginkgo CLI parameter pod-delay value: %d seconds\n", podDelay)
+	glog.V(gpuparams.GpuLogLevel).Infof("%s: %d seconds", colorLog(colorCyan+colorBold, "pod-delay"), podDelay)
 
-	return delayBetweenPods
+	return podDelay
 }
 
 // CleanupWorkloadResources cleans up existing GPU burn pods and configmaps, then waits for cleanup to complete.
@@ -1051,10 +1048,11 @@ func isRunning(GpuPod *pod.Builder, namespace string) {
 	err = GpuPod.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
 	if err != nil {
 		// pod exists, but is not running
-		pod, _ := pod.Pull(inittools.APIClient, GpuPod.Definition.Name, namespace)
+		// Using pod2 to avoid confusion with previous pod pull
+		pod2, _ := pod.Pull(inittools.APIClient, GpuPod.Definition.Name, namespace)
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Pod %s is likely Pending for some reason: %s (%s)",
-			pod.Definition.Name, pod.Object.Status.Phase, pod.Object.Status.Reason)
-		logPodEvents(pod.Definition.Name, namespace)
+			pod2.Definition.Name, pod2.Object.Status.Phase, pod2.Object.Status.Reason)
+		logPodEvents(pod2.Definition.Name, namespace)
 	}
 	Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod with MIG in "+
 		"namespace '%s' to go to Running phase: %v\n Pod is likely Pending for some reason", namespace, err)
