@@ -2,7 +2,7 @@ name: Weekly Version Summary
 
 on:
   schedule:
-    - cron: '0 14 * * 4'  # 2 pm UTC on Thursdays
+    - cron: '0 10 * * 4'  # 10 am UTC on Thursdays
   workflow_dispatch:
 
 permissions:
@@ -40,6 +40,7 @@ jobs:
           mkdir -p gh-pages-work/weekly-summaries
           DATE=$(date +%Y-%m-%d)
           cp weekly-summary.md "gh-pages-work/weekly-summaries/${DATE}-weekly-summary.md"
+          cp weekly-summary.md "gh-pages-work/weekly-summaries/latest.md"
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4

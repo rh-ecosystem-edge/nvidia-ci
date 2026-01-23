@@ -159,6 +159,7 @@ def generate_markdown_summary(tested_versions: Dict[str, Set[str]], start_date: 
         parts.append(f"{ocp_count} new OpenShift versions with the release versions of the NVIDIA GPU Operator")
 
     if parts:
+        lines.append("## Summary")
         if len(parts) == 1:
             summary_text = parts[0]
         elif len(parts) == 2:
