@@ -28,7 +28,7 @@ jobs:
     if: github.event_name != 'schedule' || github.repository == 'rh-ecosystem-edge/nvidia-ci' || vars.MICROSHIFT_DASHBOARD_FLOW_ENABLE_SCHEDULED == 'true'
     runs-on: ubuntu-latest
     env:
-      DASHBOARD_OUTPUT_DIR: 'workflows/test_matrix_dashboard/output'
+      DASHBOARD_OUTPUT_DIR: '.github/scripts/test_matrix_dashboard/output'
     steps:
       - name: Set dynamic env vars
         run: |
@@ -53,11 +53,13 @@ jobs:
           python-version: 3.13
       - name: Install Dependencies
         run: |
-          pip install -r workflows/microshift_dashboard/requirements.txt
+          pip install -r .github/scripts/microshift_dashboard/requirements.txt
 
       - name: Fetch MicroShift job results
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python -m workflows.microshift_dashboard.microshift \
+          PYTHONPATH=.github/scripts python -m microshift_dashboard.microshift \
             fetch-data \
               --output-data "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift_results.json"
 
@@ -68,7 +70,7 @@ jobs:
             echo "No changes to MicroShift results file"
           else
             cd "${{ github.workspace }}"
-            python -m workflows.microshift_dashboard.microshift \
+            PYTHONPATH=.github/scripts python -m microshift_dashboard.microshift \
               generate-dashboard \
                 --input-data "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift_results.json" \
                 --output-dashboard "${{ env.DASHBOARD_OUTPUT_DIR }}/microshift.html"

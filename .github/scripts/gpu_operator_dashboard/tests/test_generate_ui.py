@@ -2,9 +2,9 @@ from unittest import TestCase
 from unittest.mock import patch
 from datetime import datetime, timezone
 
-from workflows.gpu_operator_dashboard.generate_ci_dashboard import (
+from gpu_operator_dashboard.generate_ci_dashboard import (
     build_bundle_info, build_catalog_table_rows, has_valid_semantic_versions, generate_test_matrix)
-from workflows.gpu_operator_dashboard.fetch_ci_data import (
+from gpu_operator_dashboard.fetch_ci_data import (
     OCP_FULL_VERSION, GPU_OPERATOR_VERSION, STATUS_ABORTED, STATUS_SUCCESS, STATUS_FAILURE)
 
 
@@ -425,7 +425,7 @@ class TestSemanticVersionValidation(TestCase):
 class TestGenerateTestMatrix(TestCase):
     """Test cases for the main generate_test_matrix function with separated data structure."""
 
-    @patch('workflows.gpu_operator_dashboard.generate_ci_dashboard.load_template')
+    @patch('gpu_operator_dashboard.generate_ci_dashboard.load_template')
     def test_generate_test_matrix_with_separated_structure(self, mock_load_template):
         """Test that generate_test_matrix works with the new separated bundle_tests and release_tests structure."""
         # Mock templates
@@ -523,7 +523,7 @@ class TestGenerateTestMatrix(TestCase):
         # Verify last updated timestamp is added
         self.assertIn('Last updated:', html_result)
 
-    @patch('workflows.gpu_operator_dashboard.generate_ci_dashboard.load_template')
+    @patch('gpu_operator_dashboard.generate_ci_dashboard.load_template')
     def test_generate_test_matrix_with_empty_sections(self, mock_load_template):
         """Test generate_test_matrix with empty bundle_tests and release_tests sections."""
         # Mock templates
@@ -550,7 +550,7 @@ class TestGenerateTestMatrix(TestCase):
         self.assertIn('<html>', html_result)
         self.assertIn('4.15', html_result)
 
-    @patch('workflows.gpu_operator_dashboard.generate_ci_dashboard.load_template')
+    @patch('gpu_operator_dashboard.generate_ci_dashboard.load_template')
     def test_generate_test_matrix_filters_invalid_versions(self, mock_load_template):
         """Test that generate_test_matrix properly filters out invalid semantic versions from release tests."""
         # Mock templates

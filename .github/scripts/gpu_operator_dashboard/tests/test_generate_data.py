@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest import mock, TestCase
 
-from workflows.gpu_operator_dashboard.fetch_ci_data import (
+from gpu_operator_dashboard.fetch_ci_data import (
     merge_and_save_results, OCP_FULL_VERSION, GPU_OPERATOR_VERSION,
     STATUS_SUCCESS, STATUS_FAILURE, STATUS_ABORTED)
 

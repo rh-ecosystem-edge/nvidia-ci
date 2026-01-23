@@ -10,7 +10,7 @@ import requests
 from pydantic import BaseModel
 import semver
 
-from workflows.common.utils import logger
+from common.utils import logger
 
 
 # Constants for version field names

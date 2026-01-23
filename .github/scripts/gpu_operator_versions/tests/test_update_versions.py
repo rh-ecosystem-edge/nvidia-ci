@@ -2,7 +2,7 @@ import copy
 import unittest
 from unittest.mock import patch
 
-from workflows.gpu_operator_versions.update_versions import (
+from gpu_operator_versions.update_versions import (
     calculate_diffs,
     create_tests_matrix,
     filter_new_gpu_versions_by_catalog
@@ -226,7 +226,7 @@ class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
             {'version': '25.2.8', 'ocp_version': '4.20'},
         ]
 
-        with patch('workflows.gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
+        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
                   return_value=mock_entries):
             filtered, _ = filter_new_gpu_versions_by_catalog(
                 gpu_diffs, ocp_versions, support_matrix
@@ -252,7 +252,7 @@ class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
             {'version': '25.2.8', 'ocp_version': '4.20'},
         ]
 
-        with patch('workflows.gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
+        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
                   return_value=mock_entries):
             filtered, _ = filter_new_gpu_versions_by_catalog(
                 gpu_diffs, ocp_versions, support_matrix
@@ -277,7 +277,7 @@ class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
         # Mock empty catalog entries
         mock_entries = []
 
-        with patch('workflows.gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
+        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
                   return_value=mock_entries):
             filtered, _ = filter_new_gpu_versions_by_catalog(
                 gpu_diffs, ocp_versions, support_matrix
@@ -299,7 +299,7 @@ class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
             {'version': '25.3.1', 'ocp_version': '4.20'},
         ]
 
-        with patch('workflows.gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
+        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
                   return_value=mock_entries):
             filtered, _ = filter_new_gpu_versions_by_catalog(
                 gpu_diffs, ocp_versions, support_matrix
@@ -310,7 +310,7 @@ class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
 
     def test_empty_gpu_diffs_returns_empty(self):
         """Empty diffs should return empty without calling catalog API."""
-        with patch('workflows.gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries') as mock_fetch:
+        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries') as mock_fetch:
             filtered, entries = filter_new_gpu_versions_by_catalog(
                 {}, {'4.19': '4.19.0'}, default_support_matrix
             )
@@ -332,7 +332,7 @@ class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
             }
         }
 
-        with patch('workflows.gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries') as mock_fetch:
+        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries') as mock_fetch:
             filtered, entries = filter_new_gpu_versions_by_catalog(
                 gpu_diffs, ocp_versions, support_matrix_no_active
             )
@@ -368,7 +368,7 @@ class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
             {'version': '25.4.0', 'ocp_version': '4.20'},
         ]
 
-        with patch('workflows.gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
+        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
                   return_value=mock_entries):
             diffs, _ = calculate_diffs(
                 old_versions, new_versions, ocp_versions, support_matrix, check_catalog=True

@@ -4,7 +4,7 @@ Check if GPU operator versions exist in OpenShift catalog using Red Hat Catalog 
 """
 
 import requests
-from workflows.common.utils import logger
+from common.utils import logger
 
 # Red Hat Catalog API base URL
 CATALOG_API_BASE = "https://catalog.redhat.com/api/containers/v1"
