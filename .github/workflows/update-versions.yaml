@@ -74,7 +74,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
         run: |
-          gh pr comment ${{ steps.create-pr.outputs.pull-request-number }} --body "/test images"
+          gh pr comment ${{ steps.create-pr.outputs.pull-request-number }} --body "/test 4.20-stable-images"
 
       - name: Notify on failure
         if: failure()
