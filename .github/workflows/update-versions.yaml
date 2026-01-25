@@ -47,6 +47,7 @@ jobs:
           TEST_TO_TRIGGER_FILE_PATH: ".github/scripts/generated-files/tests_to_trigger.txt"
           CHECK_CATALOG_AVAILABILITY: "true"
       - name: Create Pull Request
+        id: create-pr
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
@@ -54,7 +55,7 @@ jobs:
           commit-message: Update versions
           branch: update-versions/${{ github.run_id }}
           body: |
-            :warning: Before approving the PR, run the following tests:
+            :warning: Before approving the PR, make sure all required tests were triggered and completed:
 
             ```
             ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
@@ -67,6 +68,15 @@ jobs:
             ${{ vars.VERSION_UPDATE_FLOW_NOTIFY_USERS }}
           delete-branch: true
           assignees: ${{ vars.VERSION_UPDATE_FLOW_ASSIGNEES }}
+
+      - name: Comment test commands on PR
+        if: steps.create-pr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
+          PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
+          TEST_TRIGGERS: ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
+        run: |
+          gh pr comment "${PR_NUMBER}" --body "${TEST_TRIGGERS}"
 
       - name: Notify on failure
         if: failure()
