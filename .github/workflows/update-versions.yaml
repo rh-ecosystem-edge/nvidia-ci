@@ -50,7 +50,6 @@ jobs:
         id: create-pr
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
           title: "[Automatic] Update versions, run ID: ${{ github.run_id }}"
           commit-message: Update versions
           branch: update-versions/${{ github.run_id }}
