@@ -24,7 +24,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.branch || 'main' }}
-          token: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -54,7 +53,7 @@ jobs:
           commit-message: Update versions
           branch: update-versions/${{ github.run_id }}
           body: |
-            :warning: Before approving the PR, make sure all required tests were triggered and completed:
+            :warning: Before approving the PR, run the following tests:
 
             ```
             ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
@@ -69,12 +68,17 @@ jobs:
           assignees: ${{ vars.VERSION_UPDATE_FLOW_ASSIGNEES }}
 
       - name: Comment test commands on PR
+        id: comment-tests
         if: steps.create-pr.outputs.pull-request-number
         env:
           GH_TOKEN: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
           PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
           TEST_TRIGGERS: ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
         run: |
+          if [ -z "${TEST_TRIGGERS//[[:space:]]/}" ]; then
+            echo "No test triggers to comment; skipping."
+            exit 0
+          fi
           gh pr comment "${PR_NUMBER}" --body "${TEST_TRIGGERS}"
 
       - name: Notify on failure
@@ -83,4 +87,3 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           help-file: .github/workflows/update-versions-help.md
-
