@@ -24,7 +24,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.branch || 'main' }}
-          token: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -47,9 +46,9 @@ jobs:
           TEST_TO_TRIGGER_FILE_PATH: ".github/scripts/generated-files/tests_to_trigger.txt"
           CHECK_CATALOG_AVAILABILITY: "true"
       - name: Create Pull Request
+        id: create-pr
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
           title: "[Automatic] Update versions, run ID: ${{ github.run_id }}"
           commit-message: Update versions
           branch: update-versions/${{ github.run_id }}
@@ -68,10 +67,23 @@ jobs:
           delete-branch: true
           assignees: ${{ vars.VERSION_UPDATE_FLOW_ASSIGNEES }}
 
+      - name: Comment test commands on PR
+        id: comment-tests
+        if: steps.create-pr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
+          PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
+          TEST_TRIGGERS: ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
+        run: |
+          if [ -z "${TEST_TRIGGERS//[[:space:]]/}" ]; then
+            echo "No test triggers to comment; skipping."
+            exit 0
+          fi
+          gh pr comment "${PR_NUMBER}" --body "${TEST_TRIGGERS}"
+
       - name: Notify on failure
         if: failure()
         uses: ./.github/actions/notify-failure
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           help-file: .github/workflows/update-versions-help.md
-
