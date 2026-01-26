@@ -63,7 +63,7 @@ get-nfd-must-gather:
 
 run-tests: get-gpu-operator-must-gather get-nfd-must-gather
 	@echo "Executing nvidiagpu test-runner script"
-	scripts/test-runner.sh
+	scripts/test-runner.sh $(ARGS)
 
 test-bm-arm-deployment:
 	/bin/bash tests/gpu-operator-arm-bm/uninstall-gpu-operator.sh

@@ -85,8 +85,8 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 
 NVIDIA MIG parameters for the script are controlled by the following environment variables:
 - `NVIDIAGPU_SINGLE_MIG_PROFILE`: Index number, that chooses the MIG profile from list of available MIG profiles (e.g. 1g.5gb is usually referenced with index 0).  If not specified, a valid random number is used. Typically values 0-5. - _optional_
-- `NVIDIAGPU_MIG_INSTANCES`: List of of numbers representing how many GPU slice instances are to be used for each profile when creating a pod. If there are 6 profiles, first 6 numbers (e.g. 2,1,1,0,0,0) indicate how many (2) GPU slices of profile 0, how many (1) GPU slice of profile 1 and how many (1) GPU slice of profile 2 and the rest are not used.
-- `NVIDIAGPU_DELAY_BETWEEN_PODS`: Default value 0, valid values 0 - 315 (seconds). In some MIG testcases there may be more than 1 pod launched. This parameter controls the delay between the pod launches. The lifetime of the pod is set to 300 seconds. This may be used to have the pods running completely simultaneously, mostly overlapping (e.g. 15-80), slightly overlapping (e.g. 200-280 seconds), or non overlapping (over 300 seconds). Values over valid values are reset to closest limit (either 0 or 315).
+- `NVIDIAGPU_MIG_INSTANCES`: List of numbers representing how many GPU slice instances are to be used for each profile when creating a pod. If there are 6 profiles, first 6 numbers (e.g. 2,1,1,0,0,0) indicate how many (2) GPU slices of profile 0, how many (1) GPU slice of profile 1 and how many (1) GPU slice of profile 2 and the rest are not used.
+- `NVIDIAGPU_DELAY_BETWEEN_PODS`: Default value 0, valid values 0 - 315 (seconds). In some MIG testcases there may be more than 1 pod launched. This parameter controls the delay between the pod launches. The lifetime of the pod is set to 300 seconds. This may be used to have the pods running completely simultaneously, mostly overlapping (e.g. 15-80), slightly overlapping (e.g. 200-280 seconds), or non-overlapping (over 300 seconds). Values that are outside of the range of valid values are reset to closest limit (either 0 or 315).
 
 
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
@@ -193,20 +193,22 @@ leaving the 1g.10gb unused).
 mixed-mig testcase would wait 15 seconds between the pods launching with NVIDIAGPU_DELAY_BETWEEN_PODS set.
 mixed-mig testcase would wait 25 seconds between the pods launching with pod-delay label
 Bigger value of the two is selected.
+You can deliver the ginkgo cli parameter using ARGS after the "make run-tests", e.g. pod-delay=35 which is
+equivalent to NVIDIAGPU_DELAY_BETWEEN_PODS.
 Note: this is a sample of doing the same thing with 2 different approach.
 ```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
 $ export TEST_FEATURES="mig"
-$ export TEST_LABELS='single-mig,mixed-mig,pod-delay=25'
+$ export TEST_LABELS='single-mig,mixed-mig'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_SINGLE_MIG_PROFILE=1
 $ export NVIDIAGPU_CLEANUP=false
 $ export NVIDIAGPU_MIG_INSTANCES="2,0,1,1"
 $ export NVIDIAGPU_DELAY_BETWEEN_PODS=15
-$ make run-tests
+$ make run-tests ARGS="-- --pod-delay=35"
 ```
 
 #### Cleanup:
