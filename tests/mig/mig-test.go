@@ -1,7 +1,6 @@
 package mig
 
 import (
-//	"flag"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
 	_ "github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
@@ -43,16 +42,6 @@ var (
 
 	cleanupAfterTest = false
 )
-
-// var (
-// 	testDelay    int
-// )
-
-// func init() {
-// 	// Register flags before Ginkgo parses them
-// 	flag.IntVar(&testDelay, "test-delay", 0, "delay in seconds between pod creation on mixed-mig testcase")
-// }
-
 
 var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 
@@ -105,6 +94,7 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 			mig.TestMixedMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
 		})
+
 	})
 })
 

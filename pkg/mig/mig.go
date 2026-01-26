@@ -671,7 +671,7 @@ func ReadDelayBetweenPods(delayBetweenPods int) int {
 	case delayBetweenPods > 315:
 		podDelay = 315
 	default:
-		// do nothing
+		podDelay = delayBetweenPods
 	}
 
 	switch {
@@ -680,13 +680,13 @@ func ReadDelayBetweenPods(delayBetweenPods int) int {
 	case PodDelay > 315:
 		// Exceeding value is reset to maximum value
 		podDelay = 315
+	case PodDelay > podDelay && PodDelay <= 315:
+		podDelay = PodDelay
 	default:
-		// do nothing
+		// do nothing, value is already within the range and set accoring to delayBetweenPods
 	}
 
-	GinkgoWriter.Printf("Ginkgo CLI parameter pod-delay value: %d seconds\n", podDelay)
-	glog.V(gpuparams.GpuLogLevel).Infof("%s: %d seconds", colorLog(colorCyan+colorBold, "pod-delay"), podDelay)
-
+	glog.V(gpuparams.Gpu10LogLevel).Infof("delay-between-pods %d PodDelay %d podDelay %d", delayBetweenPods, PodDelay, podDelay)
 	return podDelay
 }
 
@@ -840,7 +840,6 @@ func SetMIGLabelsOnNodes(migCapabilities []MIGProfileInfo, useMigIndex int, Work
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG mixed strategy label on GPU worker nodes from %d entry of the list (profile: %s with %d/%d slices)",
 			useMigIndex, migCapabilities[useMigIndex].MigName, migCapabilities[useMigIndex].Available, migCapabilities[useMigIndex].Total)
 		MigProfile = "all-balanced"
-		migStrategy = "mixed"
 		useMigProfile = "mixed"
 	default:
 		// mig strategy is initially for mixed strategy, so by default using mixed strategy on any other case.
@@ -984,9 +983,6 @@ func DeployGPUWorkload(
 	glog.V(gpuparams.Gpu10LogLevel).Infof("The created gpuBurnMigPod has name: %s has status: %v",
 		gpuBurnMigPod.Name, gpuBurnMigPod.Status)
 
-	_, err = pod.Pull(inittools.APIClient, podName, namespace)
-	Expect(err).ToNot(HaveOccurred(), "error pulling pod %s from namespace %s: %v", podName, namespace, err)
-
 	gpuMigPodPulled, err := pod.Pull(inittools.APIClient, gpuBurnMigPod.Name, namespace)
 	Expect(err).ToNot(HaveOccurred(), "error pulling gpu-burn pod from "+
 		"namespace '%s': %v", namespace, err)
@@ -1040,11 +1036,16 @@ func logPodEvents(podName, namespace string) {
 // It first checks it quickly and if necessary, it waits for it to reach the Running phase.
 // Log validation ensures that the logs are from the pod that was created at the start of the test.
 func isRunning(GpuPod *pod.Builder, namespace string) {
+	// This is to avoid waiting, if the pod is already in Running or Succeeded phase.
+	// If pod was Completed (or Running) already, there's no need to wait.
+	// Avoiding the timeout in case it is Completed already is preferred.
 	_, err := pod.Pull(inittools.APIClient, GpuPod.Definition.Name, namespace)
 	Expect(err).ToNot(HaveOccurred(), "Pod %s does not exist in namespace %s with error: %v", GpuPod.Definition.Name, namespace, err)
 	if GpuPod.Object.Status.Phase == corev1.PodRunning || GpuPod.Object.Status.Phase == corev1.PodSucceeded {
 		return
 	}
+	// Waiting for the pod to reach Running phase, if it was not already.
+	// If the pod is left in Pending state, timeout will occur.
 	err = GpuPod.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
 	if err != nil {
 		// pod exists, but is not running
@@ -1073,8 +1074,9 @@ func GetGPUBurnPodLogs(gpuMigPodPulled *pod.Builder, multiplier int) string {
 
 	var BurnLogTimer time.Duration = 0
 
+	// although multiplier is supposed to be positive integer, it's better to check for the negative as well.
 	switch {
-	case multiplier == 0:
+	case multiplier <= 0:
 		BurnLogTimer = nvidiagpu.BurnLogCollectionPeriod
 	case multiplier > 0:
 		BurnLogTimer = nvidiagpu.BurnPodCreationTimeout + nvidiagpu.BurnLogCollectionPeriod*time.Duration(multiplier)
