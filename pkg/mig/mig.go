@@ -54,8 +54,11 @@ func init() {
 	flag.IntVar(&SingleMigProfile, "single.mig.profile", -1, "index of the MIG profile to be used for single-mig testcase")
 	flag.StringVar(&MigInstances, "mixed.mig.instances", "2,0,1,1", "comma-separated number of instances for mixed-mig testcase, defaults are for A100 GPU [2,0,1,1,0,0]")
 	flag.BoolVar(&NoColor, "no-color", false, "disable color output")
+}
 
-	// Parse the string into []int after flags are parsed
+// InitializeMixedMigInstances parses MigInstances string into MixedMigInstances slice.
+// This must be called after flags are parsed (e.g., in a BeforeSuite or BeforeAll hook).
+func InitializeMixedMigInstances() {
 	MixedMigInstances = parseMigInstances(MigInstances, defaultMigInstances)
 }
 
