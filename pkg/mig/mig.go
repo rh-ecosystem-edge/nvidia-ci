@@ -125,7 +125,6 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	expectedLabelValue := "single"
 	err = wait.NodeLabelExists(inittools.APIClient, migSingleLabel, expectedLabelValue,
 		labels.Set(WorkerNodeSelector), nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
-	// In this case test has to proceed even if the label is not found. Strategy will be changed later.
 	Expect(err).ToNot(HaveOccurred(), "Could not find at least one node with label '%s' set to '%s'", migSingleLabel, expectedLabelValue)
 	glog.V(gpuparams.Gpu10LogLevel).Infof("MIG single strategy label found, proceeding with test")
 
@@ -645,7 +644,7 @@ func ReadMIGParameter(MixedMIGProfile string) []int {
 	}
 
 	// If no valid numbers found, return default values
-	glog.V(gpuparams.GpuLogLevel).Infof("No valid numbers found in NVIDIAGPU_MIG_INSTANCES, using default values %s", defaults)
+	glog.V(gpuparams.GpuLogLevel).Infof("No valid numbers found in NVIDIAGPU_MIG_INSTANCES, using default values %v", defaults)
 	return defaults
 }
 
@@ -1047,15 +1046,17 @@ func isRunning(GpuPod *pod.Builder, namespace string) {
 	// Waiting for the pod to reach Running phase, if it was not already.
 	// If the pod is left in Pending state, timeout will occur.
 	err = GpuPod.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
+	var err2 error
+	var pod2 *pod.Builder
 	if err != nil {
 		// pod exists, but is not running
 		// Using pod2 to avoid confusion with previous pod pull
-		pod2, _ := pod.Pull(inittools.APIClient, GpuPod.Definition.Name, namespace)
-		glog.V(gpuparams.Gpu10LogLevel).Infof("Pod %s is likely Pending for some reason: %s (%s)",
-			pod2.Definition.Name, pod2.Object.Status.Phase, pod2.Object.Status.Reason)
+		pod2, err2 = pod.Pull(inittools.APIClient, GpuPod.Definition.Name, namespace)
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Pod %s is likely Pending for some reason: %s (%s). Error: %v, Error2: %v",
+			pod2.Definition.Name, pod2.Object.Status.Phase, pod2.Object.Status.Reason, err, err2)
 		logPodEvents(pod2.Definition.Name, namespace)
 	}
-	Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod with MIG in "+
+	Expect(err2).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod with MIG in "+
 		"namespace '%s' to go to Running phase: %v\n Pod is likely Pending for some reason", namespace, err)
 }
 
