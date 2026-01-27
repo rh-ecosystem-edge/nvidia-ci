@@ -35,13 +35,43 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
+// Global variables for ginkgo CLI parameters
 var (
-	PodDelay int
+	PodDelay          int
+	SingleMigProfile  int
+	MigInstances      string
+	NoColor           bool
+	MixedMigInstances []int
+)
+
+const (
+	defaultMigInstances = "2,0,1,1"
 )
 
 func init() {
 	// Register flags before Ginkgo parses them
-	flag.IntVar(&PodDelay, "pod-delay", 0, "delay in seconds between pod creation on mixed-mig testcase")
+	flag.IntVar(&PodDelay, "mixed.mig.pod-delay", 0, "delay in seconds between pod creation on mixed-mig testcase")
+	flag.IntVar(&SingleMigProfile, "single.mig.profile", -1, "index of the MIG profile to be used for single-mig testcase")
+	flag.StringVar(&MigInstances, "mixed.mig.instances", "2,0,1,1", "comma-separated number of instances for mixed-mig testcase, defaults are for A100 GPU [2,0,1,1,0,0]")
+	flag.BoolVar(&NoColor, "no-color", false, "disable color output")
+
+	// Parse the string into []int after flags are parsed
+	MixedMigInstances = parseMigInstances(MigInstances, defaultMigInstances)
+}
+
+func parseMigInstances(s string, defaults string) []int {
+	regex := regexp.MustCompile(`\d+`)
+	matches := regex.FindAllString(s, -1)
+	if len(matches) <= 0 {
+		s = defaults
+		matches = regex.FindAllString(s, -1)
+	}
+	result := []int{}
+	for _, match := range matches {
+		instance, _ := strconv.Atoi(match)
+		result = append(result, instance)
+	}
+	return result
 }
 
 // TestSingleMIGGPUBurn performs the GPU Burn test with single strategy MIG Configuration
@@ -66,6 +96,7 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	var useMigProfile string // = "mig-1g.5gb"  // mig profiles are queried from the hardware
 	var useMigIndex int      // will be set to random value after migCapabilities is populated
 	var migCapabilities []MIGProfileInfo
+	glog.V(gpuparams.Gpu100LogLevel).Infof("%s %v is not in use yet", colorLog(colorCyan+colorBold, "Check --no-color parameter: "), NoColor)
 
 	By("Check mig.capability on GPU nodes")
 	err := wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.capable", "true", labels.Set(WorkerNodeSelector),
@@ -240,6 +271,7 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	// If so wished, 1x can be used insteady of 2x.
 	var useMigIndex int // will be set to random value after migCapabilities is populated
 	var migCapabilities []MIGProfileInfo
+	glog.V(gpuparams.Gpu100LogLevel).Infof("%s %v is not in use yet", colorLog(colorCyan+colorBold, "Check --no-color parameter: "), NoColor)
 
 	By("Check mig.capability on GPU nodes")
 	err := wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.capable", "true", labels.Set(WorkerNodeSelector),
@@ -594,6 +626,7 @@ func ShouldKeepOperator(labelsToCheck []string) bool {
 // -1 translates to random selection of MIG profile
 func ReadSingleMIGParameter(singleMIGProfile string) int {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Check NVIDIAGPU_SINGLE_MIG_PROFILE parameter"))
+	glog.V(gpuparams.Gpu100LogLevel).Infof("%s %v is not in use yet", colorLog(colorCyan+colorBold, "Check --single.mig.profile parameter: "), singleMIGProfile)
 	if singleMIGProfile == "" {
 		glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_SINGLE_MIG_PROFILE" +
 			" is not set, selecting it automatically")
@@ -616,6 +649,7 @@ func ReadSingleMIGParameter(singleMIGProfile string) int {
 // If the parameter is set, it parses all numbers from the string (comma or space separated) and returns them as a slice.
 func ReadMIGParameter(MixedMIGProfile string) []int {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Check NVIDIAGPU_MIG_INSTANCES parameter"))
+	glog.V(gpuparams.Gpu100LogLevel).Infof("%s %v is not in use yet", colorLog(colorCyan+colorBold, "Check --mixed.mig.instances parameter: "), MixedMigInstances)
 	defaults := []int{2, 0, 1, 1, 0, 0}
 	if MixedMIGProfile == "" {
 		glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_MIG_INSTANCES"+
