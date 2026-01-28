@@ -8,13 +8,13 @@ import (
 
 var (
 	// Labels represents the range of labels that can be used for test cases selection.
-	MigLabels = append(gpuparams.Labels, LabelSuite)
+	MigLabels = append(gpuparams.MigLabels, LabelSuite)
 
 	// ReporterNamespacesToDump tells to the reporter from where to collect logs.
 	MigReporterNamespacesToDump = map[string]string{
 		"openshift-nfd":       "nfd-operator",
 		"nvidia-gpu-operator": "gpu-operator",
-		"mig-testing":         "mig-testing",
+		"mig-testing":         "test-gpu-burn",
 	}
 
 	// ReporterCRDsToDump tells to the reporter what CRs to dump.

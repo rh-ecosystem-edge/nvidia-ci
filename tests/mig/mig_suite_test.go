@@ -20,7 +20,7 @@ func TestMIG(t *testing.T) {
 	reporterConfig.JUnitReport = inittools.GeneralConfig.GetJunitReportPath(currentFile)
 
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "MIG", Label(tsparams.Labels...), reporterConfig)
+	RunSpecs(t, "MIG", Label(tsparams.MigLabels...), reporterConfig)
 }
 
 var _ = JustAfterEach(func() {
