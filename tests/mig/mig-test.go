@@ -50,7 +50,8 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 		BeforeAll(func() {
 			glog.V(gpuparams.Gpu10LogLevel).Infof("Start of the test case, BeforeAll")
 			// Initialize CLI flag-derived values after flags are parsed
-			mig.InitializeMixedMigInstances()
+			mig.ParseCLIParameters()
+			mig.LogCLIParameterValues()
 			nvidiaGPUConfig = nvidiagpuconfig.NewNvidiaGPUConfig()
 			Expect(nvidiaGPUConfig).ToNot(BeNil(), "Failed to initialize NvidiaGPUConfig")
 
