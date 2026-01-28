@@ -27,7 +27,7 @@ DEFAULT_ORG_REPO = "rh-ecosystem-edge_nvidia-ci"
 OLLAMA_MODEL = "llama3.2:1b"  # ~1GB, fast CPU inference
 OLLAMA_URL = "http://localhost:11434"
 
-SYSTEM_PROMPT = """Summarize this CI failure in 1-2 sentences. State if it's safe to retest or needs a fix. Be concise."""
+SYSTEM_PROMPT = """Summarize this CI failure in 1-2 sentences. Only describe what failed. Do NOT suggest fixes or recommend actions. Be concise."""
 
 
 def fetch_file_from_gcs(bucket: str, path: str) -> str | None:
@@ -429,12 +429,12 @@ def summarize_with_ollama(job_name: str, build_log: str, key_errors: dict) -> st
         "model": OLLAMA_MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Job: {job_name}\n\nLog:\n{relevant_log}\n\nBriefly explain why this failed and if it's safe to retest:"}
+            {"role": "user", "content": f"Job: {job_name}\n\nLog:\n{relevant_log}\n\nBriefly explain what failed:"}
         ],
         "stream": False,
         "options": {
             "temperature": 0.3,  # Balanced temperature
-            "num_predict": 75,   # Very short for fast CPU inference
+            "num_predict": 100,  # Short but allows complete sentences
         }
     }
     
