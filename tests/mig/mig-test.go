@@ -49,6 +49,8 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 
 		BeforeAll(func() {
 			glog.V(gpuparams.Gpu10LogLevel).Infof("Start of the test case, BeforeAll")
+			// Initialize CLI flag-derived values after flags are parsed
+			mig.InitializeMixedMigInstances()
 			nvidiaGPUConfig = nvidiagpuconfig.NewNvidiaGPUConfig()
 			Expect(nvidiaGPUConfig).ToNot(BeNil(), "Failed to initialize NvidiaGPUConfig")
 
@@ -86,10 +88,15 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 			mig.TestSingleMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
 		})
 
-		It("Test GPU workload with mixed strategy MIG Configuration", Label("gpu-mixed-mig"), func() {
-			glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-mixed-mig testcase not yet implemented")
-			// mig.TestMixedMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
+		It("Test GPU workload with mixed strategy MIG Configuration", Label("mixed-mig"), func() {
+			// Skip if mixed-mig label is not in the ginkgo label filter
+			if !mig.IsLabelInFilter("mixed-mig") {
+				glog.V(gpuparams.GpuLogLevel).Infof("Skipping test: 'mixed-mig' label not present in ginkgo label filter")
+				Skip("Test skipped: 'mixed-mig' label not present in ginkgo label filter")
+			}
+			mig.TestMixedMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
 		})
+
 	})
 })
 
@@ -108,4 +115,3 @@ func ReportOpenShiftVersionAndEnsureNFD(nfdInstance *operatorconfig.CustomConfig
 
 	nfd.EnsureNFDIsInstalled(inittools.APIClient, nfdInstance, ocpVersion, gpuparams.GpuLogLevel)
 }
-
