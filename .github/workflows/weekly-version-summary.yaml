@@ -2,7 +2,7 @@ name: Weekly Version Summary
 
 on:
   schedule:
-    - cron: '0 10 * * 4'  # 10 am UTC on Thursdays
+    - cron: '0 5 * * 4'  # 5 am UTC on Thursdays
   workflow_dispatch:
 
 permissions:
