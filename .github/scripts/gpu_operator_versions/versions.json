@@ -1,5 +1,5 @@
 {
-    "gpu-main-latest": "sha256:d2b68f7065ad94683725f27569ea78f0bbc1449bf8164689ca37ec3a5100c3fb",
+    "gpu-main-latest": "sha256:c22c8d542801fed58a05735815953dc73419252212e7ae145c516122aed994b5",
     "gpu-operator": {
         "22.9": "22.9.2",
         "23.3": "23.3.2",
