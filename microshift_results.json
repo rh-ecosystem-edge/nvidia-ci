@@ -1,6 +1,13 @@
 {
   "4.22": [
     {
+      "num": 2017040320964857856,
+      "timestamp": 1769739426,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.22-periodics-e2e-aws-ai-model-serving-nightly/2017040320964857856/",
+      "microshift_version": "4.22.0_0.nightly_2026_01_27_121451_20260129154302_c08164c20"
+    },
+    {
       "num": 2016315464333922304,
       "timestamp": 1769566464,
       "status": "SUCCESS",
@@ -83,16 +90,16 @@
       "status": "SUCCESS",
       "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.22-periodics-e2e-aws-ai-model-serving-nightly/2010517441490194432/",
       "microshift_version": "4.22.0_0.nightly_2026_01_06_164201_20260111152924_4ff79188b"
-    },
-    {
-      "num": 2009430270322675712,
-      "timestamp": 1767924978,
-      "status": "SUCCESS",
-      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.22-periodics-e2e-aws-ai-model-serving-nightly/2009430270322675712/",
-      "microshift_version": "4.22.0_0.nightly_2026_01_01_225210_20260107205129_da6561051"
     }
   ],
   "4.21": [
+    {
+      "num": 2017040315063472128,
+      "timestamp": 1769739396,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.21-periodics-e2e-aws-ai-model-serving-nightly/2017040315063472128/",
+      "microshift_version": "4.21.0_0.nightly_2026_01_22_192129_20260129111047_3426b95ea"
+    },
     {
       "num": 2016315456788369408,
       "timestamp": 1769567085,
@@ -176,16 +183,16 @@
       "status": "SUCCESS",
       "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.21-periodics-e2e-aws-ai-model-serving-nightly/2010517435639140352/",
       "microshift_version": "4.21.0_0.nightly_2026_01_08_052422_20260111170704_714a26a62"
-    },
-    {
-      "num": 2009430263611789312,
-      "timestamp": 1767924989,
-      "status": "SUCCESS",
-      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.21-periodics-e2e-aws-ai-model-serving-nightly/2009430263611789312/",
-      "microshift_version": "4.21.0_0.nightly_2026_01_06_165528_20260108084028_df30d92be"
     }
   ],
   "4.20": [
+    {
+      "num": 2017040309183057920,
+      "timestamp": 1769739388,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.20-periodics-e2e-aws-ai-model-serving-nightly/2017040309183057920/",
+      "microshift_version": "4.20.0_0.nightly_2026_01_28_090316_20260129064335_cad94bfe8"
+    },
     {
       "num": 2015953232739700736,
       "timestamp": 1769480179,
@@ -283,16 +290,16 @@
       "status": "FAILURE",
       "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.20-periodics-e2e-aws-ai-model-serving-nightly/1999283176668663808/",
       "microshift_version": "4.20.0_0.nightly_2025_12_10_143047_20251211075837_3e83a0a10"
-    },
-    {
-      "num": 1998196185252237312,
-      "timestamp": 1765246074,
-      "status": "FAILURE",
-      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.20-periodics-e2e-aws-ai-model-serving-nightly/1998196185252237312/",
-      "microshift_version": "4.20.0_0.nightly_2025_12_04_021057_20251208175636_cc1895bc1"
     }
   ],
   "4.19": [
+    {
+      "num": 2017040302467977216,
+      "timestamp": 1769738916,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.19-periodics-e2e-aws-ai-model-serving-nightly/2017040302467977216/",
+      "microshift_version": "4.19.0_0.nightly_2026_01_26_174424_20260129064051_94e2acd19"
+    },
     {
       "num": 2015953226028814336,
       "timestamp": 1769479163,
@@ -390,13 +397,6 @@
       "status": "FAILURE",
       "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.19-periodics-e2e-aws-ai-model-serving-nightly/1999283169957777408/",
       "microshift_version": "4.19.0_0.nightly_2025_12_09_173011_20251211075838_44a34026a"
-    },
-    {
-      "num": 1998196176863629312,
-      "timestamp": 1765246071,
-      "status": "FAILURE",
-      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.19-periodics-e2e-aws-ai-model-serving-nightly/1998196176863629312/",
-      "microshift_version": "4.19.0_0.nightly_2025_12_04_015230_20251208175635_f0e7cfed7"
     }
   ],
   "4.18": [
@@ -508,6 +508,13 @@
   ],
   "4.17": [
     {
+      "num": 2016726403147370496,
+      "timestamp": 1769662280,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6164/pull-ci-openshift-microshift-release-4.17-e2e-aws-nvidia-device-plugin/2016726403147370496/",
+      "microshift_version": "4.17.44"
+    },
+    {
       "num": 2015639422921347072,
       "timestamp": 1769403071,
       "status": "SUCCESS",
@@ -603,13 +610,6 @@
       "timestamp": 1764824537,
       "status": "SUCCESS",
       "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/5857/pull-ci-openshift-microshift-release-4.17-e2e-aws-nvidia-device-plugin/1996435435726835712/",
-      "microshift_version": "4.17.44"
-    },
-    {
-      "num": 1995345337526521856,
-      "timestamp": 1764564681,
-      "status": "SUCCESS",
-      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/5830/pull-ci-openshift-microshift-release-4.17-e2e-aws-nvidia-device-plugin/1995345337526521856/",
       "microshift_version": "4.17.44"
     }
   ],
