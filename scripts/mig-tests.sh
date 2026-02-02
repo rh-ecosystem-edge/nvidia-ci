@@ -60,12 +60,6 @@ if [[ ! -z "${TEST_LABELS}" ]]; then
     cmd+=" --label-filter=\"${TEST_LABELS}\""
 fi
 cmd+=" "$feature_dirs" $@"   # + user args --xxx=yyy...
-#### user arguments can be e.g.:
-# --single.mig.profile=0  #### usually 0-5 are valid
-# --mixed.mig.instances='2,0,1,1'  #### defaults are for A100 GPU [2,0,1,1,0,0]
-# --mixed.mig.pod-delay=10  #### delay in seconds between pod creation on mixed-mig testcase
-# --no-color  #### disable color output on mig testcases
-#### make run-tests ARGS="-- --pod-delay=10 --single.mig.profile=0 --mixed.mig.instances='2,0,1,1' --no-color=true"
 
 # Execute ginkgo command
 echo $cmd
