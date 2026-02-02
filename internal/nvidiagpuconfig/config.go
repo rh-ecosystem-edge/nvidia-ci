@@ -16,10 +16,6 @@ type NvidiaGPUConfig struct {
 	OperatorUpgradeToChannel           string `envconfig:"NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL"`
 	GPUFallbackCatalogsourceIndexImage string `envconfig:"NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"`
 	ClusterPolicyPatch                 string `envconfig:"NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH"`
-	SingleMIGProfile                   string `envconfig:"NVIDIAGPU_SINGLE_MIG_PROFILE"`
-	MIGInstances                       string `envconfig:"NVIDIAGPU_MIG_INSTANCES"`
-	MIGStrategy                        string `envconfig:"NVIDIAGPU_MIG_STRATEGY"`
-	DelayBetweenPods                   int    `envconfig:"NVIDIAGPU_DELAY_BETWEEN_PODS"`
 }
 
 // NewNvidiaGPUConfig returns an instance of NvidiaGPUConfig.

@@ -61,13 +61,15 @@ In order to enable k8reporter the following needs to be done:
 
 The test-runner [script](scripts/test-runner.sh) is the recommended way for executing tests.
 
+### Environment variables
+
 General Parameters for the script are controlled by the following environment variables:
-- `TEST_FEATURES`: list of features to be tested.  Subdirectories under `tests` dir that match a feature will be included (internal directories are excluded).  When we have more than one subdirectlory ot tests, they can be listed comma separated.- _required_
+- `TEST_FEATURES`: list of features to be tested.  Subdirectories under `tests` dir that match a feature will be included (internal directories are excluded).  When we have more than one subdirectory ot tests, they can be listed comma-separated.- _required_
 - `TEST_LABELS`: ginkgo query passed to the label-filter option for including/excluding tests. Supports comma-separated labels (AND logic) and `||` operator (OR logic). Examples: `'nvidia-ci,gpu'`, `'nvidia-ci,mps'`, `'nvidia-ci,mig'`, `'deploy || rdma-legacy-sriov'` - _optional_
 - `TEST_VERBOSE`: executes ginkgo with verbose test output - _optional_
 - `TEST_TRACE`: includes full stack trace from ginkgo tests when a failure occurs - _optional_
 - `VERBOSE_SCRIPT`: prints verbose script information when executing the script - _optional_
-- `NO_COLOR`: when used, omits the coloring of logs that appear on beginning of the functions. However it does not affect on the coloring of the logs that ginkgo framework generates. - _optional_
+- `NO_COLOR`: `{true|anything else}` when used, omits the coloring of logs that appear on beginning of the functions. However it does not affect on the coloring of the logs that ginkgo framework generates. - _optional_
 
 NVIDIA GPU Operator-specific parameters for the script are controlled by the following environment variables:
 - `NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE`: Use only when OCP is on a public cloud, and when you need to scale the cluster to add a GPU-enabled compute node. If cluster already has a GPU enabled worker node, this variable should be unset.
@@ -82,12 +84,6 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 - `NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH`: a JSON patch to apply to a default cluster policy from ALM examples, written according to
    [RFC 6902](http://tools.ietf.org/html/rfc6902) (also see [kubectl patch](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_patch/)) - _optional_
 - `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
-
-NVIDIA MIG parameters for the script are controlled by the following environment variables:
-- `NVIDIAGPU_SINGLE_MIG_PROFILE`: Index number, that chooses the MIG profile from list of available MIG profiles (e.g. 1g.5gb is usually referenced with index 0).  If not specified, a valid random number is used. Typically values 0-5. - _optional_
-- `NVIDIAGPU_MIG_INSTANCES`: List of numbers representing how many GPU slice instances are to be used for each profile when creating a pod. If there are 6 profiles, first 6 numbers (e.g. 2,1,1,0,0,0) indicate how many (2) GPU slices of profile 0, how many (1) GPU slice of profile 1 and how many (1) GPU slice of profile 2 and the rest are not used.
-- `NVIDIAGPU_DELAY_BETWEEN_PODS`: Default value 0, valid values 0 - 315 (seconds). In some MIG testcases there may be more than 1 pod launched. This parameter controls the delay between the pod launches. The lifetime of the pod is set to 300 seconds. This may be used to have the pods running completely simultaneously, mostly overlapping (e.g. 15-80), slightly overlapping (e.g. 200-280 seconds), or non-overlapping (over 300 seconds). Values outside valid range are reset to closest limit (either 0 or 315).
-
 
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
 - `NVIDIANETWORK_CATALOGSOURCE`: custom catalogsource to be used.  If not specified, the default "certified-operators" catalog is used - _optional_
@@ -114,6 +110,13 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE`: MacvlanNetwork Custom Resource instance IPAM or IP Address/Subnet mask range for Eth or IB interface - _required_
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - _required_
 - `NVIDIANETWORK_RDMA_GPUDIRECT`: Boolean flag to run RDMA workload with 1 nvidia.com/gpu resource - _optional_
+
+### CLI parameters:
+
+NVIDIA MIG parameters for the script are controlled by the following ginkgo parameters which are delivered as `ARGS="-- [{parameter}...]"` for the `make run-tests` (check the examples):
+- `--single.mig-profile=n`, where n is typically a value of int type between 0-5. The parameter is used to choose the MIG profile from list of available MIG profiles (e.g. 1g.5gb is usually referenced with index 0).  If not specified, a valid random number is used. Typically values 0-5. - _optional_
+- `--mixed.mig.instances=xxx`, where xxx is a comma-separated string inside quotation marks (e.g. "2,0,1,1,0,0") The list of numbers represent how many instances are to be used for each profile when creating a pod. The first number indicates how many instances are to be used for the first profile etc. The instances of different profiles consume GPU slices in a different way. The name of the profile (e.g. 2g.10gb) describes the consumption of each instance (each instance would consume 2 slices and 10gb of memory). _optional_
+- `--mixed.mig.pod-delay=n`, where n is a number in range 0 - 315 (seconds). In mixed MIG testcase there are usually more than 1 pod launched (depends on available GPU and mixed.mig.instances parameter). Since GPU workload is 300 seconds, this parameter can be used to control the delay between the pod launches so that the pods are running completely simultaneously, mostly overlapping (e.g. 15-80), slightly overlapping (e.g. 200-280 seconds), or non-overlapping (over 300 seconds). Values outside valid range are reset to closest limit (either 0 or 315). _optional_
 
 ### Testing MPS with GPU Operator
 
@@ -170,32 +173,27 @@ It is recommended to execute the runner script through the `make run-tests` make
 
 #### Steps to run MIG tests:
 
-1. Run mig testcase(s) after nvidia-ci on any cluster
+1. Run mig testcases (single-mig and mixed-mig) after nvidia-ci on any cluster, while selecting single.mig.profile=1
 ```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
 $ export TEST_FEATURES="nvidiagpu"
-$ export TEST_LABELS='nvidia-ci,gpu,single-mig'
+$ export TEST_LABELS='nvidia-ci,gpu,single-mig,mixed-mig'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
-$ export NVIDIAGPU_SINGLE_MIG_PROFILE=1  ## any value of int type, usually 0-5 are valid
-$ make run-tests
+$ make run-tests ARGS="-- --single.mig.profile=1"
 ```
 2. Running only MIG testcases on an existing cluster which has GPU operator installed,
 e.g. after executing step 1. MIG testcase(s) can be used from either nvidiagpu or
 mig package. MIG is used in this example. In the other case, use `TEST_FEATURES="nvidiagpu"`
 to execute the testcase from nvidiagpu package.
-With these MIG parameters single-mig testcase would take MIG profile with index=1, mixed-mig
-testcase would use default instance amount for A100 GPU (2x 1g.5gb, 1x 2g.10gb and 1x 3g.20gb,
-leaving the 1g.10gb unused).
-mixed-mig testcase would wait 15 seconds between the pods launching with NVIDIAGPU_DELAY_BETWEEN_PODS set.
-mixed-mig testcase would wait 25 seconds between the pods launching with pod-delay label
-Bigger value of the two is selected.
-You can deliver the ginkgo cli parameter using ARGS after the "make run-tests", e.g. pod-delay=35 which is
-equivalent to NVIDIAGPU_DELAY_BETWEEN_PODS.
-Note: this is a sample of doing the same thing with 2 different approach.
+With these MIG parameters single-mig testcase would choose a random MIG profile (as the single.mig.profile is not
+included) , mixed-mig testcase would use 1 instance amount for A100 GPU (1x 1g.5gb, 1x 2g.10gb and 1x 3g.20gb,
+leaving the second profile 1g.10gb unused).
+mixed-mig testcase would wait 35 seconds between the pods launching with mixed.mig.pod-delay parameter
+You can deliver the ginkgo cli parameter using ARGS after the "make run-tests"
 ```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
@@ -204,11 +202,8 @@ $ export TEST_FEATURES="mig"
 $ export TEST_LABELS='single-mig,mixed-mig'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
-$ export NVIDIAGPU_SINGLE_MIG_PROFILE=1
 $ export NVIDIAGPU_CLEANUP=false
-$ export NVIDIAGPU_MIG_INSTANCES="2,0,1,1"
-$ export NVIDIAGPU_DELAY_BETWEEN_PODS=15
-$ make run-tests ARGS="-- --pod-delay=35"
+$ make run-mig-tests ARGS="-- --mixed.mig.instances='1,0,1,1' --mixed.mig.pod-delay=35"
 ```
 
 #### Cleanup:
@@ -219,7 +214,7 @@ in the last execution of either steps 1 or 2
 $ export NVIDIAGPU_CLEANUP=true
 ```
 
-## Examples:
+### Examples of Testing GPU Operator end-to-end
 
 Example running the end-to-end GPU Operator test case:
 ```bash
@@ -227,7 +222,7 @@ $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
 $ export TEST_FEATURES="nvidiagpu"
-$ export TEST_LABELS='nvidia-ci,gpu,single-mig'
+$ export TEST_LABELS='nvidia-ci,gpu,single-mig,mixed-mig'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE="g4dn.xlarge"
@@ -236,8 +231,10 @@ $ export NVIDIAGPU_SUBSCRIPTION_CHANNEL="v23.9"
 $ make run-tests
 Executing nvidiagpu test-runner script
 scripts/test-runner.sh
-ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,single-mig" ./tests/nvidiagpu
+ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,single-mig,mixed-mig" ./tests/nvidiagpu
 ```
+
+### Examples of Testing GPU Operator upgrade
 
 Example running the GPU Operator upgrade testcase (from v23.6 to v24.3) after the end-end testcase.
 Note:  you must run the end-to-end testcase first to deploy a previous version, set NVIDIAGPU_CLEANUP=false,
@@ -262,6 +259,8 @@ scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,operator-upgrade" ./tests/nvidiagpu
 ```
 
+### Example of running nvidia-ci with custom parameters for NFD and GPU operators
+
 Example running the end-to-end test case and creating custom catalogsources for NFD and GPU Operator packagmanifests
 when missing from their default catalogsources.
 ```bash
@@ -277,6 +276,8 @@ $ export NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/re
 $ export NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
 $ make run-tests
 ```
+
+### Example for end-to-end Network Operator testcase with Legacy SRIOV RDMA testcase
 
 Example running the end-to-end Network Operator test case, with the Legacy SRIOV RDMA testcase.  
 Note: both TEST_LABELS "deploy || rdma-legacy-sriov' are specified in examples below:
