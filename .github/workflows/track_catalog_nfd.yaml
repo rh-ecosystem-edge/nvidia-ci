@@ -7,7 +7,7 @@ on:
       ocp_version:
         description: 'OpenShift version to check'
         required: false
-        default: '4.21'
+        default: '4.22'
       index_name:
         description: 'Operator index name'
         required: false
@@ -27,7 +27,7 @@ jobs:
     with:
       operator_display_name: 'NFD'
       index_name: ${{ github.event.inputs.index_name || 'redhat-operator-index' }}
-      ocp_version: ${{ github.event.inputs.ocp_version || '4.21' }}
+      ocp_version: ${{ github.event.inputs.ocp_version || '4.22' }}
       operator_name: ${{ github.event.inputs.operator_name || 'nfd' }}
     secrets:
       registry_username: ${{ secrets.REGISTRY_REDHAT_USERNAME }}
