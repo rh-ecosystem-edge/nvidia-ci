@@ -54,7 +54,7 @@ type Settings struct {
 	olm.OperatorsV1alpha1Interface
 	dynamic.Interface
 	olmv1.OperatorsV1Interface
-	PackageManifestInterface clientPkgManifestV1.OperatorsV1Interface
+	PackageManifestInterface clientPkgManifestV1.PackagesV1Interface
 	operatorv1alpha1.OperatorV1alpha1Interface
 	machinev1beta1client.MachineV1beta1Interface
 }

@@ -6,9 +6,10 @@ import (
 	"io/fs"
 	"strings"
 
-	operatorsv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	operatorsv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 )
 
 type bundleParser struct {
@@ -156,6 +157,7 @@ func (b *bundleParser) addMetadata(metadata fs.FS, bundle *Bundle) error {
 		bundle.Package = af.Annotations.PackageName
 		bundle.Channels = af.GetChannels()
 	} else {
+		//nolint:staticcheck // ST1005: error message is intentionally capitalized
 		return fmt.Errorf("Could not find annotations file")
 	}
 
@@ -184,6 +186,7 @@ func (b *bundleParser) derivedProperties(bundle *Bundle) ([]Property, error) {
 		return nil, fmt.Errorf("bundle missing csv")
 	}
 
+	// nolint:prealloc
 	var derived []Property
 	if len(csv.GetAnnotations()) > 0 {
 		properties, ok := csv.GetAnnotations()[PropertyKey]
@@ -194,22 +197,35 @@ func (b *bundleParser) derivedProperties(bundle *Bundle) ([]Property, error) {
 		}
 	}
 
+	// nolint:nestif
+	// existing code triggering nested complexity, but at least will not make worse with release processing
 	if bundle.Annotations != nil && bundle.Annotations.PackageName != "" {
 		pkg := bundle.Annotations.PackageName
 		version, err := bundle.Version()
 		if err != nil {
 			return nil, err
 		}
+		release, err := bundle.Release()
+		if err != nil {
+			return nil, err
+		}
+		if release == "" && csv.GetSubstitutesFor() != "" {
+			version, release, err = extractReleaseVersionFromBuildMetadata(version)
+			if err != nil {
+				return nil, fmt.Errorf("bundle %q error: %v", bundle.Name, err)
+			}
+		}
 
 		value, err := json.Marshal(PackageProperty{
 			PackageName: pkg,
 			Version:     version,
+			Release:     release,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal package property: %s", err)
 		}
 
-		// Annotations file takes precedent over CSV annotations
+		// Annotations file takes precedence over CSV annotations
 		derived = append([]Property{{Type: PackageType, Value: value}}, derived...)
 	}
 
@@ -235,6 +251,7 @@ func (b *bundleParser) derivedProperties(bundle *Bundle) ([]Property, error) {
 
 // propertySet returns the deduplicated set of a property list.
 func propertySet(properties []Property) []Property {
+	// nolint:prealloc
 	var (
 		set     []Property
 		visited = map[string]struct{}{}
@@ -248,4 +265,22 @@ func propertySet(properties []Property) []Property {
 	}
 
 	return set
+}
+
+func extractReleaseVersionFromBuildMetadata(substitutesFor string) (string, string, error) {
+	var version, release string
+	// if the bundle expresses no release version, but
+	// includes the substitutesFor annotation, then we
+	// interpret any build metadata in the version as
+	// the release version.
+	// failure to parse build metadata under these conditions is fatal,
+	// though validation is later
+	parts := strings.SplitN(substitutesFor, "+", 2)
+	if len(parts) == 2 {
+		version = parts[0]
+		release = parts[1]
+	} else {
+		return "", "", fmt.Errorf("no release version expressed as build metadata: %q", substitutesFor)
+	}
+	return version, release, nil
 }

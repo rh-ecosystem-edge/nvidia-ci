@@ -5,19 +5,19 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2"  //nolint:revive,staticcheck // Dot import is standard for Ginkgo tests
+	. "github.com/onsi/gomega"     //nolint:revive,staticcheck // Dot import is standard for Gomega assertions
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
-	_ "github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
+	_ "github.com/rh-ecosystem-edge/nvidia-ci/internal/check"      //nolint:revive,staticcheck // Blank import needed for init side effects
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
-	_ "github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
+	_ "github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams" //nolint:revive,staticcheck // Blank import needed for init side effects
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
-	_ "github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
+	_ "github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools" //nolint:revive,staticcheck // Blank import needed for init side effects
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
-	_ "github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
-	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"
+	_ "github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"                //nolint:revive,staticcheck // Blank import needed for init side effects
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"     //nolint:revive,staticcheck // Dot import for test configuration
 	"gopkg.in/k8snetworkplumbingwg/multus-cni.v4/pkg/logging"
 )
 
