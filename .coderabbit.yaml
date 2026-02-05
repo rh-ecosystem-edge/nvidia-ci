@@ -2,3 +2,4 @@ reviews:
   poem: false
   path_filters:
     - "!.github/scripts/gpu_operator_versions/versions.json"
+    - "!vendor/**"
