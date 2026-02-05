@@ -1,0 +1,130 @@
+name: Track operator availability (Reusable)
+on:
+  workflow_call:
+    inputs:
+      operator_display_name:
+        description: 'Display name for the operator (e.g., "GPU", "NFD")'
+        required: true
+        type: string
+      index_name:
+        description: 'Operator index name'
+        required: true
+        type: string
+      ocp_version:
+        description: 'OpenShift version to check'
+        required: true
+        type: string
+      operator_name:
+        description: 'Operator package name'
+        required: true
+        type: string
+    secrets:
+      registry_username:
+        required: true
+      registry_password:
+        required: true
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  check-catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Red Hat registry
+        id: login
+        uses: docker/login-action@v3
+        with:
+          registry: registry.redhat.io
+          username: ${{ secrets.registry_username }}
+          password: ${{ secrets.registry_password }}
+      - name: Check if catalog image exists
+        id: image_check
+        env:
+          INDEX_NAME: ${{ inputs.index_name }}
+          OCP_VERSION: ${{ inputs.ocp_version }}
+        run: |
+          IMAGE="registry.redhat.io/redhat/${INDEX_NAME}:v${OCP_VERSION}"
+          echo "Checking if catalog image exists: ${IMAGE}"
+
+          if docker manifest inspect "${IMAGE}"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Unable to access catalog image ${IMAGE}"
+          fi
+      - name: Render catalog using opm
+        if: steps.image_check.outputs.exists == 'true'
+        id: catalog_render
+        env:
+          OPERATOR_NAME: ${{ inputs.operator_name }}
+          INDEX_NAME: ${{ inputs.index_name }}
+          OCP_VERSION: ${{ inputs.ocp_version }}
+        run: |
+          set -euo pipefail
+          echo "Looking for ${OPERATOR_NAME} in ${INDEX_NAME} for OpenShift ${OCP_VERSION}"
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+            "registry.redhat.io/redhat/${INDEX_NAME}:v${OCP_VERSION}" \
+            render /configs > "${GITHUB_WORKSPACE}/catalog.json"
+      - name: Check for operator in catalog
+        if: steps.image_check.outputs.exists == 'true'
+        id: catalog_check
+        env:
+          OPERATOR_NAME: ${{ inputs.operator_name }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -s "${GITHUB_WORKSPACE}/catalog.json" ]; then
+            echo "Error: catalog.json is missing or empty"
+            exit 1
+          fi
+
+          if jq -e --arg name "${OPERATOR_NAME}" 'select(.name == $name)' "${GITHUB_WORKSPACE}/catalog.json" > /dev/null; then
+            echo "Operator ${OPERATOR_NAME} found in catalog!"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Operator ${OPERATOR_NAME} not yet in catalog"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create GitHub issue for operator availability
+        if: steps.catalog_check.outputs.found == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ocpVersion = '${{ inputs.ocp_version }}';
+            const operatorDisplayName = '${{ inputs.operator_display_name }}';
+            const operatorName = '${{ inputs.operator_name }}';
+            const indexName = '${{ inputs.index_name }}';
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'operator-available'
+            });
+
+            const issueTitle = `${operatorDisplayName} operator is now available for OpenShift ${ocpVersion}`;
+            const existingIssue = issues.find(issue => issue.title === issueTitle);
+
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: issueTitle,
+                body: `The ${operatorDisplayName} operator has been detected in the ${indexName} catalog for OpenShift ${ocpVersion}.\n\n## Tasks\n\n- [ ] Update the CI jobs to remove the custom catalog source\n- [ ] Update this workflow to start tracking the next version of OpenShift\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                labels: ['operator-available']
+              });
+            }
+      - name: Checkout Code
+        if: failure()
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/actions/notify-failure
+          fetch-depth: 1
+      - name: Notify on failure
+        if: failure()
+        uses: ./.github/actions/notify-failure
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}

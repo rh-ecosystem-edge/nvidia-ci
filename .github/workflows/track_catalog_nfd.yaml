@@ -1,0 +1,34 @@
+name: Track NFD operator availability
+on:
+  schedule:
+    - cron: '30 10 * * 4'
+  workflow_dispatch:
+    inputs:
+      ocp_version:
+        description: 'OpenShift version to check'
+        required: false
+        default: '4.22'
+      index_name:
+        description: 'Operator index name'
+        required: false
+        default: 'redhat-operator-index'
+      operator_name:
+        description: 'Operator package name'
+        required: false
+        default: 'nfd'
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  call-reusable-workflow:
+    uses: ./.github/workflows/track_catalog_operator.reusable.yaml
+    with:
+      operator_display_name: 'NFD'
+      index_name: ${{ github.event.inputs.index_name || 'redhat-operator-index' }}
+      ocp_version: ${{ github.event.inputs.ocp_version || '4.22' }}
+      operator_name: ${{ github.event.inputs.operator_name || 'nfd' }}
+    secrets:
+      registry_username: ${{ secrets.REGISTRY_REDHAT_USERNAME }}
+      registry_password: ${{ secrets.REGISTRY_REDHAT_PASSWORD }}
