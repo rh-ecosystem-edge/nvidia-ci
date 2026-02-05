@@ -14,8 +14,8 @@ import (
 
 	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
 	"github.com/golang/glog"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2"  //nolint:revive,staticcheck // Dot import is standard for Ginkgo tests
+	. "github.com/onsi/gomega"     //nolint:revive,staticcheck // Dot import is standard for Gomega assertions
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
 	gpuburn "github.com/rh-ecosystem-edge/nvidia-ci/internal/gpu-burn"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"

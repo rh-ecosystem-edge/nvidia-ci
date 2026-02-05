@@ -19,9 +19,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/golang/glog"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
+	. "github.com/onsi/ginkgo/v2"                          //nolint:revive,staticcheck // Dot import is standard for Ginkgo tests
+	. "github.com/onsi/gomega"                             //nolint:revive,staticcheck // Dot import is standard for Gomega assertions
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"  //nolint:revive,staticcheck // Dot import for global constants
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
 
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
@@ -356,15 +356,16 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					"not set or set to False, will execute RDMA tests without cuda switch")
 			}
 
-			if nvidiaNetworkConfig.RdmaNetworkType == "sriov" {
+			switch nvidiaNetworkConfig.RdmaNetworkType {
+			case "sriov":
 				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_NETWORK_TYPE" +
 					" is set to 'sriov', will remove the RDMASaredDevicePlugin element form the NicClusterPolicy")
 				rdmaNetworkType = nvidiaNetworkConfig.RdmaNetworkType
-			} else if nvidiaNetworkConfig.RdmaNetworkType == "shared-device" {
+			case "shared-device":
 				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_NETWORK_TYPE" +
 					" is set to 'shared-device', proceeding with setting up default NicCLusterPolicy for Shared Device")
 				rdmaNetworkType = nvidiaNetworkConfig.RdmaNetworkType
-			} else {
+			default:
 				rdmaNetworkType = "shared-device"
 				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_NETWORK_TYPE is " +
 					"not set, proceeding with setting up default NicCLusterPolicy for Shared Device")
@@ -804,7 +805,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 			// Need to handle case where there are more than one CSV in nvidia-network-operator namespace,
 			// such as in RHOAI environment
-			var nnoCSVName string = ""
+			nnoCSVName := ""
 			var nnoCSVBuilder *olm.ClusterServiceVersionBuilder = nil
 
 			for _, csvBuilder := range csvBuilderList {
@@ -1287,13 +1288,14 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(networkparams.LogLevel).Infof("Create ib_write_bw server workload pod '%s'", rdmaServerPodName)
 
 			// need to set the network name ipoibNetworkName or  macvlanNetworkName
-			var workloadPodNetworkName string = UndefinedValue
+			workloadPodNetworkName := UndefinedValue
 
-			if rdmaLinkType == "infiniband" {
+			switch rdmaLinkType {
+			case "infiniband":
 				glog.V(networkparams.LogLevel).Infof("rdmaLinkType is set to infiniband, setting workload "+
 					"pod network name to ipoibnetwork cr name: '%s'", ipoibNetworkName)
 				workloadPodNetworkName = ipoibNetworkName
-			} else if rdmaLinkType == "ethernet" {
+			case "ethernet":
 				glog.V(networkparams.LogLevel).Infof("rdmaLinkType is set to 'ethernet', setting workload "+
 					"pod network name to macvlanNetworkName cr name: '%s'", macvlanNetworkName)
 				workloadPodNetworkName = macvlanNetworkName

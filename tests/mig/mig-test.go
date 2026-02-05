@@ -4,15 +4,15 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
 	_ "github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
-	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"  //nolint:revive,staticcheck // Dot import for global constants
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/mig"
 	nfd "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"
 
 	"github.com/golang/glog"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2"  //nolint:revive,staticcheck // Dot import is standard for Ginkgo tests
+	. "github.com/onsi/gomega"     //nolint:revive,staticcheck // Dot import is standard for Gomega assertions
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
 )

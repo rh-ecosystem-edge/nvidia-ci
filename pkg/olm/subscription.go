@@ -135,7 +135,7 @@ func (builder *SubscriptionBuilder) WithInstallPlanApproval(
 	glog.V(100).Infof("Defining Subscription builder object with "+
 		"installPlanApproval: %s", installPlanApproval)
 
-	if !(installPlanApproval == "Automatic" || installPlanApproval == "Manual") {
+	if installPlanApproval != "Automatic" && installPlanApproval != "Manual" {
 		glog.V(100).Infof("The InstallPlanApproval of the Subscription must be either \"Automatic\" " +
 			"or \"Manual\"")
 

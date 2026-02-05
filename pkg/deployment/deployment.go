@@ -201,7 +201,7 @@ func (builder *Builder) WithSecondaryNetwork(networks []*multus.NetworkSelection
 		return builder
 	}
 
-	builder.Definition.Spec.Template.ObjectMeta.Annotations = map[string]string{
+	builder.Definition.Spec.Template.Annotations = map[string]string{
 		"k8s.v1.cni.cncf.io/networks": string(netAnnotation)}
 
 	return builder
