@@ -9,7 +9,7 @@ import (
 	"gopkg.in/k8snetworkplumbingwg/multus-cni.v4/pkg/logging"
 
 	"github.com/golang/glog"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega"  //nolint:revive,staticcheck // Dot import is standard for Gomega assertions
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"

@@ -16,7 +16,7 @@ import (
 	internalNFD "github.com/rh-ecosystem-edge/nvidia-ci/internal/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
 	_ "github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
-	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"  //nolint:revive,staticcheck // Dot import for global constants
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/machine"
 
 	nfd "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
@@ -25,8 +25,8 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"
 
 	"github.com/golang/glog"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2"  //nolint:revive,staticcheck // Dot import is standard for Ginkgo tests
+	. "github.com/onsi/gomega"     //nolint:revive,staticcheck // Dot import is standard for Gomega assertions
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/configmap"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
@@ -316,7 +316,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					err)
 
 				pulledMachineSetBuilder, err := machine.PullSet(inittools.APIClient,
-					createdMsBuilder.Definition.ObjectMeta.Name,
+					createdMsBuilder.Definition.Name,
 					machineSetNamespace)
 
 				Expect(err).ToNot(HaveOccurred(), "error pulling GPU enabled machineset:"+
@@ -327,14 +327,14 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 				By("Wait on machineset to be ready")
 				glog.V(gpuparams.GpuLogLevel).Infof("Just before waiting for GPU enabled machineset %s "+
-					"to be in Ready state", createdMsBuilder.Definition.ObjectMeta.Name)
+					"to be in Ready state", createdMsBuilder.Definition.Name)
 
-				err = machine.WaitForMachineSetReady(inittools.APIClient, createdMsBuilder.Definition.ObjectMeta.Name,
+				err = machine.WaitForMachineSetReady(inittools.APIClient, createdMsBuilder.Definition.Name,
 					machineSetNamespace, nvidiagpu.MachineReadyWaitDuration)
 
 				Expect(err).ToNot(HaveOccurred(), "Failed to detect at least one replica"+
 					" of MachineSet %s in Ready state during 15 min polling interval: %v",
-					pulledMachineSetBuilder.Definition.ObjectMeta.Name, err)
+					pulledMachineSetBuilder.Definition.Name, err)
 
 				defer func() {
 					defer GinkgoRecover()

@@ -318,8 +318,8 @@ func (builder *Builder) hasOnlyDefaultConfigMaps(objList *unstructured.Unstructu
 	}
 
 	// return false if existing configmaps are NOT default pre-deployed openshift configmaps
-	if !(slices.Contains(existingConfigMaps, "kube-root-ca.crt") &&
-		slices.Contains(existingConfigMaps, "openshift-service-ca.crt")) {
+	if !slices.Contains(existingConfigMaps, "kube-root-ca.crt") ||
+		!slices.Contains(existingConfigMaps, "openshift-service-ca.crt") {
 		return false, err
 	}
 

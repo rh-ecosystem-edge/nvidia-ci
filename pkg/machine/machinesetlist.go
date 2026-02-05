@@ -62,7 +62,7 @@ func ListWorkerMachineSets(
 			Definition: &copiedMachineSet,
 		}
 
-		if val, ok := SetBuilder.Definition.Spec.Template.ObjectMeta.Labels[workerLabel]; ok && val == "worker" {
+		if val, ok := SetBuilder.Definition.Spec.Template.Labels[workerLabel]; ok && val == "worker" {
 			machineSetObjects = append(machineSetObjects, SetBuilder)
 		}
 	}

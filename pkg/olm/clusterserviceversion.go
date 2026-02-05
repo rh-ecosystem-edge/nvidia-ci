@@ -115,7 +115,7 @@ func (builder *ClusterServiceVersionBuilder) GetAlmExamples() (string, error) {
 	almExamples := "alm-examples"
 
 	if builder.Exists() {
-		annotations := builder.Object.ObjectMeta.GetAnnotations()
+		annotations := builder.Object.GetAnnotations()
 
 		if example, ok := annotations[almExamples]; ok {
 			return example, nil

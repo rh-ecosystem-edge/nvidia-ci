@@ -56,8 +56,8 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 		args = []string{"-c", withCuda, "-m", mode, "-n", "net1", "-d", device, "-i", serverIP}
 	}
 
-	if rdmaNetworkType == "sriov" {
-
+	switch rdmaNetworkType {
+	case "sriov":
 		if withCuda == "yes" {
 			rdmaResources = corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
@@ -79,9 +79,7 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 				},
 			}
 		}
-
-	} else if rdmaNetworkType == "shared-device" || rdmaNetworkType == "undefined" {
-
+	case "shared-device", "undefined":
 		if withCuda == "yes" {
 			rdmaResources = corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
@@ -245,7 +243,9 @@ func GetPodLogs(clientset *clients.Settings, namespace, podName string) (string,
 	if err != nil {
 		return "", fmt.Errorf("error opening log stream: %v", err)
 	}
-	defer logStream.Close()
+	defer func() {
+		_ = logStream.Close()
+	}()
 
 	var logs strings.Builder
 	buf := make([]byte, 4096)
@@ -267,19 +267,19 @@ func ValidateRDMAResults(results map[string]string) (bool, error) {
 	// Check Test Type
 	testType, exists := results["Test_Type"]
 	if !exists || testType != "RDMA_Write BW Test" {
-		return false, fmt.Errorf("Invalid Test Type: %s", testType)
+		return false, fmt.Errorf("invalid test type: %s", testType)
 	}
 
 	// Check Link Type
 	linkType, exists := results["Link type"]
-	if !exists || !(linkType == "Ethernet" || linkType == "IB") {
-		return false, fmt.Errorf("Invalid Link Type: %s (Expected: Ethernet or IB)", linkType)
+	if !exists || (linkType != "Ethernet" && linkType != "IB") {
+		return false, fmt.Errorf("invalid link type: %s (expected: Ethernet or IB)", linkType)
 	}
 
 	// Check Bandwidth
 	bwAvg, err := strconv.ParseFloat(results["BW_Avg_Gbps"], 64)
 	if err != nil || bwAvg < MinBandwidth {
-		return false, fmt.Errorf("Bandwidth too low: %.2f Gbps (Min: %.2f Gbps)", bwAvg, MinBandwidth)
+		return false, fmt.Errorf("bandwidth too low: %.2f Gbps (min: %.2f Gbps)", bwAvg, MinBandwidth)
 	}
 
 	// Check Message Rate
