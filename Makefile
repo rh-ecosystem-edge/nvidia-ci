@@ -3,7 +3,8 @@ export GO111MODULE=on
 GO_PACKAGES=$(shell go list ./... | grep -v vendor)
 .PHONY: lint \
         deps-update \
-        vet
+        vet \
+        verify
 
 .PHONY: help
 help: ## Show available make targets
@@ -24,6 +25,9 @@ vet: ## Run go vet on all packages
 lint: ## Run golangci-lint
 	@echo "Running go lint"
 	scripts/golangci-lint.sh
+
+verify: lint vet ## Verify code quality
+	@echo "All quality checks passed"
 
 deps-update: ## Update dependencies (go mod tidy and vendor)
 	go mod tidy && \

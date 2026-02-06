@@ -15,8 +15,7 @@ import (
 )
 
 // NicClusterPolicyReady Waits until nicClusterPolicy is Ready.
-func NicClusterPolicyReady(apiClient *clients.Settings, nicClusterPolicyName string, pollInterval,
-	timeout time.Duration) error {
+func NicClusterPolicyReady(apiClient *clients.Settings, nicClusterPolicyName string, pollInterval, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(
 		context.Background(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 			nicClusterPolicy, err := nvidianetwork.PullNicClusterPolicy(apiClient, nicClusterPolicyName)

@@ -1,0 +1,44 @@
+version: "2"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: standard # errcheck govet ineffassign staticcheck unused
+
+  enable:
+    - decorder
+    - exhaustive
+    - goconst
+    - importas
+    - loggercheck
+    - wastedassign
+    - nolintlint
+    - revive
+
+  settings:
+    revive:
+      rules:
+        - name: filename-format
+          arguments: ["^[a-z][a-z0-9]*(_suite_test|_test|_linux|_darwin|_windows|_amd64|_arm64)?\\.go$"]
+
+formatters:
+  enable:
+    - goimports
+    - gofmt
+
+# recommended linters that require lots of fixing
+# before they can be enabled
+# linters:
+    # - cyclop
+    # - dupl
+    # - funcorder
+    # - funlen
+    # - ginkgolinter
+    # - lll
+    # - wsl_v5
+
+# formatters:
+#   enable:
+#     - gofumpt

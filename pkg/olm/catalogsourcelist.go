@@ -10,13 +10,9 @@ import (
 )
 
 // ListCatalogSources returns catalogsource inventory in the given namespace.
-func ListCatalogSources(
-	apiClient *clients.Settings,
-	nsname string,
-	options ...metav1.ListOptions) ([]*CatalogSourceBuilder, error) {
+func ListCatalogSources(apiClient *clients.Settings, nsname string, options ...metav1.ListOptions) ([]*CatalogSourceBuilder, error) {
 	if nsname == "" {
 		glog.V(100).Infof("catalogsource 'namespace' parameter can not be empty")
-
 		return nil, fmt.Errorf("failed to list catalogsource, 'namespace' parameter is empty")
 	}
 

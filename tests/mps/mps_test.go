@@ -493,7 +493,6 @@ func parseNvidiaSmiOutput(output, podName string) {
 }
 
 func EnsureAllGpuPodsAreRunning() {
-
 	Eventually(func() bool {
 		driverPods, err := inittools.APIClient.Pods(GPUOperatorNamespace).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
@@ -513,7 +512,6 @@ func EnsureAllGpuPodsAreRunning() {
 				if !containerStatus.Ready && containerStatus.State.Terminated == nil {
 					return false
 				}
-
 			}
 		}
 		return true
@@ -530,7 +528,6 @@ func EnsureAllGpuPodsAreRunning() {
 }
 
 func EnsureOnlyOperatorIsRunning() {
-
 	Eventually(func() bool {
 		driverPods, err := inittools.APIClient.Pods(GPUOperatorNamespace).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
@@ -554,5 +551,4 @@ func EnsureOnlyOperatorIsRunning() {
 		}
 		return true
 	}, TestDuration, TimeStep).Should(BeTrue(), "NVIDIA driver pods did not become ready")
-
 }

@@ -36,7 +36,6 @@ func NewMacvlanNetworkBuilderFromObjectString(apiClient *clients.Settings, almEx
 		"Initializing new MacvlanNetworkBuilder  structure from almExample string")
 
 	macvlanNetwork, err := getMacvlanNetworkFromAlmExample(almExample)
-
 	if err != nil {
 		glog.V(100).Infof(
 			"Error initializing MacvlanNetwork from alm-examples: %s", err.Error())

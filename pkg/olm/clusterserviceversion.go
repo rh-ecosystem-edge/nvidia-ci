@@ -29,8 +29,7 @@ type ClusterServiceVersionBuilder struct {
 }
 
 // PullClusterServiceVersion loads an existing clusterserviceversion into Builder struct.
-func PullClusterServiceVersion(apiClient *clients.Settings, name, namespace string) (*ClusterServiceVersionBuilder,
-	error) {
+func PullClusterServiceVersion(apiClient *clients.Settings, name, namespace string) (*ClusterServiceVersionBuilder, error) {
 	glog.V(100).Infof("Pulling existing clusterserviceversion name %s in namespace %s", name, namespace)
 
 	builder := ClusterServiceVersionBuilder{

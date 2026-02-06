@@ -10,24 +10,24 @@ import (
 
 // MIGProfileInfo represents information about a MIG profile
 type MIGProfileInfo struct {
-	GpuID        int      // Physical GPU index
-	MigType      string   // always MIG, probably unnecessary
-	MigName      string   // e.g., 1g.5gb, 2g.10gb, 3g.20gb
-	MigID        int      // Profile identifier used when creating instances
-	Available    int      // number of available instances
-	Total        int      // total number of instances
-	Memory       string   // memory in GB, need to be converted to float64
-	P2P          string   // Peer-to-peer support between instances (No = not supported)
-	SM           int      // SM: Streaming Multiprocessors per instance (compute units)
-	DEC          int      // DEC: Video decode units per instance
-	ENC          int      // ENC: Video encode units per instance
-	CE           int      // CE: Copy Engine units per instance (second row)
-	JPEG         int      // JPEG: JPEG decoder units per instance (second row)
-	OFA          int      // OFA: Optical Flow Accelerator units per instance (second row)
-	Flavor       string   // single strategy: nvidia.com/gpu or all-balanced: nvidia.com/mig-*
-	MixedCnt     int      // number of instances to use for mixed strategy
-	SliceUsage   int      // number of slices used per instance
-	MemUsage     int      // memory usage in GB per instance
+	GpuID      int    // Physical GPU index
+	MigType    string // always MIG, probably unnecessary
+	MigName    string // e.g., 1g.5gb, 2g.10gb, 3g.20gb
+	MigID      int    // Profile identifier used when creating instances
+	Available  int    // number of available instances
+	Total      int    // total number of instances
+	Memory     string // memory in GB, need to be converted to float64
+	P2P        string // Peer-to-peer support between instances (No = not supported)
+	SM         int    // SM: Streaming Multiprocessors per instance (compute units)
+	DEC        int    // DEC: Video decode units per instance
+	ENC        int    // ENC: Video encode units per instance
+	CE         int    // CE: Copy Engine units per instance (second row)
+	JPEG       int    // JPEG: JPEG decoder units per instance (second row)
+	OFA        int    // OFA: Optical Flow Accelerator units per instance (second row)
+	Flavor     string // single strategy: nvidia.com/gpu or all-balanced: nvidia.com/mig-*
+	MixedCnt   int    // number of instances to use for mixed strategy
+	SliceUsage int    // number of slices used per instance
+	MemUsage   int    // memory usage in GB per instance
 }
 
 type MigPodInfo struct {
@@ -71,11 +71,15 @@ const (
 	defaultSingleMigProfile int = -2 // parameter not provided
 )
 
+const (
+	MIGStrategySingle = "single"
+	MIGStrategyMixed  = "mixed"
+)
+
 func init() {
 	// Register flags before Ginkgo parses them
 	flag.IntVar(&PodDelay, "mixed.mig.pod-delay", 0, "delay in seconds between pod creation on mixed-mig testcase")
 	flag.IntVar(&SingleMigProfile, "single.mig.profile", -2, "index of the MIG profile to be used for single-mig testcase")
 	flag.StringVar(&MigInstances, "mixed.mig.instances", "-1", "comma-separated number of instances for mixed-mig testcase, defaults are for A100 GPU [2,0,1,1,0,0]")
 	flag.BoolVar(&NoColor, "no-color", false, "disable color output")
-
 }

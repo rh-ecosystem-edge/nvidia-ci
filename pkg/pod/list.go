@@ -34,7 +34,6 @@ func List(apiClient *clients.Settings, nsname string, options ...v1.ListOptions)
 	glog.V(100).Infof(logMessage)
 
 	podList, err := apiClient.Pods(nsname).List(context.TODO(), passedOptions)
-
 	if err != nil {
 		glog.V(100).Infof("Failed to list pods in the nsname %s due to %s", nsname, err.Error())
 

@@ -1,4 +1,4 @@
-package rdmatest
+package rdma
 
 import (
 	"bufio"
@@ -42,9 +42,7 @@ const (
 )
 
 // CreateRdmaWorkloadPod create RDMA worker pod.
-func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, crName,
-	image, linkType, serverIP string, rdmaNetworkType string) *corev1.Pod {
-
+func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, crName, image, linkType, serverIP string, rdmaNetworkType string) *corev1.Pod {
 	var (
 		args          []string
 		rdmaResources corev1.ResourceRequirements
@@ -142,6 +140,7 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 func boolPtr(b bool) *bool {
 	return &b
 }
+
 func ptrInt64(i int64) *int64 {
 	return &i
 }
@@ -185,7 +184,6 @@ func ParseRdmaOutput(output string) (map[string]string, error) {
 
 	// Regex patterns
 	configRegex := regexp.MustCompile(`([\w-\s\*]+):\s+([\w\[\]\/.]+)`)
-	//configRegex := regexp.MustCompile(`(?P<key>[\w\s\*]+):\s+(?P<value>[\w\[\]\/.]+)`)
 	bwTableRegex := regexp.MustCompile(`\s*(\d+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)`)
 
 	scanner := bufio.NewScanner(strings.NewReader(output))
@@ -294,7 +292,6 @@ func ValidateRDMAResults(results map[string]string) (bool, error) {
 
 // DeleteMofedRpmDir deletes mofed driver inventory dir on a specific node.
 func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, clusterArch, nodeName string) (string, error) {
-
 	commands := []string{
 		"sh",
 		"-c",
@@ -304,14 +301,12 @@ func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, clusterA
 			"else echo 'Directory not found: /opt/mofed-container/inventory'; fi"}
 
 	return RunCommandsOnSpecificNode(clientset, podName, namespace, clusterArch, nodeName, commands)
-
 }
 
 // RunCommandsOnSpecificNode runs commands on a specific node by creating a pod on that node.
 
 func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, clusterArch, nodeName string,
 	commands []string) (string, error) {
-
 	// Validate input parameters
 	if podName == "" || namespace == "" || nodeName == "" {
 		return "", fmt.Errorf("podName, namespace, and nodeName cannot be empty")

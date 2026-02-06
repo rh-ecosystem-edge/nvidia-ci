@@ -36,7 +36,6 @@ func NewIPoIBNetworkBuilderFromObjectString(apiClient *clients.Settings, almExam
 		"Initializing new IPoIBNetworkBuilder  structure from almExample string")
 
 	IPoIBNetwork, err := getIPoIBNetworkFromAlmExample(almExample)
-
 	if err != nil {
 		glog.V(100).Infof(
 			"Error initializing IPoIBNetwork from alm-examples: %s", err.Error())

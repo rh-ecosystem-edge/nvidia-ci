@@ -221,11 +221,11 @@ func CreateDevicePluginConfigMap(apiClient *clients.Settings, replicas int, conf
 }
 
 // CreateClusterPolicyFromCSV creates a new cluster policy from the CSV ALM example
-func CreateClusterPolicyFromCSV(apiClient *clients.Settings, GPUOperatorNamespace, clusterPolicyName string) (*nvidiagpu.Builder, error) {
+func CreateClusterPolicyFromCSV(apiClient *clients.Settings, gpuOperatorNamespace, clusterPolicyName string) (*nvidiagpu.Builder, error) {
 	glog.V(gpuparams.GpuLogLevel).Infof("Creating new ClusterPolicy %s from CSV ALM example", clusterPolicyName)
 
 	// Get the CSV containing the ALM example
-	csvList, err := olm.ListClusterServiceVersion(apiClient, GPUOperatorNamespace, metav1.ListOptions{
+	csvList, err := olm.ListClusterServiceVersion(apiClient, gpuOperatorNamespace, metav1.ListOptions{
 		LabelSelector: "operators.coreos.com/gpu-operator-certified.nvidia-gpu-operator",
 	})
 	if err != nil {

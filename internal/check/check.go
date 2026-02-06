@@ -21,10 +21,8 @@ const (
 )
 
 // AllNodeLabel checks if label is present on all nodes matching nodeSelector.
-func AllNodeLabel(apiClient *clients.Settings, nodeLabel string, nodeLabelValues []string,
-	nodeSelector map[string]string) (bool, error) {
+func AllNodeLabel(apiClient *clients.Settings, nodeLabel string, nodeLabelValues []string, nodeSelector map[string]string) (bool, error) {
 	nodeBuilder, err := nodes.List(apiClient, v1.ListOptions{LabelSelector: labels.Set(nodeSelector).String()})
-
 	// in all the nodes that match the nodeSelectors, look for specific label
 	// For example, look in all the worker nodes for a specific label with specific value
 	if err != nil {
