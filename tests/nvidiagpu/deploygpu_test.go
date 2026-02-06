@@ -16,7 +16,7 @@ import (
 	internalNFD "github.com/rh-ecosystem-edge/nvidia-ci/internal/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
 	_ "github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
-	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global" //nolint // Dot import for global constants
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/machine"
 
 	nfd "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
@@ -25,8 +25,8 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"
 
 	"github.com/golang/glog"
-	. "github.com/onsi/ginkgo/v2" //nolint // Dot import is standard for Ginkgo tests
-	. "github.com/onsi/gomega"    //nolint // Dot import is standard for Gomega assertions
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/configmap"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
@@ -37,7 +37,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/deploy"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
-	gpuburn "github.com/rh-ecosystem-edge/nvidia-ci/internal/gpu-burn"
+	gpuburn "github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuburn"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
