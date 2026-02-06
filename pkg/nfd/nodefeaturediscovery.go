@@ -238,7 +238,6 @@ func getNodeFeatureDiscoveryFromAlmExample(almExample string) (*nfdv1.NodeFeatur
 // validate will check that the builder and builder definition are properly initialized before
 // accessing any member fields.
 func (builder *Builder) validate() (bool, error) {
-
 	if builder == nil {
 		glog.V(LogLevel).Infof("The %s builder is uninitialized", resourceCRD)
 
@@ -267,7 +266,6 @@ func (builder *Builder) validate() (bool, error) {
 //
 // Returns an error if the configuration update fails or if invalid parameters are provided.
 func (builder *Builder) UpdatePciDevices(deviceClassWhitelist []string, deviceLabelFields []string) error {
-
 	if deviceClassWhitelist == nil || deviceLabelFields == nil {
 		return fmt.Errorf("deviceClassWhitelist and deviceLabelFields cannot be nil")
 	}

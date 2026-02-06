@@ -44,7 +44,6 @@ func NewConfig(config string) *Config {
 
 // SetPciWhitelistConfig updates the PCI device whitelist and label fields.
 func (cfg *Config) SetPciWhitelistConfig(deviceClassWhitelist, deviceLabelFields []string) {
-
 	if cfg.Sources.PCI == nil {
 		cfg.Sources.PCI = &PCIDevice{}
 	}

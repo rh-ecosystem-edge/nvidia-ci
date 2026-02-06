@@ -34,7 +34,6 @@ func NewDeploy(client *clients.Settings) Deploy {
 
 func (d deploy) CreateAndLabelNamespaceIfNeeded(logLevel glog.Level, ns string,
 	labels map[string]string) (*namespace.Builder, error) {
-
 	nsBuilder := namespace.NewBuilder(d.client, ns)
 
 	if nsBuilder.Exists() {
@@ -60,7 +59,6 @@ func (d deploy) CreateAndLabelNamespaceIfNeeded(logLevel glog.Level, ns string,
 }
 
 func (d deploy) DeployBundle(logLevel glog.Level, bundleConfig *BundleConfig, ns string, timeout time.Duration) error {
-
 	cmd := exec.Command("operator-sdk", "run", "bundle", bundleConfig.BundleImage,
 		"--namespace", ns, "--timeout", timeout.String())
 
@@ -72,7 +70,6 @@ func (d deploy) DeployBundle(logLevel glog.Level, bundleConfig *BundleConfig, ns
 }
 
 func (d deploy) WaitForReadyStatus(logLevel glog.Level, name, ns string, timeout time.Duration) error {
-
 	dep, err := deployment.Pull(d.client, name, ns)
 	if err != nil {
 		return fmt.Errorf("failed to pull deployment %s in namespace %s", name, ns)

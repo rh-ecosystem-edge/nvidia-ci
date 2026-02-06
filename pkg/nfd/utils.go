@@ -69,9 +69,7 @@ func EnsureNFDIsInstalled(apiClient *clients.Settings, nfd *CustomConfig, ocpVer
 			nfdChannel := nfdPkgManifestBuilderByCustomCatalog.Object.Status.DefaultChannel
 			glog.V(level).Infof("NFD channel '%s' retrieved from packagemanifest "+
 				"of custom catalogsource '%s'", nfdChannel, nfd.CustomCatalogSource)
-
 		} else {
-
 			By("Check if 'nfd' packagemanifest exists in 'redhat-operators' default catalog")
 			nfdPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(apiClient,
 				Package, CatalogSourceNamespace, CatalogSourceDefault)
@@ -93,7 +91,6 @@ func EnsureNFDIsInstalled(apiClient *clients.Settings, nfd *CustomConfig, ocpVer
 			nfdChannel := nfdPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
 			glog.V(level).Infof("The NFD channel retrieved from packagemanifest is:  %v",
 				nfdChannel)
-
 		}
 
 		DeployNFDOperatorWithRetries(inittools.APIClient, nfd, level, ocpVersion)
