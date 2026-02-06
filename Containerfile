@@ -1,5 +1,5 @@
-FROM quay.io/openshift/origin-cli:4.20 as oc-cli
-FROM registry.access.redhat.com/ubi9/go-toolset:1.24.4
+FROM quay.io/openshift/origin-cli:4.22 as oc-cli
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25.5
 
 LABEL org.opencontainers.image.authors="Red Hat Ecosystem Engineering"
 
@@ -8,7 +8,7 @@ USER root
 COPY --from=oc-cli /usr/bin/oc /usr/bin/oc
 
 # Install dependencies: `operator-sdk`
-ARG OPERATOR_SDK_VERSION=v1.6.2
+ARG OPERATOR_SDK_VERSION=v1.42.0
 RUN ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac) && \
     OS=$(uname | awk '{print tolower($0)}') && \
     OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION} && \
@@ -35,7 +35,7 @@ RUN make install-ginkgo
 RUN mkdir -p "${ARTIFACT_DIR}" && chmod 777 "${ARTIFACT_DIR}"
 RUN mkdir -p "${GOCACHE}" && chmod 777 "${GOCACHE}"
 RUN chmod 777 /root/nvidia-ci -R
-ARG GPU_OPERATOR_VERSION=v23.9.1
+ARG GPU_OPERATOR_VERSION=v25.10.1
 RUN curl -SsL -o gpu-operator-must-gather.sh -L https://raw.githubusercontent.com/NVIDIA/gpu-operator/${GPU_OPERATOR_VERSION}/hack/must-gather.sh && \
     chmod +x gpu-operator-must-gather.sh
 

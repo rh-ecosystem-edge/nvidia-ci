@@ -30,7 +30,7 @@ type NodeFeatureDiscoverySpec struct {
 	// NFD-Topology-Updater is a daemon responsible for examining allocated
 	// resources on a worker node to account for resources available to be
 	// allocated to new pod on a per-zone basis
-	// https://kubernetes-sigs.github.io/node-feature-discovery/v0.10/get-started/introduction.html#nfd-topology-updater
+	// https://kubernetes-sigs.github.io/node-feature-discovery/master/get-started/introduction.html#nfd-topology-updater
 	// +optional
 	TopologyUpdater bool `json:"topologyUpdater"`
 
@@ -62,13 +62,27 @@ type NodeFeatureDiscoverySpec struct {
 	// worker.
 	// +optional
 	WorkerConfig ConfigMap `json:"workerConfig"`
+
+	// PruneOnDelete defines whether the NFD-master prune should be
+	// enabled or not. If enabled, the Operator will deploy an NFD-Master prune
+	// job that will remove all NFD labels (and other NFD-managed assets such
+	// as annotations, extended resources and taints) from the cluster nodes.
+	// +optional
+	PruneOnDelete bool `json:"prunerOnDelete"`
+
+	// EnableTaints enables the enable the experimental tainting feature
+	// This allows keeping nodes with specialized hardware away from running general workload i
+	// and instead leave them for workloads that need the specialized hardware.
+	// +optional
+	EnableTaints bool `json:"enableTaints"`
 }
 
 // OperandSpec describes configuration options for the operand
 type OperandSpec struct {
 	// Image defines the image to pull for the
 	// NFD operand
-	// [defaults to k8s.gcr.io/nfd/node-feature-discovery]
+	// [defaults to registry.k8s.io/nfd/node-feature-discovery]
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Pattern=[a-zA-Z0-9\-]+
 	Image string `json:"image,omitempty"`
 
@@ -81,6 +95,21 @@ type OperandSpec struct {
 	// listens for incoming requests.
 	// +kubebuilder:validation:Optional
 	ServicePort int `json:"servicePort"`
+
+	// WorkerTolerations defines tolerations to be applied to the worker Daemonset
+	WorkerTolerations []corev1.Toleration `json:"workerTolerations,omitempty"`
+
+	// MasterTolerations defines tolerations to be applied to the master deployment
+	MasterTolerations []corev1.Toleration `json:"masterTolerations,omitempty"`
+
+	// WorkerEnv defines environment variables to be added to the worker Daemonset
+	WorkerEnvs []corev1.EnvVar `json:"workerEnvs,omitempty"`
+
+	// MasterEnv defines environment variables to be added to the master deployment
+	MasterEnvs []corev1.EnvVar `json:"masterEnvs,omitempty"`
+
+	// WorkerNodeSelector describes on which nodes the worker pod should be deployed.
+	WorkerNodeSelector map[string]string `json:"workerNodeSelector,omitempty"`
 }
 
 // ConfigMap describes configuration options for the NFD worker

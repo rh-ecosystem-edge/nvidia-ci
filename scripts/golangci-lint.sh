@@ -4,7 +4,7 @@ set -e
 
 . "$(dirname "$0")"/common.sh
 
-GOLANGCI_LINT_VERSION="1.64.8"
+GOLANGCI_LINT_VERSION="2.8.0"
 # This is required because the Openshift CI is running this test as a non-root
 # user but whitin the / directory as the home directory, therefore, the linter
 # won't have the permissions to create the `/.cache` directory.

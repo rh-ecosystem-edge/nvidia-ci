@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
 	"strings"
 	"time"
+
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidianetworkconfig"
@@ -1031,7 +1032,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					mellanoxEthernetInterfaceName, mellanoxInfinibandInterfaceName)
 				fmt.Println(newRDMASharedDevicePluginConfig)
 
-				nicClusterPolicyBuilder.Definition.Spec.RdmaSharedDevicePlugin.Config = newRDMASharedDevicePluginConfig
+				nicClusterPolicyBuilder.Definition.Spec.RdmaSharedDevicePlugin.Config = &newRDMASharedDevicePluginConfig
 			}
 
 			By("Deploy NicClusterPolicy")
