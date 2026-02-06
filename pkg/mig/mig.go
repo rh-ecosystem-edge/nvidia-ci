@@ -14,8 +14,8 @@ import (
 
 	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
 	"github.com/golang/glog"
-	. "github.com/onsi/ginkgo/v2"  //nolint:revive,staticcheck // Dot import is standard for Ginkgo tests
-	. "github.com/onsi/gomega"     //nolint:revive,staticcheck // Dot import is standard for Gomega assertions
+	. "github.com/onsi/ginkgo/v2" //nolint:revive,staticcheck // Dot import is standard for Ginkgo tests
+	. "github.com/onsi/gomega"    //nolint:revive,staticcheck // Dot import is standard for Gomega assertions
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
 	gpuburn "github.com/rh-ecosystem-edge/nvidia-ci/internal/gpu-burn"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
@@ -52,14 +52,14 @@ import (
 // Prepare the workload and deploy it (namespace, configmap, 1 single pod for one profile)
 // After it has been running and finished, get the logs and analyze them
 func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, burn *nvidiagpu.GPUBurnConfig,
-	BurnImageName map[string]string, WorkerNodeSelector map[string]string, cleanupAfterTest bool) {
+	burnImageName map[string]string, workerNodeSelector map[string]string, cleanupAfterTest bool) {
 	// select one mig profile from the list of mig profiles
 	var useMigProfile string // = "mig-1g.5gb"  // mig profiles are queried from the hardware
 	var useMigIndex int      // will be set to random value after migCapabilities is populated
 	var migCapabilities []MIGProfileInfo
 
 	By("Check mig.capability on GPU nodes")
-	err := wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.capable", "true", labels.Set(WorkerNodeSelector),
+	err := wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.capable", "true", labels.Set(workerNodeSelector),
 		nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Error checking MIG capability on nodes: %v", err)
 
@@ -76,7 +76,7 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	migInstanceCounts := ReadMIGParameter()
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Parsed MIG instance counts: %v", migInstanceCounts)
 	useMigIndex = ReadSingleMIGParameter()
-	migCapabilities, useMigIndex = SelectMigProfile(WorkerNodeSelector, useMigIndex, migInstanceCounts)
+	migCapabilities, useMigIndex = SelectMigProfile(workerNodeSelector, useMigIndex, migInstanceCounts)
 	Expect(migCapabilities).ToNot(BeNil(), "SelectMigProfile did not return migCapabilities")
 	_ = UpdateMIGCapabilities(migCapabilities, migInstanceCounts, migStrategy)
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Updated MigCapabilities: %v", migCapabilities)
@@ -90,12 +90,12 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 
 	// Configure MIG strategy for the test
 	By("Configuring MIG strategy in ClusterPolicy")
-	clusterArch, err := configureMIGStrategy(pulledClusterPolicyBuilder, WorkerNodeSelector, nvidiagpuv1.MIGStrategySingle)
+	clusterArch, err := configureMIGStrategy(pulledClusterPolicyBuilder, workerNodeSelector, nvidiagpuv1.MIGStrategySingle)
 	Expect(err).ToNot(HaveOccurred(), "error configuring MIG strategy and getting cluster architecture: %v", err)
 
 	// Set the single MIG strategy and mig.config labels on GPU worker nodes
 	By("Set the MIG strategy label on GPU worker nodes")
-	useMigProfile = SetMIGLabelsOnNodes(migCapabilities, useMigIndex, WorkerNodeSelector, migStrategy)
+	useMigProfile = SetMIGLabelsOnNodes(migCapabilities, useMigIndex, workerNodeSelector, migStrategy)
 
 	// Waiting for ClusterPolicy state transition first to notReady with quick timeout and interval, then to ready
 	// error is ignored in case of timeout, if the state transition from ready to notReady and back to ready.
@@ -115,7 +115,7 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	migSingleLabel := "nvidia.com/mig.strategy"
 	expectedLabelValue := "single"
 	err = wait.NodeLabelExists(inittools.APIClient, migSingleLabel, expectedLabelValue,
-		labels.Set(WorkerNodeSelector), nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
+		labels.Set(workerNodeSelector), nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Could not find at least one node with label '%s' set to '%s'", migSingleLabel, expectedLabelValue)
 	glog.V(gpuparams.Gpu10LogLevel).Infof("MIG single strategy label found, proceeding with test")
 
@@ -131,7 +131,7 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 		} else {
 			wait = true
 		}
-		ResetMIGLabelsToDisabled(WorkerNodeSelector, wait)
+		ResetMIGLabelsToDisabled(workerNodeSelector, wait)
 	}()
 
 	// Check and create test-gpu-burn namespace if it is missing
@@ -173,13 +173,13 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	// Deploy GPU Burn pod with MIG single strategy configuration
 	By("Deploy gpu-burn pod with MIG configuration in test-gpu-burn namespace")
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Creating image '%s' pod with MIG profile '%s' in burn: '%s' requesting %d instances",
-		BurnImageName[clusterArch], useMigProfile, burn, migCapabilities[useMigIndex].Total)
+		burnImageName[clusterArch], useMigProfile, burn, migCapabilities[useMigIndex].Total)
 	// Using total, because nvidia-smi Available field may sometimes be zero (e.g. pods are running for some reason)
 	// Using migCapabilities[useMigIndex].MixedCnt could be used to restrict the number of instances to use,
 	// but it would cause problems when both single-mig and mixed-mig testcases are run in the same test suite.
 	instances := migCapabilities[useMigIndex].Total
 	gpuMigPodPulled := DeployGPUWorkload(
-		BurnImageName[clusterArch],
+		burnImageName[clusterArch],
 		burn.PodName,
 		burn.Namespace,
 		useMigProfile,
@@ -225,7 +225,7 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 // Ensure the state of pods end up in Completed state
 // After all pods are completed, get and check the logs for each pod.
 func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, burn *nvidiagpu.GPUBurnConfig,
-	BurnImageName map[string]string, WorkerNodeSelector map[string]string, cleanupAfterTest bool) {
+	burnImageName map[string]string, workerNodeSelector map[string]string, cleanupAfterTest bool) {
 	// Any combination of mig profiles can be selected, by default 2x 1g.5gb + 1x 2g.10gb + 1x 3g.20gb
 	// The valid combination for A100 is 2x 1g.5gb + 1x 2g.10gb + 1x 3g.20gb
 	// If so wished, 1x can be used insteady of 2x and 0x can be used instead of 1x or 2x.
@@ -233,7 +233,7 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	var migCapabilities []MIGProfileInfo
 
 	By("Check mig.capability on GPU nodes")
-	err := wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.capable", "true", labels.Set(WorkerNodeSelector),
+	err := wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.capable", "true", labels.Set(workerNodeSelector),
 		nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Error checking MIG capability on nodes: %v", err)
 
@@ -248,7 +248,7 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	migInstanceCounts := ReadMIGParameter()
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Parsed MIG instance counts: %v", migInstanceCounts)
 	useMigIndex = ReadSingleMIGParameter()
-	migCapabilities, useMigIndex = SelectMigProfile(WorkerNodeSelector, useMigIndex, migInstanceCounts)
+	migCapabilities, useMigIndex = SelectMigProfile(workerNodeSelector, useMigIndex, migInstanceCounts)
 	Expect(migCapabilities).ToNot(BeNil(), "SelectMigProfile did not return migCapabilities")
 	SumOfMixedCnt := UpdateMIGCapabilities(migCapabilities, migInstanceCounts, migStrategy)
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Updated MigCapabilities: %v", migCapabilities)
@@ -274,21 +274,21 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 
 	// Configure MIG strategy for the test in ClusterPolicy
 	By("Configuring MIG strategy in ClusterPolicy")
-	clusterArch, err := configureMIGStrategy(pulledClusterPolicyBuilder, WorkerNodeSelector, nvidiagpuv1.MIGStrategyMixed)
+	clusterArch, err := configureMIGStrategy(pulledClusterPolicyBuilder, workerNodeSelector, nvidiagpuv1.MIGStrategyMixed)
 	Expect(err).ToNot(HaveOccurred(), "error configuring MIG strategy and getting cluster architecture: %v", err)
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Cluster architecture: %v", clusterArch)
 
 	// Set MIG mixed strategy and mig.config labels on GPU nodes
 	// return values is irrelevant on mixed strategy testcase.
 	By("Set MIG mixed strategy label")
-	_ = SetMIGLabelsOnNodes(migCapabilities, useMigIndex, WorkerNodeSelector, migStrategy)
+	_ = SetMIGLabelsOnNodes(migCapabilities, useMigIndex, workerNodeSelector, migStrategy)
 
 	// Waiting for ClusterPolicy state transition first to notReady with quick timeout and interval, then to ready, timeout is one expected outcome.
 	// Checking that mig.config.state gets into success state
 	By(fmt.Sprintf("Wait up to %s for ClusterPolicy to be notReady after node label changes", nvidiagpu.ClusterPolicyNotReadyTimeout))
 	_ = wait.ClusterPolicyNotReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
 		nvidiagpu.ClusterPolicyNotReadyCheckInterval, nvidiagpu.ClusterPolicyNotReadyTimeout)
-	err = CheckMigConfigState(WorkerNodeSelector)
+	err = CheckMigConfigState(workerNodeSelector)
 	Expect(err).ToNot(HaveOccurred(), "Could not find at least one node with label 'nvidia.com/mig.config.state' set to 'success'")
 
 	// Wait for ClusterPolicy to be ready. Changing labels will take a couple of minutes.
@@ -296,7 +296,7 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	err = wait.ClusterPolicyReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
 		nvidiagpu.ClusterPolicyReadyCheckInterval, nvidiagpu.ClusterPolicyReadyTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Error waiting for ClusterPolicy to be ready: %v", err)
-	err = CheckMigConfigState(WorkerNodeSelector)
+	err = CheckMigConfigState(workerNodeSelector)
 	Expect(err).ToNot(HaveOccurred(), "Could not find at least one node with label 'nvidia.com/mig.config.state' set to 'success'")
 
 	// Waiting for the mig.strategy=mixed label to be present on GPU nodes
@@ -304,12 +304,12 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	migSingleLabel := "nvidia.com/mig.strategy"
 	expectedLabelValue := "mixed"
 	err = wait.NodeLabelExists(inittools.APIClient, migSingleLabel, expectedLabelValue,
-		labels.Set(WorkerNodeSelector), nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
+		labels.Set(workerNodeSelector), nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Could not find at least one node with label '%s' set to '%s'", migSingleLabel, expectedLabelValue)
 	glog.V(gpuparams.Gpu10LogLevel).Infof("MIG mixed strategy label found, proceeding with test")
 
 	// Checking that mig.config.state gets into success state
-	err = CheckMigConfigState(WorkerNodeSelector)
+	err = CheckMigConfigState(workerNodeSelector)
 	Expect(err).ToNot(HaveOccurred(), "Could not find at least one node with label 'nvidia.com/mig.config.state' set to 'success'")
 
 	defer func() {
@@ -324,7 +324,7 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 		} else {
 			wait = true
 		}
-		ResetMIGLabelsToDisabled(WorkerNodeSelector, wait)
+		ResetMIGLabelsToDisabled(workerNodeSelector, wait)
 	}()
 
 	// Check and create test-gpu-burn namespace if it is missing
@@ -371,10 +371,10 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	for i, cap := range migCapabilities {
 		if cap.MixedCnt > 0 {
 			glog.V(gpuparams.Gpu10LogLevel).Infof("Creating image '%s' pod with MIG mixed strategy in burn: '%s' requesting %d instances",
-				BurnImageName[clusterArch], burn, migCapabilities[i].MixedCnt)
+				burnImageName[clusterArch], burn, migCapabilities[i].MixedCnt)
 			burn.PodName = fmt.Sprintf("gpu-burn-pod-%d-of-mig-%s", migCapabilities[i].MixedCnt, migCapabilities[i].MigName)
 			gpuMigPodPulled := DeployGPUWorkload(
-				BurnImageName[clusterArch],
+				burnImageName[clusterArch],
 				burn.PodName,
 				burn.Namespace,
 				migCapabilities[i].MigName,
@@ -634,7 +634,10 @@ func CleanupWorkloadResources(burn *nvidiagpu.GPUBurnConfig) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Cleaning up namespace and workload resources"))
 	// Delete any existing gpu-burn pods with the label. There may be none.
 	podList, err := pod.List(inittools.APIClient, burn.Namespace, metav1.ListOptions{LabelSelector: burn.PodLabel})
-	if err == nil && len(podList) > 0 {
+	switch {
+	case err != nil:
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Error listing pods with label '%s': %v", burn.PodLabel, err)
+	case len(podList) > 0:
 		glog.V(gpuparams.GpuLogLevel).Infof("Found %d gpu-burn pod(s) with label '%s'", len(podList), burn.PodLabel)
 		for _, podBuilder := range podList {
 			glog.V(gpuparams.GpuLogLevel).Infof("Deleting gpu-burn pod '%s'", podBuilder.Definition.Name)
@@ -647,9 +650,7 @@ func CleanupWorkloadResources(burn *nvidiagpu.GPUBurnConfig) {
 			Expect(err).ToNot(HaveOccurred(), "Error waiting for workload pod '%s' to be deleted: %v", podBuilder.Definition.Name, err)
 		}
 		glog.V(gpuparams.Gpu10LogLevel).Infof("All gpu-burn pods with label '%s' have been deleted", burn.PodLabel)
-	} else if err != nil {
-		glog.V(gpuparams.Gpu10LogLevel).Infof("Error listing pods with label '%s': %v", burn.PodLabel, err)
-	} else {
+	default:
 		glog.V(gpuparams.Gpu10LogLevel).Infof("No gpu-burn pods found with label '%s'", burn.PodLabel)
 	}
 
@@ -667,10 +668,10 @@ func CleanupWorkloadResources(burn *nvidiagpu.GPUBurnConfig) {
 // SelectMigProfile queries MIG profiles from hardware and selects/validates the MIG index.
 // It returns the MIG capabilities and the selected/validated MIG index.
 // If no MIG configurations are found, it calls Skip to skip the test.
-func SelectMigProfile(WorkerNodeSelector map[string]string, useMigIndex int, migInstanceCounts []int) ([]MIGProfileInfo, int) {
+func SelectMigProfile(workerNodeSelector map[string]string, useMigIndex int, migInstanceCounts []int) ([]MIGProfileInfo, int) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Query and select MIG profile"))
 
-	_, migCapabilities, err := MIGProfiles(inittools.APIClient, WorkerNodeSelector)
+	_, migCapabilities, err := MIGProfiles(inittools.APIClient, workerNodeSelector)
 	Expect(err).ToNot(HaveOccurred(), "Error getting MIG capabilities: %v", err)
 	glog.V(gpuparams.GpuLogLevel).Infof("Found %d MIG configuration profiles", len(migCapabilities))
 	for i, info := range migCapabilities {
@@ -682,14 +683,14 @@ func SelectMigProfile(WorkerNodeSelector map[string]string, useMigIndex int, mig
 	}
 	Expect(len(migCapabilities)).ToNot(BeZero(), "No MIG configurations available")
 
-	// Select random index if not already set or if it is out of range
-	if useMigIndex < 0 {
+	switch {
+	case useMigIndex < 0:
 		useMigIndex = rand.Intn(len(migCapabilities))
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Selected random MIG index: %d (available: 0-%d)", useMigIndex, len(migCapabilities)-1)
-	} else if useMigIndex >= len(migCapabilities) {
+	case useMigIndex >= len(migCapabilities):
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Selected MIG index %d is out of range (available: 0-%d), using last available index", useMigIndex, len(migCapabilities)-1)
 		useMigIndex = len(migCapabilities) - 1
-	} else {
+	default:
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Selected MIG index %d is within range (available: 0-%d), using it", useMigIndex, len(migCapabilities)-1)
 	}
 
@@ -698,12 +699,12 @@ func SelectMigProfile(WorkerNodeSelector map[string]string, useMigIndex int, mig
 
 // CheckMigConfigState checks that mig.config.state gets into success state on GPU nodes.
 // It returns an error if the label is not found or does not have the expected value.
-func CheckMigConfigState(WorkerNodeSelector map[string]string) error {
+func CheckMigConfigState(workerNodeSelector map[string]string) error {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Check for MIG config state on GPU nodes"))
 	migConfigStateLabel := "nvidia.com/mig.config.state"
 	expectedLabelValue := "success"
 	err := wait.NodeLabelExists(inittools.APIClient, migConfigStateLabel, expectedLabelValue,
-		labels.Set(WorkerNodeSelector), nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
+		labels.Set(workerNodeSelector), nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
 	if err == nil {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("MIG config state (success) label found, proceeding with test")
 	}
@@ -765,7 +766,7 @@ func UpdateMIGCapabilities(migCapabilities []MIGProfileInfo, migInstanceCounts [
 
 // setMIGLabelsOnNodes sets MIG strategy and configuration labels on GPU worker nodes.
 // It returns the MIG profile flavor that was set.
-func SetMIGLabelsOnNodes(migCapabilities []MIGProfileInfo, useMigIndex int, WorkerNodeSelector map[string]string, migStrategy string) string {
+func SetMIGLabelsOnNodes(migCapabilities []MIGProfileInfo, useMigIndex int, workerNodeSelector map[string]string, migStrategy string) string {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Set MIG labels on nodes"))
 	var MigProfile, useMigProfile string
 
@@ -790,7 +791,7 @@ func SetMIGLabelsOnNodes(migCapabilities []MIGProfileInfo, useMigIndex int, Work
 	}
 
 	// use first mig profile from the list, unless specified otherwise
-	nodeBuilders, err := nodes.List(inittools.APIClient, metav1.ListOptions{LabelSelector: labels.Set(WorkerNodeSelector).String()})
+	nodeBuilders, err := nodes.List(inittools.APIClient, metav1.ListOptions{LabelSelector: labels.Set(workerNodeSelector).String()})
 	Expect(err).ToNot(HaveOccurred(), "Error listing worker nodes: %v", err)
 	for _, nodeBuilder := range nodeBuilders {
 		glog.V(gpuparams.GpuLogLevel).Infof("Setting MIG %s strategy label on node '%s' (overwrite=true)", migStrategy, nodeBuilder.Definition.Name)
@@ -811,9 +812,9 @@ func SetMIGLabelsOnNodes(migCapabilities []MIGProfileInfo, useMigIndex int, Work
 
 // ResetMIGLabelsToDisabled sets MIG strategy and configuration labels to "all-disabled" on GPU worker nodes.
 // If waitForReady is true, it waits for ClusterPolicy to be ready after setting the labels.
-func ResetMIGLabelsToDisabled(WorkerNodeSelector map[string]string, waitForReady bool) {
+func ResetMIGLabelsToDisabled(workerNodeSelector map[string]string, waitForReady bool) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Reset MIG labels to disabled"))
-	nodeBuilders, err := nodes.List(inittools.APIClient, metav1.ListOptions{LabelSelector: labels.Set(WorkerNodeSelector).String()})
+	nodeBuilders, err := nodes.List(inittools.APIClient, metav1.ListOptions{LabelSelector: labels.Set(workerNodeSelector).String()})
 	Expect(err).ToNot(HaveOccurred(), "Error listing worker nodes: %v", err)
 	for _, nodeBuilder := range nodeBuilders {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG configuration label to 'all-disabled' on node '%s' (overwrite=true)", nodeBuilder.Definition.Name)
@@ -841,7 +842,7 @@ func ResetMIGLabelsToDisabled(WorkerNodeSelector map[string]string, waitForReady
 }
 
 // updateAndWaitForClusterPolicyWithMIG updates ClusterPolicy with MIG configuration, waits for it to be ready, and logs the results.
-func updateAndWaitForClusterPolicyWithMIG(pulledClusterPolicyBuilder *nvidiagpu.Builder, WorkerNodeSelector map[string]string, migStrategy nvidiagpuv1.MIGStrategy) {
+func updateAndWaitForClusterPolicyWithMIG(pulledClusterPolicyBuilder *nvidiagpu.Builder, workerNodeSelector map[string]string, migStrategy nvidiagpuv1.MIGStrategy) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Update and wait for ClusterPolicy with MIG configuration"))
 	updatedClusterPolicyBuilder, err := pulledClusterPolicyBuilder.Update(true)
 
@@ -856,7 +857,7 @@ func updateAndWaitForClusterPolicyWithMIG(pulledClusterPolicyBuilder *nvidiagpu.
 		"After updating ClusterPolicy, MIG strategy is now '%v'",
 		updatedClusterPolicyBuilder.Definition.Spec.MIG.Strategy)
 
-	err = wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.strategy", string(migStrategy), labels.Set(WorkerNodeSelector),
+	err = wait.NodeLabelExists(inittools.APIClient, "nvidia.com/mig.strategy", string(migStrategy), labels.Set(workerNodeSelector),
 		nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Error checking MIG capability on nodes: %v", err)
 
@@ -878,7 +879,7 @@ func updateAndWaitForClusterPolicyWithMIG(pulledClusterPolicyBuilder *nvidiagpu.
 // from the first GPU enabled worker node.
 func configureMIGStrategy(
 	pulledClusterPolicyBuilder *nvidiagpu.Builder,
-	WorkerNodeSelector map[string]string,
+	workerNodeSelector map[string]string,
 	migStrategy nvidiagpuv1.MIGStrategy) (string, error) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Configure MIG strategy and get cluster architecture"))
 	glog.V(gpuparams.Gpu10LogLevel).Infof(
@@ -889,12 +890,12 @@ func configureMIGStrategy(
 		"Current MIG strategy is '%s', updating to '%s'",
 		currentMigStrategy, migStrategy)
 	pulledClusterPolicyBuilder.Definition.Spec.MIG.Strategy = migStrategy
-	updateAndWaitForClusterPolicyWithMIG(pulledClusterPolicyBuilder, WorkerNodeSelector, migStrategy)
+	updateAndWaitForClusterPolicyWithMIG(pulledClusterPolicyBuilder, workerNodeSelector, migStrategy)
 
-	By(fmt.Sprintf("Getting cluster architecture from nodes with WorkerNodeSelector: %v", WorkerNodeSelector))
+	By(fmt.Sprintf("Getting cluster architecture from nodes with WorkerNodeSelector: %v", workerNodeSelector))
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Getting cluster architecture from nodes with "+
-		"WorkerNodeSelector: %v", WorkerNodeSelector)
-	clusterArch, err := get.GetClusterArchitecture(inittools.APIClient, WorkerNodeSelector)
+		"WorkerNodeSelector: %v", workerNodeSelector)
+	clusterArch, err := get.GetClusterArchitecture(inittools.APIClient, workerNodeSelector)
 	Expect(err).ToNot(HaveOccurred(), "Error getting cluster architecture: %v", err)
 	return clusterArch, nil
 }
@@ -974,24 +975,24 @@ func logPodEvents(podName, namespace string) {
 // isRunning checks and waits for the GPU burn pod to reach the Running phase.
 // It first checks it quickly and if necessary, it waits for it to reach the Running phase.
 // Log validation ensures that the logs are from the pod that was created at the start of the test.
-func isRunning(GpuPod *pod.Builder, namespace string) {
+func isRunning(gpuPod *pod.Builder, namespace string) {
 	// This is to avoid waiting, if the pod is already in Running or Succeeded phase.
 	// If pod was Completed (or Running) already, there's no need to wait.
 	// Avoiding the timeout in case it is Completed already is preferred.
-	_, err := pod.Pull(inittools.APIClient, GpuPod.Definition.Name, namespace)
-	Expect(err).ToNot(HaveOccurred(), "Pod %s does not exist in namespace %s with error: %v", GpuPod.Definition.Name, namespace, err)
-	if GpuPod.Object.Status.Phase == corev1.PodRunning || GpuPod.Object.Status.Phase == corev1.PodSucceeded {
+	_, err := pod.Pull(inittools.APIClient, gpuPod.Definition.Name, namespace)
+	Expect(err).ToNot(HaveOccurred(), "Pod %s does not exist in namespace %s with error: %v", gpuPod.Definition.Name, namespace, err)
+	if gpuPod.Object.Status.Phase == corev1.PodRunning || gpuPod.Object.Status.Phase == corev1.PodSucceeded {
 		return
 	}
 	// Waiting for the pod to reach Running phase, if it was not already.
 	// If the pod is left in Pending state, timeout will occur.
-	err = GpuPod.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
+	err = gpuPod.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
 	var err2 error
 	var pod2 *pod.Builder
 	if err != nil {
 		// pod exists, but is not running
 		// Using pod2 to avoid confusion with previous pod pull
-		pod2, err2 = pod.Pull(inittools.APIClient, GpuPod.Definition.Name, namespace)
+		pod2, err2 = pod.Pull(inittools.APIClient, gpuPod.Definition.Name, namespace)
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Pod %s is likely Pending for some reason: %s (%s). Error: %v, Error2: %v",
 			pod2.Definition.Name, pod2.Object.Status.Phase, pod2.Object.Status.Reason, err, err2)
 		logPodEvents(pod2.Definition.Name, namespace)
@@ -1118,7 +1119,7 @@ func isFlagProvided(flagName string) bool {
 func parseMigInstances(s string, defaults string) []int {
 	regex := regexp.MustCompile(`\d+`)
 	matches := regex.FindAllString(s, -1)
-	if len(matches) <= 0 {
+	if len(matches) == 0 {
 		s = defaults
 		matches = regex.FindAllString(s, -1)
 	}

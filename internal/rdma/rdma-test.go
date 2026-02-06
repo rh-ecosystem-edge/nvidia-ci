@@ -185,7 +185,6 @@ func ParseRdmaOutput(output string) (map[string]string, error) {
 
 	// Regex patterns
 	configRegex := regexp.MustCompile(`([\w-\s\*]+):\s+([\w\[\]\/.]+)`)
-	//configRegex := regexp.MustCompile(`(?P<key>[\w\s\*]+):\s+(?P<value>[\w\[\]\/.]+)`)
 	bwTableRegex := regexp.MustCompile(`\s*(\d+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)`)
 
 	scanner := bufio.NewScanner(strings.NewReader(output))
