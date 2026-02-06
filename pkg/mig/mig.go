@@ -72,7 +72,7 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	// Query MIG capabilities and select MIG profile and index to be used later.
 	// Select MIG profile and index to be used later
 	By("Read single.mig.profile parameter and select MIG profile")
-	migStrategy := "single"
+	migStrategy := MIGStrategySingle
 	migInstanceCounts := ReadMIGParameter()
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Parsed MIG instance counts: %v", migInstanceCounts)
 	useMigIndex = ReadSingleMIGParameter()
@@ -113,7 +113,7 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	// Node labels are updated after ClusterPolicy is ready, it takes some time for them to appear.
 	By("Check for MIG single strategy capability labels on GPU nodes")
 	migSingleLabel := "nvidia.com/mig.strategy"
-	expectedLabelValue := "single"
+	expectedLabelValue := MIGStrategySingle
 	err = wait.NodeLabelExists(inittools.APIClient, migSingleLabel, expectedLabelValue,
 		labels.Set(workerNodeSelector), nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Could not find at least one node with label '%s' set to '%s'", migSingleLabel, expectedLabelValue)
@@ -244,7 +244,7 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	// Read Mixed MIG parameter from CLI parameter, returns slice of instance counts per profile, or default values
 	// Query MIG capabilities and select MIG profiles to be used later.
 	By("Read mixed.mig.instances parameter and select MIG profile")
-	migStrategy := "mixed"
+	migStrategy := MIGStrategyMixed
 	migInstanceCounts := ReadMIGParameter()
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Parsed MIG instance counts: %v", migInstanceCounts)
 	useMigIndex = ReadSingleMIGParameter()
@@ -302,7 +302,7 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	// Waiting for the mig.strategy=mixed label to be present on GPU nodes
 	By("Check for MIG mixed strategy capability labels on GPU nodes")
 	migSingleLabel := "nvidia.com/mig.strategy"
-	expectedLabelValue := "mixed"
+	expectedLabelValue := MIGStrategyMixed
 	err = wait.NodeLabelExists(inittools.APIClient, migSingleLabel, expectedLabelValue,
 		labels.Set(workerNodeSelector), nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
 	Expect(err).ToNot(HaveOccurred(), "Could not find at least one node with label '%s' set to '%s'", migSingleLabel, expectedLabelValue)
@@ -749,10 +749,10 @@ func UpdateMIGCapabilities(migCapabilities []MIGProfileInfo, migInstanceCounts [
 			i, migCapabilities[i].MigName, addtext, instanceCount)
 	}
 	glog.V(gpuparams.Gpu10LogLevel).Infof("UsedSlices: %d, UsedMemory: %d, MaxSlices: %d, MaxMemory: %d", UsedSlices, UsedMemory, MaxSlices, MaxMemory)
-	if UsedSlices > MaxSlices && migStrategy == "mixed" {
+	if UsedSlices > MaxSlices && migStrategy == MIGStrategyMixed {
 		glog.V(gpuparams.Gpu10LogLevel).Infof(colorRed + "Warning: UsedSlices is greater than MaxSlices, case may fail" + colorReset)
 	}
-	if UsedMemory > MaxMemory && migStrategy == "mixed" {
+	if UsedMemory > MaxMemory && migStrategy == MIGStrategyMixed {
 		glog.V(gpuparams.Gpu10LogLevel).Infof(colorRed + "Warning: UsedMemory is greater than MaxMemory, case may fail" + colorReset)
 	}
 
@@ -771,23 +771,23 @@ func SetMIGLabelsOnNodes(migCapabilities []MIGProfileInfo, useMigIndex int, work
 	var MigProfile, useMigProfile string
 
 	switch migStrategy {
-	case "single":
+	case MIGStrategySingle:
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG single strategy label on GPU worker nodes from entry # %d of the list (profile: %s with %d/%d slices)",
 			useMigIndex, migCapabilities[useMigIndex].MigName, migCapabilities[useMigIndex].Available, migCapabilities[useMigIndex].Total)
 		MigProfile = "all-" + migCapabilities[useMigIndex].MigName
 		useMigProfile = migCapabilities[useMigIndex].Flavor
-	case "mixed":
+	case MIGStrategyMixed:
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG mixed strategy label on GPU worker nodes from entry # %d of the list (profile: %s with %d/%d slices)",
 			useMigIndex, migCapabilities[useMigIndex].MigName, migCapabilities[useMigIndex].Available, migCapabilities[useMigIndex].Total)
 		MigProfile = "all-balanced"
-		useMigProfile = "mixed"
+		useMigProfile = MIGStrategyMixed
 	default:
 		// mig strategy is initially for mixed strategy, so by default using mixed strategy on any other case.
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Setting MIG strategy label on GPU worker nodes from entry # %d of the list (profile: %s with %d/%d slices)",
 			useMigIndex, migCapabilities[useMigIndex].MigName, migCapabilities[useMigIndex].Available, migCapabilities[useMigIndex].Total)
 		MigProfile = migStrategy
-		migStrategy = "mixed"
-		useMigProfile = "mixed"
+		migStrategy = MIGStrategyMixed
+		useMigProfile = MIGStrategyMixed
 	}
 
 	// use first mig profile from the list, unless specified otherwise

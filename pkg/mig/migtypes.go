@@ -71,6 +71,11 @@ const (
 	defaultSingleMigProfile int = -2 // parameter not provided
 )
 
+const (
+	MIGStrategySingle = "single"
+	MIGStrategyMixed  = "mixed"
+)
+
 func init() {
 	// Register flags before Ginkgo parses them
 	flag.IntVar(&PodDelay, "mixed.mig.pod-delay", 0, "delay in seconds between pod creation on mixed-mig testcase")

@@ -16,6 +16,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	errCatalogSourceNameEmpty   = "catalogsource 'name' cannot be empty"
+	errCatalogSourceNsnameEmpty = "catalogsource 'nsname' cannot be empty"
+)
+
 // CatalogSourceBuilder provides a struct for catalogsource object
 // from the cluster and a catalogsource definition.
 type CatalogSourceBuilder struct {
@@ -47,13 +52,13 @@ func NewCatalogSourceBuilder(apiClient *clients.Settings, name, nsname string) *
 	if name == "" {
 		glog.V(100).Infof("The name of the catalogsource is empty")
 
-		builder.errorMsg = "catalogsource 'name' cannot be empty"
+		builder.errorMsg = errCatalogSourceNameEmpty
 	}
 
 	if nsname == "" {
 		glog.V(100).Infof("The nsname of the catalogsource is empty")
 
-		builder.errorMsg = "catalogsource 'nsname' cannot be empty"
+		builder.errorMsg = errCatalogSourceNsnameEmpty
 	}
 
 	return &builder
@@ -85,19 +90,19 @@ func NewCatalogSourceBuilderWithIndexImage(apiClient *clients.Settings,
 	if name == "" {
 		glog.V(100).Infof("The name of the catalogsource is empty")
 
-		builder.errorMsg = "catalogsource 'name' cannot be empty"
+		builder.errorMsg = errCatalogSourceNameEmpty
 	}
 
 	if nsname == "" {
 		glog.V(100).Infof("The nsname of the catalogsource is empty")
 
-		builder.errorMsg = "catalogsource 'nsname' cannot be empty"
+		builder.errorMsg = errCatalogSourceNsnameEmpty
 	}
 
 	if nsname == "" {
 		glog.V(100).Infof("The nsname of the catalogsource is empty")
 
-		builder.errorMsg = "catalogsource 'nsname' cannot be empty"
+		builder.errorMsg = errCatalogSourceNsnameEmpty
 	}
 
 	if displayName == "" {
@@ -131,7 +136,7 @@ func PullCatalogSource(apiClient *clients.Settings, name, nsname string) (*Catal
 	}
 
 	if name == "" {
-		builder.errorMsg = "catalogsource 'name' cannot be empty"
+		builder.errorMsg = errCatalogSourceNameEmpty
 	}
 
 	if nsname == "" {
