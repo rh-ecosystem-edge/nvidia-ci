@@ -133,7 +133,6 @@ func (builder *Builder) Delete() error {
 
 	err := builder.apiClient.ConfigMaps(builder.Definition.Namespace).Delete(
 		context.TODO(), builder.Object.Name, metav1.DeleteOptions{})
-
 	if err != nil {
 		return err
 	}

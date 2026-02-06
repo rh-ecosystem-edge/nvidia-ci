@@ -32,8 +32,7 @@ func NewDeploy(client *clients.Settings) Deploy {
 	}
 }
 
-func (d deploy) CreateAndLabelNamespaceIfNeeded(logLevel glog.Level, ns string,
-	labels map[string]string) (*namespace.Builder, error) {
+func (d deploy) CreateAndLabelNamespaceIfNeeded(logLevel glog.Level, ns string, labels map[string]string) (*namespace.Builder, error) {
 	nsBuilder := namespace.NewBuilder(d.client, ns)
 
 	if nsBuilder.Exists() {

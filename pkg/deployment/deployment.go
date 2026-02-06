@@ -37,8 +37,7 @@ type Builder struct {
 type AdditionalOptions func(builder *Builder) (*Builder, error)
 
 // NewBuilder creates a new instance of Builder.
-func NewBuilder(
-	apiClient *clients.Settings, name, nsname string, labels map[string]string, containerSpec *corev1.Container) *Builder {
+func NewBuilder(apiClient *clients.Settings, name, nsname string, labels map[string]string, containerSpec *corev1.Container) *Builder {
 	glog.V(100).Infof(
 		"Initializing new deployment structure with the following params: "+
 			"name: %s, namespace: %s, labels: %s, containerSpec %v",

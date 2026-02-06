@@ -1,10 +1,11 @@
 package dummy
 
 import (
-	"github.com/rh-ecosystem-edge/nvidia-ci/internal/reporter"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"runtime"
 	"testing"
+
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/reporter"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"

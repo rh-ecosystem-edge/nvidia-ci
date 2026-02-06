@@ -43,12 +43,7 @@ const (
 )
 
 // NewSetBuilderFromCopy returns an SetBuilder struct from a copied MachineSet.
-func NewSetBuilderFromCopy(
-	apiClient *clients.Settings,
-	nsName string,
-	instanceType string,
-	workerLabel string,
-	replicas int32) *SetBuilder {
+func NewSetBuilderFromCopy(apiClient *clients.Settings, nsName string, instanceType string, workerLabel string, replicas int32) *SetBuilder {
 	glog.V(100).Infof("Initializing new SetBuilder structure from copied MachineSet with the following"+
 		" params: namespace: %s, instanceType: %s, workerLabel: %s, and replicas: %v", nsName, instanceType,
 		workerLabel, replicas)
@@ -58,7 +53,6 @@ func NewSetBuilderFromCopy(
 	}
 
 	newSetBuilder, err := createNewWorkerMachineSetFromCopy(apiClient, nsName, instanceType, workerLabel, replicas)
-
 	if err != nil {
 		glog.V(100).Infof("Error initializing MachineSet from copy: %s", err.Error())
 

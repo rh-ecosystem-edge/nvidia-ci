@@ -2,6 +2,7 @@ package get
 
 import (
 	"fmt"
+
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
