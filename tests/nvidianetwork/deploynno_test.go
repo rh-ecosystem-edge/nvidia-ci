@@ -19,9 +19,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/golang/glog"
-	. "github.com/onsi/ginkgo/v2"                         //nolint // Dot import is standard for Ginkgo tests
-	. "github.com/onsi/gomega"                            //nolint // Dot import is standard for Gomega assertions
-	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global" //nolint // Dot import for global constants
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
 
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"

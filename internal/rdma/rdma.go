@@ -1,4 +1,4 @@
-package rdmatest
+package rdma
 
 import (
 	"bufio"

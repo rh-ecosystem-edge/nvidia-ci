@@ -17,7 +17,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint // Dot import is standard for Ginkgo tests
 	. "github.com/onsi/gomega"    //nolint // Dot import is standard for Gomega assertions
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
-	gpuburn "github.com/rh-ecosystem-edge/nvidia-ci/internal/gpu-burn"
+	gpuburn "github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuburn"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
