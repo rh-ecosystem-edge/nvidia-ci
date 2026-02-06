@@ -5,15 +5,15 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	. "github.com/onsi/ginkgo/v2" //nolint:revive,staticcheck // Dot import is standard for Ginkgo tests
-	. "github.com/onsi/gomega"    //nolint:revive,staticcheck // Dot import is standard for Gomega assertions
+	. "github.com/onsi/ginkgo/v2" //nolint // Dot import is standard for Ginkgo tests
+	. "github.com/onsi/gomega"    //nolint // Dot import is standard for Gomega assertions
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
-	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig" //nolint:revive,staticcheck // Dot import for test configuration
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig" //nolint // Dot import for test configuration
 	"gopkg.in/k8snetworkplumbingwg/multus-cni.v4/pkg/logging"
 )
 

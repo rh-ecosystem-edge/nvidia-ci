@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	. "github.com/onsi/ginkgo/v2" //nolint:revive,staticcheck // Dot import is standard for Ginkgo tests
+	. "github.com/onsi/ginkgo/v2" //nolint // Dot import is standard for Ginkgo tests
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 )
 
