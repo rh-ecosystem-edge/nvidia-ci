@@ -1033,7 +1033,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					mellanoxEthernetInterfaceName, mellanoxInfinibandInterfaceName)
 				fmt.Println(newRDMASharedDevicePluginConfig)
 
-				nicClusterPolicyBuilder.Definition.Spec.RdmaSharedDevicePlugin.Config = &newRDMASharedDevicePluginConfig
+				nicClusterPolicyBuilder.Definition.Spec.RdmaSharedDevicePlugin.Config = newRDMASharedDevicePluginConfig
 			}
 
 			By("Deploy NicClusterPolicy")
