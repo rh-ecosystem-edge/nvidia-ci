@@ -65,8 +65,7 @@ func NewCatalogSourceBuilder(apiClient *clients.Settings, name, nsname string) *
 }
 
 // NewCatalogSourceBuilderWithIndexImage creates new instance of CatalogSourceBuilder.
-func NewCatalogSourceBuilderWithIndexImage(apiClient *clients.Settings,
-	name, nsname, indexImage, displayName, publisher string) *CatalogSourceBuilder {
+func NewCatalogSourceBuilderWithIndexImage(apiClient *clients.Settings, name, nsname, indexImage, displayName, publisher string) *CatalogSourceBuilder {
 	glog.V(100).Infof("Initializing new catalogsource structure with "+
 		"name '%s', namespace '%s', index image '%s', display name '%s', and publisher '%s'",
 		name, nsname, indexImage, displayName, publisher)

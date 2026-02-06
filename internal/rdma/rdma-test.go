@@ -42,8 +42,7 @@ const (
 )
 
 // CreateRdmaWorkloadPod create RDMA worker pod.
-func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, crName,
-	image, linkType, serverIP string, rdmaNetworkType string) *corev1.Pod {
+func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, crName, image, linkType, serverIP string, rdmaNetworkType string) *corev1.Pod {
 	var (
 		args          []string
 		rdmaResources corev1.ResourceRequirements
@@ -141,6 +140,7 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 func boolPtr(b bool) *bool {
 	return &b
 }
+
 func ptrInt64(i int64) *int64 {
 	return &i
 }

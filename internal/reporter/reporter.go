@@ -19,15 +19,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-var (
-	pathToPodExecLogs = "/tmp/pod_exec_logs.log"
-)
+var pathToPodExecLogs = "/tmp/pod_exec_logs.log"
 
-func newReporter(
-	reportPath string,
-	namespacesToDump map[string]string,
-	apiScheme func(scheme *runtime.Scheme) error,
-	cRDs []k8sreporter.CRData) (*k8sreporter.KubernetesReporter, error) {
+func newReporter(reportPath string, namespacesToDump map[string]string, apiScheme func(scheme *runtime.Scheme) error, cRDs []k8sreporter.CRData) (*k8sreporter.KubernetesReporter, error) {
 	nsToDumpFilter := func(ns string) bool {
 		_, found := namespacesToDump[ns]
 

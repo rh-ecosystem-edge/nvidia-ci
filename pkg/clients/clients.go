@@ -102,7 +102,6 @@ func New(kubeconfig string) *Settings {
 
 	crScheme := runtime.NewScheme()
 	err = SetScheme(crScheme)
-
 	if err != nil {
 		log.Print("Error to load apiClient scheme")
 
@@ -112,7 +111,6 @@ func New(kubeconfig string) *Settings {
 	clientSet.Client, err = runtimeClient.New(config, runtimeClient.Options{
 		Scheme: crScheme,
 	})
-
 	if err != nil {
 		log.Print("Error to create apiClient")
 

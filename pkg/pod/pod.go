@@ -75,7 +75,6 @@ func NewBuilder(apiClient *clients.Settings, name, nsname, image string) *Builde
 	}
 
 	defaultContainer, err := NewContainerBuilder("test", image, []string{"/bin/bash", "-c", "sleep INF"}).GetContainerCfg()
-
 	if err != nil {
 		glog.V(100).Infof("Failed to define the default container settings")
 

@@ -83,9 +83,7 @@ func ListExternalIPv4Networks(apiClient *clients.Settings, options ...v1.ListOpt
 }
 
 // WaitForAllNodesAreReady waits for all nodes to be Ready for a time duration up to the timeout.
-func WaitForAllNodesAreReady(apiClient *clients.Settings,
-	timeout time.Duration,
-	options ...v1.ListOptions) (bool, error) {
+func WaitForAllNodesAreReady(apiClient *clients.Settings, timeout time.Duration, options ...v1.ListOptions) (bool, error) {
 	glog.V(100).Infof("Waiting for all nodes to be in the Ready state for up to a duration of %v",
 		timeout)
 
@@ -131,9 +129,7 @@ func WaitForAllNodesAreReady(apiClient *clients.Settings,
 }
 
 // WaitForAllNodesToReboot waits for all nodes to start and finish reboot up to the timeout.
-func WaitForAllNodesToReboot(apiClient *clients.Settings,
-	globalRebootTimeout time.Duration,
-	options ...v1.ListOptions) (bool, error) {
+func WaitForAllNodesToReboot(apiClient *clients.Settings, globalRebootTimeout time.Duration, options ...v1.ListOptions) (bool, error) {
 	glog.V(100).Infof("Waiting for all nodes in the list to reboot and return to the Ready condition")
 
 	nodesList, err := List(apiClient, options...)

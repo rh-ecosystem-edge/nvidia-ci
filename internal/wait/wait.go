@@ -17,8 +17,7 @@ import (
 )
 
 // ClusterPolicyReady Waits until clusterPolicy is Ready.
-func ClusterPolicyReady(apiClient *clients.Settings, clusterPolicyName string, pollInterval,
-	timeout time.Duration) error {
+func ClusterPolicyReady(apiClient *clients.Settings, clusterPolicyName string, pollInterval, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(
 		context.TODO(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 			clusterPolicy, err := nvidiagpu.Pull(apiClient, clusterPolicyName)

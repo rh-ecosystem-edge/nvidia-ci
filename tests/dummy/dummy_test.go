@@ -14,9 +14,7 @@ type Config struct {
 	ReportSuccess bool `envconfig:"DUMMY_REPORT_SUCCESS" default:"true"`
 }
 
-var (
-	config *Config
-)
+var config *Config
 
 var _ = Describe("Dummy", Ordered, Label("dummy"), func() {
 
