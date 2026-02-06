@@ -615,7 +615,7 @@ func ReadMIGParameter() []int {
 // ReadDelayBetweenPods returns the value of mixed.mig.pod-delay.
 // ReadDelayBetweenPods checks the Ginkgo CLI parameter mixed.mig.pod-delay and returns the value.
 func ReadDelayBetweenPods() int {
-	podDelay := 0
+	var podDelay int
 	switch {
 	case PodDelay < 0:
 		podDelay = 0
@@ -1101,7 +1101,6 @@ func ParseCLIParameters() {
 	} else {
 		MixedMigInstances = nil
 	}
-
 }
 
 // isFlagProvided checks if a flag was explicitly set on the command line.

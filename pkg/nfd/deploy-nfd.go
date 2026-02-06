@@ -9,7 +9,7 @@ import (
 	"gopkg.in/k8snetworkplumbingwg/multus-cni.v4/pkg/logging"
 
 	"github.com/golang/glog"
-	. "github.com/onsi/gomega"  //nolint:revive,staticcheck // Dot import is standard for Gomega assertions
+	. "github.com/onsi/gomega" //nolint:revive,staticcheck // Dot import is standard for Gomega assertions
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
@@ -453,7 +453,6 @@ func DeleteNFDCSV(apiClient *clients.Settings) error {
 // DeleteAnyNFDCSV Deletes all CSVs that belong to a the NFD subscription (by name) in the NFD subscription namespace.
 // Equivalent to `oc delete csv -n <namespace> -l operators.coreos.com/<name>.<namespace>`
 func DeleteAnyNFDCSV(apiClient *clients.Settings) error {
-
 	csvList, err := apiClient.ClusterServiceVersions(nfdOperatorNamespace).List(context.TODO(),
 		metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("operators.coreos.com/%s.%s", nfdPackage, nfdOperatorNamespace),
