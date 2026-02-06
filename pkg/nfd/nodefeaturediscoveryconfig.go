@@ -43,15 +43,15 @@ func NewConfig(config string) *Config {
 }
 
 // SetPciWhitelistConfig updates the PCI device whitelist and label fields.
-func (cfg *Config) SetPciWhitelistConfig(DeviceClassWhitelist, DeviceLabelFields []string) {
+func (cfg *Config) SetPciWhitelistConfig(deviceClassWhitelist, deviceLabelFields []string) {
 
 	if cfg.Sources.PCI == nil {
 		cfg.Sources.PCI = &PCIDevice{}
 	}
 	cfg.Sources.PCI.DeviceClassWhitelist = cfg.Sources.PCI.DeviceClassWhitelist[:0]
 	cfg.Sources.PCI.DeviceLabelFields = cfg.Sources.PCI.DeviceLabelFields[:0]
-	cfg.Sources.PCI.DeviceClassWhitelist = append(cfg.Sources.PCI.DeviceClassWhitelist, DeviceClassWhitelist...)
-	cfg.Sources.PCI.DeviceLabelFields = append(cfg.Sources.PCI.DeviceLabelFields, DeviceLabelFields...)
+	cfg.Sources.PCI.DeviceClassWhitelist = append(cfg.Sources.PCI.DeviceClassWhitelist, deviceClassWhitelist...)
+	cfg.Sources.PCI.DeviceLabelFields = append(cfg.Sources.PCI.DeviceLabelFields, deviceLabelFields...)
 }
 
 func (cfg *Config) GetYamlString() (string, error) {

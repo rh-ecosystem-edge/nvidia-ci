@@ -20,7 +20,7 @@ import (
 // EnsureNFDIsInstalled ensures that the Node Feature Discovery (NFD) operator
 // is installed on the cluster. If not, it attempts to deploy the operator and,
 // if necessary, creates a custom CatalogSource to make NFD available.
-func EnsureNFDIsInstalled(apiClient *clients.Settings, Nfd *CustomConfig, ocpVersion string, level glog.Level) {
+func EnsureNFDIsInstalled(apiClient *clients.Settings, nfd *CustomConfig, ocpVersion string, level glog.Level) {
 	By("Check if NFD is installed")
 	nfdInstalled, err := check.NFDDeploymentsReady(apiClient)
 
@@ -32,25 +32,25 @@ func EnsureNFDIsInstalled(apiClient *clients.Settings, Nfd *CustomConfig, ocpVer
 		glog.V(level).Infof("NFD is not currently installed on this cluster")
 		glog.V(level).Infof("Deploying NFD Operator and CR instance on this cluster")
 
-		Nfd.CleanupAfterInstall = true
+		nfd.CleanupAfterInstall = true
 
-		if Nfd.CreateCustomCatalogsource {
+		if nfd.CreateCustomCatalogsource {
 			glog.V(level).Infof("Creating custom catalogsource '%s' for NFD "+
-				"Operator with index image '%s'", Nfd.CustomCatalogSource, Nfd.CustomCatalogSourceIndexImage)
+				"Operator with index image '%s'", nfd.CustomCatalogSource, nfd.CustomCatalogSourceIndexImage)
 
 			nfdCustomCatalogSourceBuilder := olm.NewCatalogSourceBuilderWithIndexImage(inittools.APIClient,
-				Nfd.CustomCatalogSource, CatalogSourceNamespace, Nfd.CustomCatalogSourceIndexImage,
+				nfd.CustomCatalogSource, CatalogSourceNamespace, nfd.CustomCatalogSourceIndexImage,
 				CustomCatalogSourceDisplayName, CustomNFDCatalogSourcePublisherName)
 
 			Expect(nfdCustomCatalogSourceBuilder).ToNot(BeNil(), "error creating custom "+
-				"NFD catalogsource %s", Nfd.CustomCatalogSource)
+				"NFD catalogsource %s", nfd.CustomCatalogSource)
 
 			createdNFDCustomCatalogSourceBuilder, err := nfdCustomCatalogSourceBuilder.Create()
 			Expect(err).ToNot(HaveOccurred(), "error creating custom NFD "+
-				"catalogsource '%s':  %v", Nfd.CustomCatalogSource, err)
+				"catalogsource '%s':  %v", nfd.CustomCatalogSource, err)
 
 			Expect(createdNFDCustomCatalogSourceBuilder).ToNot(BeNil(), "Failed to "+
-				" create custom NFD catalogsource '%s'", Nfd.CustomCatalogSource)
+				" create custom NFD catalogsource '%s'", nfd.CustomCatalogSource)
 
 			By(fmt.Sprintf("Sleep for %s to allow the NFD custom catalogsource to be created", nvidiagpu.SleepDuration.String()))
 			time.Sleep(nvidiagpu.SleepDuration)
@@ -60,15 +60,15 @@ func EnsureNFDIsInstalled(apiClient *clients.Settings, Nfd *CustomConfig, ocpVer
 			Expect(createdNFDCustomCatalogSourceBuilder.IsReady(nvidiagpu.WaitDuration)).NotTo(BeFalse())
 
 			nfdPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalogWithTimeout(inittools.APIClient,
-				Package, CatalogSourceNamespace, Nfd.CustomCatalogSource, 30*time.Second, 5*time.Minute)
+				Package, CatalogSourceNamespace, nfd.CustomCatalogSource, 30*time.Second, 5*time.Minute)
 
 			Expect(err).ToNot(HaveOccurred(), "error getting NFD packagemanifest '%s' "+
-				"from custom catalog '%s':  %v", Package, Nfd.CustomCatalogSource, err)
+				"from custom catalog '%s':  %v", Package, nfd.CustomCatalogSource, err)
 
-			Nfd.CatalogSource = Nfd.CustomCatalogSource
+			nfd.CatalogSource = nfd.CustomCatalogSource
 			nfdChannel := nfdPkgManifestBuilderByCustomCatalog.Object.Status.DefaultChannel
 			glog.V(level).Infof("NFD channel '%s' retrieved from packagemanifest "+
-				"of custom catalogsource '%s'", nfdChannel, Nfd.CustomCatalogSource)
+				"of custom catalogsource '%s'", nfdChannel, nfd.CustomCatalogSource)
 
 		} else {
 
@@ -89,14 +89,14 @@ func EnsureNFDIsInstalled(apiClient *clients.Settings, Nfd *CustomConfig, ocpVer
 			glog.V(level).Infof("The nfd packagemanifest '%s' was found in the default"+
 				" catalog '%s'", nfdPkgManifestBuilderByCatalog.Object.Name, CatalogSourceDefault)
 
-			Nfd.CatalogSource = CatalogSourceDefault
+			nfd.CatalogSource = CatalogSourceDefault
 			nfdChannel := nfdPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
 			glog.V(level).Infof("The NFD channel retrieved from packagemanifest is:  %v",
 				nfdChannel)
 
 		}
 
-		DeployNFDOperatorWithRetries(inittools.APIClient, Nfd, level, ocpVersion)
+		DeployNFDOperatorWithRetries(inittools.APIClient, nfd, level, ocpVersion)
 	}
 }
 
