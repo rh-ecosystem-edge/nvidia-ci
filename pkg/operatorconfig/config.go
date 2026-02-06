@@ -1,7 +1,7 @@
 package operatorconfig
 
 import (
-	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global" //nolint:revive,staticcheck // Dot import for global constants
+	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global" //nolint // Dot import for global constants
 )
 
 type CustomConfig struct {
