@@ -99,12 +99,6 @@ func NewCatalogSourceBuilderWithIndexImage(apiClient *clients.Settings,
 		builder.errorMsg = errCatalogSourceNsnameEmpty
 	}
 
-	if nsname == "" {
-		glog.V(100).Infof("The nsname of the catalogsource is empty")
-
-		builder.errorMsg = errCatalogSourceNsnameEmpty
-	}
-
 	if displayName == "" {
 		glog.V(100).Infof("The display name of the catalogsource is empty")
 
