@@ -99,4 +99,3 @@ func GetClusterArchitecture(apiClient *clients.Settings, nodeSelector map[string
 
 	return "", err
 }
-
