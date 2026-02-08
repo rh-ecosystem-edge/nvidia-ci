@@ -171,3 +171,49 @@ func NodeLabelExists(apiClient *clients.Settings, labelKey, labelValue string, n
 			return false, nil
 		})
 }
+
+// DaemonSetReady waits for a specific DaemonSet to have all pods ready.
+func DaemonSetReady(apiClient *clients.Settings, daemonSetName, namespace string, pollInterval, timeout time.Duration) error {
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Waiting for DaemonSet '%s' in namespace '%s' to be ready", daemonSetName, namespace)
+	return wait.PollUntilContextTimeout(
+		context.TODO(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			ds, err := apiClient.DaemonSets(namespace).Get(ctx, daemonSetName, metav1.GetOptions{})
+
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("Error getting DaemonSet '%s' in namespace '%s': %v", daemonSetName, namespace, err)
+				return false, err
+			}
+
+			// Verify the generation observed by the DaemonSet controller matches the spec generation
+			if ds.Status.ObservedGeneration != ds.Generation {
+				glog.V(gpuparams.GpuLogLevel).Infof("DaemonSet '%s' in namespace '%s': ObservedGeneration %d != Generation %d",
+					daemonSetName, namespace, ds.Status.ObservedGeneration, ds.Generation)
+				return false, nil
+			}
+
+			// Make sure all the updated pods have been scheduled
+			if ds.Status.UpdatedNumberScheduled != ds.Status.DesiredNumberScheduled {
+				glog.V(gpuparams.GpuLogLevel).Infof("DaemonSet '%s' in namespace '%s': %d/%d pods updated",
+					daemonSetName, namespace, ds.Status.UpdatedNumberScheduled, ds.Status.DesiredNumberScheduled)
+				return false, nil
+			}
+
+			// Verify all nodes have available pods (ready for at least minReadySeconds)
+			// NumberAvailable only counts nodes with the current revision's pods that are available,
+			// unlike NumberReady which can include old revision pods during rolling updates
+			available := ds.Status.NumberAvailable
+			desired := ds.Status.DesiredNumberScheduled
+
+			glog.V(gpuparams.GpuLogLevel).Infof("DaemonSet '%s' in namespace '%s': %d/%d pods available",
+				daemonSetName, namespace, available, desired)
+
+			if available == desired {
+				glog.V(gpuparams.GpuLogLevel).Infof("DaemonSet '%s' in namespace '%s' is now ready",
+					daemonSetName, namespace)
+
+				return true, nil
+			}
+
+			return false, nil
+		})
+}

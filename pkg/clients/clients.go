@@ -33,6 +33,7 @@ import (
 
 	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
 	nvidiagpuv1alpha1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1alpha1"
+	nvidiadrav1beta1 "github.com/NVIDIA/k8s-dra-driver-gpu/api/nvidia.com/resource/v1beta1"
 
 	nvidianetworkv1alpha1 "github.com/Mellanox/network-operator/api/v1alpha1"
 
@@ -147,6 +148,10 @@ func SetScheme(crScheme *runtime.Scheme) error {
 	}
 
 	if err := nvidiagpuv1alpha1.AddToScheme(crScheme); err != nil {
+		return err
+	}
+
+	if err := nvidiadrav1beta1.AddToScheme(crScheme); err != nil {
 		return err
 	}
 
