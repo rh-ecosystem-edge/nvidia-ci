@@ -29,6 +29,8 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/msg"
 )
 
+const pollingInterval = 5 * time.Second
+
 // Builder provides a struct for pod object from the cluster and a pod definition.
 type Builder struct {
 	// Pod definition, used to create the pod object.
@@ -126,6 +128,39 @@ func Pull(apiClient *clients.Settings, name, nsname string) (*Builder, error) {
 	builder.Definition = builder.Object
 
 	return &builder, nil
+}
+
+// NewBuilderFromDefinition creates a Builder from a complete pod definition.
+// Use this when you already have a full pod spec and don't need the default container.
+func NewBuilderFromDefinition(apiClient *clients.Settings, podDef *corev1.Pod) *Builder {
+	builder := &Builder{
+		apiClient: apiClient,
+	}
+
+	if podDef == nil {
+		glog.V(100).Infof("The pod definition is nil")
+		builder.errorMsg = "pod definition cannot be nil"
+		return builder
+	}
+
+	glog.V(100).Infof("Initializing pod builder from definition: name=%s, namespace=%s",
+		podDef.Name, podDef.Namespace)
+
+	builder.Definition = podDef
+
+	if podDef.Name == "" {
+		glog.V(100).Infof("The name of the pod is empty")
+		builder.errorMsg = "pod's name is empty"
+		return builder
+	}
+
+	if podDef.Namespace == "" {
+		glog.V(100).Infof("The namespace of the pod is empty")
+		builder.errorMsg = "pod's namespace is empty"
+		return builder
+	}
+
+	return builder
 }
 
 // DefineOnNode adds nodeName to the pod's definition.
@@ -268,9 +303,9 @@ func (builder *Builder) WaitUntilInStatus(status corev1.PodPhase, timeout time.D
 		builder.Definition.Name, builder.Definition.Namespace, status)
 
 	return wait.PollUntilContextTimeout(
-		context.TODO(), time.Second, timeout, true, func(ctx context.Context) (bool, error) {
-			updatePod, err := builder.apiClient.Pods(builder.Object.Namespace).Get(
-				context.TODO(), builder.Object.Name, metav1.GetOptions{})
+		context.TODO(), pollingInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			updatePod, err := builder.apiClient.Pods(builder.Definition.Namespace).Get(
+				ctx, builder.Definition.Name, metav1.GetOptions{})
 			if err != nil {
 				return false, nil
 			}
@@ -289,7 +324,7 @@ func (builder *Builder) WaitUntilDeleted(timeout time.Duration) error {
 		builder.Definition.Name, builder.Definition.Namespace)
 
 	err := wait.PollUntilContextTimeout(
-		context.TODO(), time.Second, timeout, false, func(ctx context.Context) (bool, error) {
+		context.TODO(), pollingInterval, timeout, false, func(ctx context.Context) (bool, error) {
 			_, err := builder.apiClient.Pods(builder.Definition.Namespace).Get(
 				ctx, builder.Definition.Name, metav1.GetOptions{})
 			if err == nil {
@@ -334,9 +369,9 @@ func (builder *Builder) WaitUntilCondition(condition corev1.PodConditionType, ti
 		builder.Definition.Name, builder.Definition.Namespace, condition)
 
 	return wait.PollUntilContextTimeout(
-		context.TODO(), time.Second, timeout, true, func(ctx context.Context) (bool, error) {
-			updatePod, err := builder.apiClient.Pods(builder.Object.Namespace).Get(
-				context.TODO(), builder.Object.Name, metav1.GetOptions{})
+		context.TODO(), pollingInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			updatePod, err := builder.apiClient.Pods(builder.Definition.Namespace).Get(
+				ctx, builder.Definition.Name, metav1.GetOptions{})
 			if err != nil {
 				return false, nil
 			}
