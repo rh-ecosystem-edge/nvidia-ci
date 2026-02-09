@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/golang/glog"
-	. "github.com/onsi/ginkgo/v2" //nolint // Dot import is standard for Ginkgo tests
-	. "github.com/onsi/gomega"    //nolint // Dot import is standard for Gomega assertions
+	. "github.com/onsi/ginkgo/v2" //nolint:staticcheck
+	. "github.com/onsi/gomega"    //nolint:staticcheck
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 )

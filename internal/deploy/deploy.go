@@ -17,7 +17,7 @@ type BundleConfig struct {
 }
 
 type Deploy interface {
-	CreateAndLabelNamespaceIfNeeded(logLevel glog.Level, targetNs string, labels map[string]string) (*namespace.Builder, error)
+	CreateAndLabelNamespaceIfNeeded(logLevel glog.Level, ns string, labels map[string]string) (*namespace.Builder, error)
 	DeployBundle(logLevel glog.Level, bundleConfig *BundleConfig, ns string, timeout time.Duration) error
 	WaitForReadyStatus(logLevel glog.Level, name, ns string, timeout time.Duration) error
 }

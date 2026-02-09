@@ -133,7 +133,7 @@ func PullCatalogSource(apiClient *clients.Settings, name, nsname string) (*Catal
 	}
 
 	if nsname == "" {
-		builder.errorMsg = "catalogsource 'namespace' cannot be empty"
+		builder.errorMsg = errCatalogSourceNsnameEmpty
 	}
 
 	if !builder.Exists() {
