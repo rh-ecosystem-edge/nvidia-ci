@@ -210,7 +210,7 @@ func WaitForMachineSetReady(
 	timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(
 		context.TODO(), 30*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
-			machineSetPulled, err := PullSet(apiClient, namespace, machineSetName)
+			machineSetPulled, err := PullSet(apiClient, machineSetName, namespace)
 
 			if err != nil {
 				glog.V(100).Infof("MachineSet pull from cluster error: %v\n", err)

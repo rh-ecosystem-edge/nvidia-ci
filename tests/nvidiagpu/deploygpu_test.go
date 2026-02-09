@@ -316,7 +316,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					err)
 
 				pulledMachineSetBuilder, err := machine.PullSet(inittools.APIClient,
-					createdMsBuilder.Definition.Name,
+					createdMsBuilder.Object.Name,
 					machineSetNamespace)
 
 				Expect(err).ToNot(HaveOccurred(), "error pulling GPU enabled machineset:"+
@@ -329,8 +329,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				glog.V(gpuparams.GpuLogLevel).Infof("Just before waiting for GPU enabled machineset %s "+
 					"to be in Ready state", createdMsBuilder.Definition.Name)
 
-				err = machine.WaitForMachineSetReady(inittools.APIClient, createdMsBuilder.Definition.Name,
-					machineSetNamespace, nvidiagpu.MachineReadyWaitDuration)
+				err = machine.WaitForMachineSetReady(inittools.APIClient, machineSetNamespace,
+					createdMsBuilder.Definition.Name, nvidiagpu.MachineReadyWaitDuration)
 
 				Expect(err).ToNot(HaveOccurred(), "Failed to detect at least one replica"+
 					" of MachineSet %s in Ready state during 15 min polling interval: %v",
