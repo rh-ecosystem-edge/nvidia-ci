@@ -196,7 +196,7 @@ func CreateDevicePluginConfigMap(apiClient *clients.Settings, replicas int, conf
 
 	yamlData, err := yaml.Marshal(config)
 	if err != nil {
-		glog.Error("unable to marshal map %v", err)
+		glog.Errorf("unable to marshal map %v", err)
 	}
 	devicePluginConfig := map[string]string{
 		"plugin-config.yaml": string(yamlData),

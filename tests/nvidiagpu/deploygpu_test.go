@@ -37,7 +37,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/deploy"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
-	gpuburn "github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuburn"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuburn"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"

@@ -14,10 +14,10 @@ import (
 
 	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
 	"github.com/golang/glog"
-	. "github.com/onsi/ginkgo/v2" //nolint // Dot import is standard for Ginkgo tests
-	. "github.com/onsi/gomega"    //nolint // Dot import is standard for Gomega assertions
+	. "github.com/onsi/ginkgo/v2" //nolint:staticcheck
+	. "github.com/onsi/gomega"    //nolint:staticcheck
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
-	gpuburn "github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuburn"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuburn"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
@@ -892,9 +892,9 @@ func configureMIGStrategy(
 	pulledClusterPolicyBuilder.Definition.Spec.MIG.Strategy = migStrategy
 	updateAndWaitForClusterPolicyWithMIG(pulledClusterPolicyBuilder, workerNodeSelector, migStrategy)
 
-	By(fmt.Sprintf("Getting cluster architecture from nodes with WorkerNodeSelector: %v", workerNodeSelector))
+	By(fmt.Sprintf("Getting cluster architecture from nodes with workerNodeSelector: %v", workerNodeSelector))
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Getting cluster architecture from nodes with "+
-		"WorkerNodeSelector: %v", workerNodeSelector)
+		"workerNodeSelector: %v", workerNodeSelector)
 	clusterArch, err := get.GetClusterArchitecture(inittools.APIClient, workerNodeSelector)
 	Expect(err).ToNot(HaveOccurred(), "Error getting cluster architecture: %v", err)
 	return clusterArch, nil
@@ -993,11 +993,11 @@ func isRunning(gpuPod *pod.Builder, namespace string) {
 		// pod exists, but is not running
 		// Using pod2 to avoid confusion with previous pod pull
 		pod2, err2 = pod.Pull(inittools.APIClient, gpuPod.Definition.Name, namespace)
+		Expect(err2).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod with MIG in "+
+			"namespace '%s' to go to Running phase: %v\n Pod is likely Pending for some reason", namespace, err)
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Pod %s is likely Pending for some reason: %s (%s). Error: %v, Error2: %v",
 			pod2.Definition.Name, pod2.Object.Status.Phase, pod2.Object.Status.Reason, err, err2)
 		logPodEvents(pod2.Definition.Name, namespace)
-		Expect(err2).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod with MIG in "+
-			"namespace '%s' to go to Running phase: %v\n Pod is likely Pending for some reason", namespace, err)
 	}
 }
 

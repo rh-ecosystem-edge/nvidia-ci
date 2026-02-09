@@ -159,7 +159,7 @@ func WaitForAllNodesToReboot(apiClient *clients.Settings, globalRebootTimeout ti
 					}
 
 					if ready && rebooted {
-						glog.V(100).Infof("Node %s was successfully rebooted after: %v",
+						glog.V(100).Infof("Node %s was successfully rebooted after: %v", node.Object.Name,
 							time.Now().Unix()-globalStartTime)
 
 						readyNodes = append(readyNodes, node.Object.Name)
