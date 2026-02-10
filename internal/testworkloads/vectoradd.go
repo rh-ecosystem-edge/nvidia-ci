@@ -23,11 +23,13 @@ const (
 
 // VectorAddWorkload implements the Workload interface for CUDA vector addition sample.
 type VectorAddWorkload struct {
-	podName      string
-	image        string
-	resources    corev1.ResourceRequirements
-	nodeSelector map[string]string
-	tolerations  []corev1.Toleration
+	podName        string
+	image          string
+	command        []string
+	resources      corev1.ResourceRequirements
+	nodeSelector   map[string]string
+	tolerations    []corev1.Toleration
+	resourceClaims []corev1.PodResourceClaim
 }
 
 // NewVectorAdd creates a VectorAdd workload with sensible defaults.
@@ -61,6 +63,12 @@ func (v *VectorAddWorkload) WithImage(image string) *VectorAddWorkload {
 	return v
 }
 
+// WithCommand sets a custom command for the container.
+func (v *VectorAddWorkload) WithCommand(command []string) *VectorAddWorkload {
+	v.command = command
+	return v
+}
+
 // WithResources sets custom resource requirements.
 func (v *VectorAddWorkload) WithResources(resources corev1.ResourceRequirements) *VectorAddWorkload {
 	v.resources = resources
@@ -79,6 +87,12 @@ func (v *VectorAddWorkload) WithTolerations(tolerations []corev1.Toleration) *Ve
 	return v
 }
 
+// WithResourceClaims sets resource claims for DRA support.
+func (v *VectorAddWorkload) WithResourceClaims(claims []corev1.PodResourceClaim) *VectorAddWorkload {
+	v.resourceClaims = claims
+	return v
+}
+
 // BuildPodSpec creates the pod specification for VectorAdd workload.
 func (v *VectorAddWorkload) BuildPodSpec() (*corev1.Pod, error) {
 	glog.V(gpuparams.GpuLogLevel).Infof("Building pod spec for VectorAdd workload: %s", v.podName)
@@ -93,6 +107,10 @@ func (v *VectorAddWorkload) BuildPodSpec() (*corev1.Pod, error) {
 
 	container := NewUnprivilegedContainer(ContainerName, v.image, v.resources)
 
+	if len(v.command) > 0 {
+		container.Command = v.command
+	}
+
 	pod := NewUnprivilegedPod(
 		v.podName,
 		[]corev1.Container{container},
@@ -100,6 +118,10 @@ func (v *VectorAddWorkload) BuildPodSpec() (*corev1.Pod, error) {
 		v.tolerations,
 		map[string]string{"app": "vectoradd-app"},
 	)
+
+	if len(v.resourceClaims) > 0 {
+		pod.Spec.ResourceClaims = v.resourceClaims
+	}
 
 	return pod, nil
 }
