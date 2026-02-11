@@ -2,6 +2,7 @@ package wait
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/golang/glog"
@@ -11,6 +12,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nodes"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -172,6 +174,41 @@ func NodeLabelExists(apiClient *clients.Settings, labelKey, labelValue string, n
 		})
 }
 
+// WaitForNodes waits for nodes matching the selector to satisfy the condition function.
+func WaitForNodes(apiClient *clients.Settings, nodeSelector labels.Set, condition func(*corev1.Node) (bool, error), pollInterval, timeout time.Duration) error {
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Waiting for nodes with selector: %v", nodeSelector)
+
+	return wait.PollUntilContextTimeout(
+		context.TODO(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			nodeBuilders, err := nodes.List(apiClient, metav1.ListOptions{
+				LabelSelector: nodeSelector.String(),
+			})
+
+			if err != nil {
+				return false, fmt.Errorf("error listing nodes: %w", err)
+			}
+
+			if len(nodeBuilders) == 0 {
+				return false, fmt.Errorf("no nodes found matching selector %v", nodeSelector)
+			}
+
+			for _, nodeBuilder := range nodeBuilders {
+				satisfied, err := condition(nodeBuilder.Object)
+				if err != nil {
+					return false, fmt.Errorf("failed to check node %s: %w", nodeBuilder.Object.Name, err)
+				}
+
+				if !satisfied {
+					return false, nil
+				}
+				glog.V(gpuparams.GpuLogLevel).Infof("Node %s satisfies the required condition", nodeBuilder.Object.Name)
+			}
+
+			glog.V(gpuparams.GpuLogLevel).Info("All nodes satisfy the required condition")
+			return true, nil
+		})
+}
+
 // DaemonSetReady waits for a specific DaemonSet to have all pods ready.
 func DaemonSetReady(apiClient *clients.Settings, daemonSetName, namespace string, pollInterval, timeout time.Duration) error {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Waiting for DaemonSet '%s' in namespace '%s' to be ready", daemonSetName, namespace)
@@ -180,8 +217,7 @@ func DaemonSetReady(apiClient *clients.Settings, daemonSetName, namespace string
 			ds, err := apiClient.DaemonSets(namespace).Get(ctx, daemonSetName, metav1.GetOptions{})
 
 			if err != nil {
-				glog.V(gpuparams.GpuLogLevel).Infof("Error getting DaemonSet '%s' in namespace '%s': %v", daemonSetName, namespace, err)
-				return false, err
+				return false, fmt.Errorf("error getting DaemonSet '%s' in namespace '%s': %w", daemonSetName, namespace, err)
 			}
 
 			// Verify the generation observed by the DaemonSet controller matches the spec generation
@@ -207,10 +243,9 @@ func DaemonSetReady(apiClient *clients.Settings, daemonSetName, namespace string
 			glog.V(gpuparams.GpuLogLevel).Infof("DaemonSet '%s' in namespace '%s': %d/%d pods available",
 				daemonSetName, namespace, available, desired)
 
-			if available == desired {
+			if desired > 0 && available == desired {
 				glog.V(gpuparams.GpuLogLevel).Infof("DaemonSet '%s' in namespace '%s' is now ready",
 					daemonSetName, namespace)
-
 				return true, nil
 			}
 

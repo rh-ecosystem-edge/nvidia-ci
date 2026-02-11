@@ -18,8 +18,10 @@ import (
 // simpleRESTClientGetter provides a minimal RESTClientGetter implementation
 // that directly uses an existing rest.Config and stores the original APIClient for retrieval.
 type simpleRESTClientGetter struct {
-	apiClient *clients.Settings
-	namespace string
+	apiClient       *clients.Settings
+	namespace       string
+	discoveryClient discovery.CachedDiscoveryInterface
+	restMapper      meta.RESTMapper
 }
 
 func (s *simpleRESTClientGetter) ToRESTConfig() (*rest.Config, error) {
@@ -27,20 +29,29 @@ func (s *simpleRESTClientGetter) ToRESTConfig() (*rest.Config, error) {
 }
 
 func (s *simpleRESTClientGetter) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
+	if s.discoveryClient != nil {
+		return s.discoveryClient, nil
+	}
+
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(s.apiClient.Config)
 	if err != nil {
 		return nil, err
 	}
-	return memory.NewMemCacheClient(discoveryClient), nil
+	s.discoveryClient = memory.NewMemCacheClient(discoveryClient)
+	return s.discoveryClient, nil
 }
 
 func (s *simpleRESTClientGetter) ToRESTMapper() (meta.RESTMapper, error) {
+	if s.restMapper != nil {
+		return s.restMapper, nil
+	}
+
 	discoveryClient, err := s.ToDiscoveryClient()
 	if err != nil {
 		return nil, err
 	}
-	mapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
-	return mapper, nil
+	s.restMapper = restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
+	return s.restMapper, nil
 }
 
 func (s *simpleRESTClientGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
