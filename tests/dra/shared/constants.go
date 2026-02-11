@@ -13,4 +13,6 @@ const (
 	DRAComponentLabelKey                = "nvidia-dra-driver-gpu-component"
 	DRAComponentController              = "controller"
 	DRAComponentKubeletPlugin           = "kubelet-plugin"
+	GPUPresentLabel                     = "nvidia.com/gpu.present"
+	GPUCapacityKey                      = "nvidia.com/gpu"
 )

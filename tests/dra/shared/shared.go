@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
@@ -18,11 +17,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
-	goclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	defaultTimeout = 5 * time.Minute
+	defaultTimeout             = 5 * time.Minute
+	defaultDevicePluginEnabled = true // On par with the GPU Operator default
 )
 
 // DRAValues creates Helm chart values for DRA driver installation.
@@ -87,7 +86,7 @@ func (v DRAValues) WithImageTag(tag string) DRAValues {
 // VerifyDRAPrerequisites checks that all prerequisites for DRA driver installation are met.
 func VerifyDRAPrerequisites(apiClient *clients.Settings) error {
 	glog.V(gpuparams.GpuLogLevel).Infof("Verifying GPU Operator ClusterPolicy is ready")
-	err := VerifyGPUOperatorReady(apiClient)
+	err := wait.ClusterPolicyReady(apiClient, nvidiagpu.ClusterPolicyName, 1*time.Second, 1*time.Second)
 	if err != nil {
 		return fmt.Errorf("GPU Operator prerequisite check failed: %w", err)
 	}
@@ -127,24 +126,6 @@ func InstallDRADriver(actionConfig *action.Configuration, version string, custom
 	return nil
 }
 
-// VerifyGPUOperatorReady checks that the GPU Operator ClusterPolicy exists and is in "ready" state.
-func VerifyGPUOperatorReady(apiClient *clients.Settings) error {
-	clusterPolicy := &nvidiagpuv1.ClusterPolicy{}
-	err := apiClient.Get(context.TODO(), goclient.ObjectKey{
-		Name: nvidiagpu.ClusterPolicyName,
-	}, clusterPolicy)
-	if err != nil {
-		return fmt.Errorf("failed to get ClusterPolicy - GPU Operator must be installed first: %w", err)
-	}
-
-	if clusterPolicy.Status.State != nvidiagpuv1.Ready {
-		return fmt.Errorf("ClusterPolicy is not ready (current state: %s) - wait for GPU Operator to be ready before running DRA tests",
-			clusterPolicy.Status.State)
-	}
-
-	return nil
-}
-
 // VerifyDRAAPIAvailable checks that the DRA API resource group (resource.k8s.io) is available in the cluster.
 func VerifyDRAAPIAvailable(apiClient *clients.Settings) error {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(apiClient.Config)
@@ -176,11 +157,53 @@ func IsDevicePluginEnabled(apiClient *clients.Settings) (bool, error) {
 		return false, fmt.Errorf("failed to get ClusterPolicy: %w", err)
 	}
 
-	if clusterPolicy.Object.Spec.DevicePlugin.Enabled != nil && *clusterPolicy.Object.Spec.DevicePlugin.Enabled {
-		return true, nil
+	if clusterPolicy.Object.Spec.DevicePlugin.Enabled == nil {
+		return defaultDevicePluginEnabled, nil
 	}
 
-	return false, nil
+	return *clusterPolicy.Object.Spec.DevicePlugin.Enabled, nil
+}
+
+// SetDevicePluginEnabled enables or disables the device plugin in ClusterPolicy.
+// Returns the previous device plugin state and an error.
+func SetDevicePluginEnabled(apiClient *clients.Settings, enabled bool) (bool, error) {
+	clusterPolicy, err := nvidiagpu.Pull(apiClient, nvidiagpu.ClusterPolicyName)
+	if err != nil {
+		return false, fmt.Errorf("failed to get ClusterPolicy: %w", err)
+	}
+
+	// Capture previous state
+	previousState := defaultDevicePluginEnabled
+	if clusterPolicy.Object.Spec.DevicePlugin.Enabled != nil {
+		previousState = *clusterPolicy.Object.Spec.DevicePlugin.Enabled
+	}
+
+	// If the previous state is the desired state
+	if previousState == enabled {
+		glog.V(gpuparams.GpuLogLevel).Infof("Device plugin is already in the desired state: %v", enabled)
+		return previousState, nil
+	}
+
+	clusterPolicy.Definition.Spec.DevicePlugin.Enabled = &enabled
+
+	_, err = clusterPolicy.Update(true)
+	if err != nil {
+		return previousState, fmt.Errorf("failed to update ClusterPolicy: %w", err)
+	}
+
+	return previousState, nil
+}
+
+// installChartOptions holds parameters for installing a Helm chart
+type installChartOptions struct {
+	actionConfig  *action.Configuration
+	releaseName   string
+	repoURL       string // For repo-based installations
+	chartRef      string // Chart name or path
+	version       string // Chart version (for repo installations)
+	imageRegistry string // Optional custom image registry
+	imageTag      string // Optional custom image tag
+	customValues  map[string]interface{}
 }
 
 // InstallDRADriverFromRepo installs the DRA driver from the NVIDIA Helm repository.
@@ -192,27 +215,41 @@ func InstallDRADriverFromRepo(actionConfig *action.Configuration, version string
 		helmVersion = version
 	}
 
-	return installChart(actionConfig, DRADriverReleaseName, DRADriverHelmRepo, DRADriverChartName, helmVersion, "", "", customValues)
+	return installChart(installChartOptions{
+		actionConfig: actionConfig,
+		releaseName:  DRADriverReleaseName,
+		repoURL:      DRADriverHelmRepo,
+		chartRef:     DRADriverChartName,
+		version:      helmVersion,
+		customValues: customValues,
+	})
 }
 
 // InstallDRADriverFromLocal installs the DRA driver from a local Helm chart.
 // customValues can be nil or a DRAValues object with custom Helm chart values.
 func InstallDRADriverFromLocal(actionConfig *action.Configuration, chartPath, imageRegistry, imageTag string, customValues DRAValues) error {
-	return installChart(actionConfig, DRADriverReleaseName, "", chartPath, "", imageRegistry, imageTag, customValues)
+	return installChart(installChartOptions{
+		actionConfig:  actionConfig,
+		releaseName:   DRADriverReleaseName,
+		chartRef:      chartPath,
+		imageRegistry: imageRegistry,
+		imageTag:      imageTag,
+		customValues:  customValues,
+	})
 }
 
-func installChart(actionConfig *action.Configuration, releaseName, repoURL, chartRef, version, imageRegistry, imageTag string, customValues map[string]interface{}) error {
-	client := action.NewInstall(actionConfig)
+func installChart(opts installChartOptions) error {
+	client := action.NewInstall(opts.actionConfig)
 	client.Namespace = DRADriverNamespace
 	client.CreateNamespace = true
-	client.ReleaseName = releaseName
-	client.Version = version
+	client.ReleaseName = opts.releaseName
+	client.Version = opts.version
 	client.Wait = true
 	client.Timeout = defaultTimeout
 
 	// Set repository URL if provided (for repo installations)
-	if repoURL != "" {
-		client.RepoURL = repoURL
+	if opts.repoURL != "" {
+		client.RepoURL = opts.repoURL
 	}
 
 	// Start with default values
@@ -225,18 +262,18 @@ func installChart(actionConfig *action.Configuration, releaseName, repoURL, char
 		},
 	}
 
-	if imageRegistry != "" {
+	if opts.imageRegistry != "" {
 		values["image"] = map[string]interface{}{
-			"repository": imageRegistry,
+			"repository": opts.imageRegistry,
 		}
 	}
 
-	if imageTag != "" {
+	if opts.imageTag != "" {
 		if imgMap, ok := values["image"].(map[string]interface{}); ok {
-			imgMap["tag"] = imageTag
+			imgMap["tag"] = opts.imageTag
 		} else {
 			values["image"] = map[string]interface{}{
-				"tag": imageTag,
+				"tag": opts.imageTag,
 			}
 		}
 	}
@@ -244,13 +281,13 @@ func installChart(actionConfig *action.Configuration, releaseName, repoURL, char
 	// Deep merge custom values into defaults using Helm's CoalesceTables
 	// Note: CoalesceTables(dst, src) considers dst authoritative, so we pass
 	// customValues first to ensure custom values override defaults
-	if len(customValues) > 0 {
-		values = chartutil.CoalesceTables(customValues, values)
+	if len(opts.customValues) > 0 {
+		values = chartutil.CoalesceTables(opts.customValues, values)
 	}
 
 	// LocateChart needs settings with cache directory configured
 	settings := cli.New()
-	chartPath, err := client.LocateChart(chartRef, settings)
+	chartPath, err := client.LocateChart(opts.chartRef, settings)
 	if err != nil {
 		return fmt.Errorf("failed to locate chart: %w", err)
 	}
@@ -272,6 +309,7 @@ func installChart(actionConfig *action.Configuration, releaseName, repoURL, char
 // Returns nil if the release was not found (idempotent behavior).
 func UninstallDRADriver(actionConfig *action.Configuration) error {
 	listClient := action.NewList(actionConfig)
+	listClient.All = true
 	releases, err := listClient.Run()
 	if err != nil {
 		return fmt.Errorf("failed to list releases: %w", err)
