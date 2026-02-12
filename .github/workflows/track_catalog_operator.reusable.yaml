@@ -30,6 +30,7 @@ permissions:
 
 jobs:
   check-catalog:
+    if: github.repository == 'rh-ecosystem-edge/nvidia-ci'
     runs-on: ubuntu-latest
     steps:
       - name: Login to Red Hat registry
