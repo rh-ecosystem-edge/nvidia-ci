@@ -1,4 +1,4 @@
-package shared
+package helm
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/registry"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
@@ -90,13 +91,11 @@ func (s *simpleClientConfig) ConfigAccess() clientcmd.ConfigAccess {
 func NewActionConfig(apiClient *clients.Settings, namespace string, logLevel glog.Level) (*action.Configuration, error) {
 	actionConfig := new(action.Configuration)
 
-	// Use our simple getter that directly provides the rest.Config and stores apiClient
 	restClientGetter := &simpleRESTClientGetter{
 		apiClient: apiClient,
 		namespace: namespace,
 	}
 
-	// Provide a log function for Helm (required, cannot be nil)
 	logFunc := func(format string, v ...interface{}) {
 		glog.V(logLevel).Infof(format, v...)
 	}
@@ -104,6 +103,13 @@ func NewActionConfig(apiClient *clients.Settings, namespace string, logLevel glo
 	if err := actionConfig.Init(restClientGetter, namespace, "secret", logFunc); err != nil {
 		return nil, fmt.Errorf("failed to initialize Helm action configuration: %w", err)
 	}
+
+	// Configure registry client for OCI chart support
+	registryClient, err := registry.NewClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create registry client: %w", err)
+	}
+	actionConfig.RegistryClient = registryClient
 
 	return actionConfig, nil
 }

@@ -3,14 +3,15 @@ package computedomain
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	nvidiadrav1beta1 "github.com/NVIDIA/k8s-dra-driver-gpu/api/nvidia.com/resource/v1beta1"
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/dra"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/helm"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/testworkloads"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
@@ -29,7 +30,7 @@ const (
 	computeDomainLabel = "resource.nvidia.com/computeDomain"
 )
 
-func createComputeDomain(apiClient *clients.Settings, name, namespace, rctName string) error {
+func createComputeDomain(apiClient *clients.Settings, name, namespace, rctName string) (*nvidiadrav1beta1.ComputeDomain, error) {
 	computeDomain := &nvidiadrav1beta1.ComputeDomain{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -45,7 +46,13 @@ func createComputeDomain(apiClient *clients.Settings, name, namespace, rctName s
 		},
 	}
 
-	return apiClient.Create(context.TODO(), computeDomain)
+	err := apiClient.Create(context.TODO(), computeDomain)
+	if err != nil {
+		return nil, err
+	}
+
+	// computeDomain is updated in place by Create() with server response
+	return computeDomain, nil
 }
 
 func hasMultiNodeClique(apiClient *clients.Settings) (bool, error) {
@@ -69,6 +76,7 @@ func hasMultiNodeClique(apiClient *clients.Settings) (bool, error) {
 
 var _ = Describe("DRA Driver Installation", Ordered, Label("dra", "dra-imex"), func() {
 	var actionConfig *action.Configuration
+	var driver *dra.Driver
 	var hasClique bool
 
 	BeforeAll(func() {
@@ -77,17 +85,20 @@ var _ = Describe("DRA Driver Installation", Ordered, Label("dra", "dra-imex"), f
 		Expect(err).ToNot(HaveOccurred(), "Failed to verify DRA prerequisites")
 
 		By("Installing DRA Driver's Helm chart")
-		actionConfig, err = shared.NewActionConfig(inittools.APIClient, shared.DRADriverNamespace, gpuparams.GpuLogLevel)
+		actionConfig, err = helm.NewActionConfig(inittools.APIClient, dra.DriverNamespace, gpuparams.GpuLogLevel)
 		Expect(err).ToNot(HaveOccurred(), "Failed to create Helm action configuration")
+
+		// For compute domain tests, disable GPU resources
+		driver, err = dra.NewDriver()
+		Expect(err).ToNot(HaveOccurred(), "Failed to create DRA driver")
+		driver.WithGPUResources(false)
 
 		DeferCleanup(func() error {
 			By("Uninstalling DRA driver")
-			return shared.UninstallDRADriver(actionConfig)
+			return driver.Uninstall(actionConfig, shared.DriverInstallationTimeout)
 		})
 
-		// For compute domain tests, disable GPU resources
-		customValues := shared.NewDRAValues().WithGPUResources(false)
-		err = shared.InstallDRADriver(actionConfig, shared.LatestVersion, customValues)
+		err = driver.Install(actionConfig, shared.DriverInstallationTimeout)
 		Expect(err).ToNot(HaveOccurred(), "Failed to install DRA driver")
 
 		By("Verifying compute domain DeviceClass resources")
@@ -145,9 +156,10 @@ var _ = Describe("DRA Driver Installation", Ordered, Label("dra", "dra-imex"), f
 			})
 
 			By("Creating ComputeDomain resource")
-			err = createComputeDomain(inittools.APIClient, names.ComputeDomain(), names.Namespace(), names.ClaimTemplate())
+			computeDomain, err := createComputeDomain(inittools.APIClient, names.ComputeDomain(), names.Namespace(), names.ClaimTemplate())
 			Expect(err).ToNot(HaveOccurred(), "Failed to create ComputeDomain")
-			glog.V(gpuparams.GpuLogLevel).Infof("Created ComputeDomain: %s", names.ComputeDomain())
+			computeDomainUID := string(computeDomain.UID)
+			glog.V(gpuparams.GpuLogLevel).Infof("Created ComputeDomain: %s with UID: %s", names.ComputeDomain(), computeDomainUID)
 
 			By("Creating VectorAdd pod with resource claims")
 			rctNamePtr := names.ClaimTemplate()
@@ -185,25 +197,14 @@ var _ = Describe("DRA Driver Installation", Ordered, Label("dra", "dra-imex"), f
 			glog.V(gpuparams.GpuLogLevel).Infof("VectorAdd pod is Running")
 
 			By("Verifying compute domain pods exist in DRA driver namespace")
-			pods, err := pod.List(inittools.APIClient, shared.DRADriverNamespace)
+			labelSelector := fmt.Sprintf("%s=%s", computeDomainLabel, computeDomainUID)
+			pods, err := pod.List(inittools.APIClient, dra.DriverNamespace, metav1.ListOptions{
+				LabelSelector: labelSelector,
+			})
 			Expect(err).ToNot(HaveOccurred(), "Failed to list pods in DRA driver namespace")
-
-			expectedPodNamePrefix := names.ComputeDomain()
-			var matchingPods []*pod.Builder
-			for _, p := range pods {
-				if strings.HasPrefix(p.Object.Name, expectedPodNamePrefix) {
-					labelValue, hasLabel := p.Object.Labels[computeDomainLabel]
-					Expect(hasLabel).To(BeTrue(),
-						"Pod %s has matching name prefix but missing label '%s'", p.Object.Name, computeDomainLabel)
-					matchingPods = append(matchingPods, p)
-					glog.V(gpuparams.GpuLogLevel).Infof("Found compute domain pod: %s with label %s=%s",
-						p.Object.Name, computeDomainLabel, labelValue)
-				}
-			}
-			Expect(matchingPods).NotTo(BeEmpty(),
-				"Expected at least one pod with name starting with '%s' and label '%s' in namespace %s",
-				expectedPodNamePrefix, computeDomainLabel, shared.DRADriverNamespace)
-			glog.V(gpuparams.GpuLogLevel).Infof("Verified %d compute domain pod(s) in DRA driver namespace", len(matchingPods))
+			Expect(pods).NotTo(BeEmpty(),
+				"Expected at least one pod with label selector '%s' in namespace %s",
+				labelSelector, dra.DriverNamespace)
 		})
 	})
 })
