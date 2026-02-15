@@ -7,11 +7,14 @@ import (
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/dra"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/helm"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/testworkloads"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/tests/dra/shared"
 	"helm.sh/helm/v3/pkg/action"
 	corev1 "k8s.io/api/core/v1"
@@ -50,6 +53,7 @@ func createGPUResourceClaimTemplate(namespace, name string) error {
 
 var _ = Describe("DRA Driver Installation", Ordered, Label("dra", "dra-gpu"), func() {
 	var actionConfig *action.Configuration
+	var driver *dra.Driver
 	var originalDevicePluginEnabled bool
 
 	BeforeAll(func() {
@@ -73,7 +77,7 @@ var _ = Describe("DRA Driver Installation", Ordered, Label("dra", "dra-gpu"), fu
 
 		By("Waiting for GPU capacity on all nodes with GPU present to become 0")
 		noGPUCapacityCondition := func(node *corev1.Node) (bool, error) {
-			gpuCount, ok := node.Status.Capacity[shared.GPUCapacityKey]
+			gpuCount, ok := node.Status.Capacity[corev1.ResourceName(nvidiagpu.GPUCapacityKey)]
 			if ok {
 				glog.V(gpuparams.GpuLogLevel).Infof("Node's %s GPU capacity: %v", node.Name, gpuCount.String())
 				return gpuCount.IsZero(), nil
@@ -82,24 +86,24 @@ var _ = Describe("DRA Driver Installation", Ordered, Label("dra", "dra-gpu"), fu
 			return true, nil
 		}
 
-		err = wait.WaitForNodes(inittools.APIClient, labels.Set{shared.GPUPresentLabel: "true"}, noGPUCapacityCondition, 20*time.Second, 10*time.Minute)
+		err = wait.WaitForNodes(inittools.APIClient, labels.Set{nvidiagpu.GPUPresentLabel: "true"}, noGPUCapacityCondition, 20*time.Second, 10*time.Minute)
 		Expect(err).ToNot(HaveOccurred(), "Failed to wait for GPU capacity on GPU nodes to become 0")
 
 		By("Installing DRA Driver's Helm chart")
-		actionConfig, err = shared.NewActionConfig(inittools.APIClient, shared.DRADriverNamespace, gpuparams.GpuLogLevel)
+		actionConfig, err = helm.NewActionConfig(inittools.APIClient, dra.DriverNamespace, gpuparams.GpuLogLevel)
 		Expect(err).ToNot(HaveOccurred(), "Failed to create Helm action configuration")
 
 		// For GPU allocation tests, explicitly enable GPU resources
+		driver, err = dra.NewDriver()
+		Expect(err).ToNot(HaveOccurred(), "Failed to create DRA driver")
+		driver.WithGPUResources(true).WithGPUResourcesOverride(true)
+
 		DeferCleanup(func() error {
 			By("Uninstalling DRA driver")
-			return shared.UninstallDRADriver(actionConfig)
+			return driver.Uninstall(actionConfig, shared.DriverInstallationTimeout)
 		})
 
-		customValues := shared.NewDRAValues().
-			WithGPUResources(true).
-			WithGPUResourcesOverride(true)
-
-		err = shared.InstallDRADriver(actionConfig, shared.LatestVersion, customValues)
+		err = driver.Install(actionConfig, shared.DriverInstallationTimeout)
 		Expect(err).ToNot(HaveOccurred(), "Failed to install DRA driver")
 	})
 
