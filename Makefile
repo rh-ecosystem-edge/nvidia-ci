@@ -51,19 +51,18 @@ unit-test: ## Run unit tests (use TEST=path to specify)
 
 get-gpu-operator-must-gather: ## Download GPU operator must-gather script
 	test -s scripts/gpu-operator-must-gather.sh || (\
-    		SCRIPT_URL="https://raw.githubusercontent.com/NVIDIA/gpu-operator/v25.10.1/hack/must-gather.sh" && \
-    		if ! curl -SsL -o scripts/gpu-operator-must-gather.sh -L $$SCRIPT_URL; then \
-    			echo "Failed to download must-gather script" >&2; \
-    			exit 1; \
-    		fi && \
-    		chmod +x scripts/gpu-operator-must-gather.sh \
-    	)
+    	SCRIPT_URL="https://raw.githubusercontent.com/NVIDIA/gpu-operator/v25.10.1/hack/must-gather.sh" && \
+    	if ! curl -SsLf -o scripts/gpu-operator-must-gather.sh $$SCRIPT_URL; then \
+    		echo "Failed to download must-gather script" >&2; \
+    		exit 1; \
+    	fi && \
+    	chmod +x scripts/gpu-operator-must-gather.sh \
+    )
 
 get-nfd-must-gather: ## Download NFD must-gather script
-	# TODO: change it to use release branch when it will be released
 	test -s scripts/nfd-must-gather.sh || (\
-		SCRIPT_URL="https://raw.githubusercontent.com/openshift/cluster-nfd-operator/c93914db38232ebf2abf62fa8028c23a154a5048/must-gather/gather" && \
-		if ! curl -SsL -o scripts/nfd-must-gather.sh -L $$SCRIPT_URL; then \
+		SCRIPT_URL="https://raw.githubusercontent.com/openshift/cluster-nfd-operator/refs/heads/release-4.22/must-gather/gather" && \
+		if ! curl -SsLf -o scripts/nfd-must-gather.sh $$SCRIPT_URL; then \
 			echo "Failed to download NFD must-gather script" >&2; \
 			exit 1; \
 		fi && \
