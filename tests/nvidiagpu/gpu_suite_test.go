@@ -32,7 +32,9 @@ var _ = JustAfterEach(func() {
 	specReport := CurrentSpecReport()
 	reporter.ReportIfFailed(
 		specReport, currentFile, tsparams.ReporterNamespacesToDump, tsparams.ReporterCRDsToDump, clients.SetScheme)
+})
 
+var _ = AfterSuite(func() {
 	scriptPath := os.Getenv("PATH_TO_MUST_GATHER_SCRIPT")
 	if scriptPath != "" {
 		artifactDir := inittools.GeneralConfig.GetReportPath("gpu-operator-tests-must-gather")
