@@ -2631,7 +2631,9 @@
         ]
     },
     "4.16": {
-        "notes": [],
+        "notes": [
+            "On Red Hat OpenShift 4.16.58, the GPU operator fails to run because of a kernel version mismatch in the driver toolkit (DTK) image."
+        ],
         "bundle_tests": [
             {
                 "ocp_full_version": "4.16",
