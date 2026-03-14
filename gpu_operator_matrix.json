@@ -2617,7 +2617,9 @@
         ]
     },
     "4.16": {
-        "notes": [],
+        "notes": [
+            "On Red Hat OpenShift 4.16.58, the NVIDIA GPU operator is broken. See <a href=\"https://issues.redhat.com/browse/OCPBUGS-60663\">OCPBUGS-60663</a> for details."
+        ],
         "bundle_tests": [
             {
                 "ocp_full_version": "4.16",
