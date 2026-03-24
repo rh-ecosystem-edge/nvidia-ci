@@ -14,6 +14,6 @@
       "status": "active"
     }
   },
-  "ignored_versions_regex": "^4.[0-9]$|^4.1[0-1]$"
+  "ignored_versions_regex": "^4.[0-9]$|^4.1[0-3]$"
 }
 
