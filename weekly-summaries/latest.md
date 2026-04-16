@@ -1,17 +1,17 @@
-# Weekly test summary: 2026-04-09 to 2026-04-15
+# Weekly test summary: 2026-04-02 to 2026-04-08
 
 ## GPU Operator Development Versions
-- sha256:1575a2783b3363460d2e1969a824faa429927913a0c3ead4cc3fe59bd8c72bf2
-- sha256:7293002ac447631dce78e7d02cc67a1894725b9a8a06dd30c2a2e1511a5cc554
-- sha256:a7153de260e602791bc5ad67ea12a15aae89cb6341c4f863cfbcf66bd15f0b52
-- sha256:ee226a01057576e6b0ca5e16b72af19d411d5f7ce1b77c0f5f51c70be833aa51
+- sha256:0f2683b9a3e166c409f1ddf7759f7e5c04c0da2969db10c32146875454fd2f57
+- sha256:8f71407ca573b45e8b32feb5802d8130788595602d98b24e0a9346161eaa752f
+- sha256:bb13954a1495b1e83f7bacc2a867127b63f3261ece72518a5d6116e36737dcd5
 
 ## GPU Operator Releases
 - (none)
 
 ## OpenShift Releases
-- 4.19.28
-- 4.21.10
+- 4.18.37
+- 4.20.18
+- 4.21.9
 
 ## Summary
-[Tested](https://github.com/rh-ecosystem-edge/nvidia-ci/pulls?q=is%3Apr+is%3Amerged+merged%3A2026-04-09..2026-04-15+%22%5BAutomatic%5D+Update%22+in%3Atitle) 4 new development versions of the NVIDIA GPU Operator and 2 new OpenShift versions with the release versions of the NVIDIA GPU Operator.
+[Tested](https://github.com/rh-ecosystem-edge/nvidia-ci/pulls?q=is%3Apr+is%3Amerged+merged%3A2026-04-02..2026-04-08+%22%5BAutomatic%5D+Update%22+in%3Atitle) 3 new development versions of the NVIDIA GPU Operator and 3 new OpenShift versions with the release versions of the NVIDIA GPU Operator.
