@@ -27,13 +27,6 @@
       "status": "SUCCESS",
       "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/5803/pull-ci-openshift-microshift-release-4.14-e2e-aws-nvidia-device-plugin-nightly/1993237710776569856/",
       "microshift_version": "4.14.0_0.nightly_2025_11_23_143146_20251028215835_ce96ac5ed"
-    },
-    {
-      "num": 1981807075902099456,
-      "timestamp": 1761336979,
-      "status": "SUCCESS",
-      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/5663/pull-ci-openshift-microshift-release-4.14-e2e-aws-nvidia-device-plugin-nightly/1981807075902099456/",
-      "microshift_version": "4.14.0_0.nightly_2025_10_24_145500_20250925094330_73ca2f89d"
     }
   ]
 }
