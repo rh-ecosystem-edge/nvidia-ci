@@ -1,6 +1,8 @@
 approvers:
 - empovit
 - ggordaniRed
+- nikitabugrovsky
+- ShiraEzra
 - TomerNewman
 - vtruhpon
 - wabouhamad
@@ -8,6 +10,8 @@ options: {}
 reviewers:
 - empovit
 - ggordaniRed
+- nikitabugrovsky
+- ShiraEzra
 - TomerNewman
 - vtruhpon
 - wabouhamad
