@@ -1,6 +1,8 @@
 approvers:
 - empovit
+- enothen
 - ggordaniRed
+- josecastillolema
 - nikitabugrovsky
 - ShiraEzra
 - TomerNewman
@@ -9,7 +11,9 @@ approvers:
 options: {}
 reviewers:
 - empovit
+- enothen
 - ggordaniRed
+- josecastillolema
 - nikitabugrovsky
 - ShiraEzra
 - TomerNewman
