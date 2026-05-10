@@ -2,6 +2,11 @@
 #
 # get-latest-dra-chart.sh - Fetch the latest DRA driver Helm chart tag from ghcr.io
 #
+# DEPRECATED: This script fetches outdated charts from ghcr.io.
+# Use download-latest-dra-chart.sh instead to fetch fresh charts from GitHub Actions.
+# This script will have to be updated once charts are published to their correct location:
+# us-central1-docker.pkg.dev/k8s-staging-images/dra-driver-nvidia/charts
+#
 # REQUIREMENTS:
 #   - Environment variable: READ_PACKAGES_GITHUB_TOKEN_FILE
 #     Must point to a file containing a GitHub Personal Access Token (classic)
@@ -19,6 +24,10 @@
 #   - stdout: Just the tag (for easy variable capture)
 
 set -euo pipefail
+
+echo "WARNING: This script is deprecated and fetches outdated charts from ghcr.io." >&2
+echo "Use download-latest-dra-chart.sh instead for fresh charts from GitHub Actions." >&2
+echo "" >&2
 
 # Read GitHub PAT from file (never print this!)
 GITHUB_TOKEN=$(cat "${READ_PACKAGES_GITHUB_TOKEN_FILE}" | tr -d '[:space:]')
