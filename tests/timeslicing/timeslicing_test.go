@@ -13,6 +13,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/timeslicing"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/configmap"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nodes"
@@ -42,15 +43,14 @@ var _ = Describe("TimeSlicing", Ordered, Label(tsparams.LabelSuite), func() {
 	BeforeAll(func() {
 		glog.V(gpuparams.GpuLogLevel).Info("Starting TimeSlicing test suite")
 
-		if tmpClusterPolicyBuilder, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName); err == nil {
+		tmpClusterPolicyBuilder, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
+		if err == nil {
 			if _, err := tmpClusterPolicyBuilder.Get(); err == nil {
 				if _, err := tmpClusterPolicyBuilder.Delete(); err != nil {
 					glog.Errorf("Error deleting cluster policy: %v", err)
 				} else {
 					EnsureOnlyOperatorIsRunning()
 				}
-			} else {
-				glog.Error("didn't find cluster policy")
 			}
 		}
 
@@ -107,11 +107,15 @@ var _ = Describe("TimeSlicing", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Creating ClusterPolicy from CSV with time-slicing device plugin config")
 			clusterPolicy, err = timeslicing.CreateClusterPolicyFromCSV(
-				inittools.APIClient, GPUOperatorNamespace, nvidiagpu.ClusterPolicyName)
+				inittools.APIClient, GPUOperatorNamespace, nvidiagpu.ClusterPolicyName,
+				DevicePluginConfigMapName)
 			Expect(err).ToNot(HaveOccurred(), "error creating cluster policy: %v", err)
 
-			By("Waiting for all GPU operator pods to be running")
-			EnsureAllGpuPodsAreRunning()
+			By(fmt.Sprintf("Waiting up to %s for ClusterPolicy to be ready",
+				nvidiagpu.ClusterPolicyReadyTimeout))
+			err = wait.ClusterPolicyReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
+				nvidiagpu.ClusterPolicyReadyCheckInterval, nvidiagpu.ClusterPolicyReadyTimeout)
+			Expect(err).ToNot(HaveOccurred(), "error waiting for ClusterPolicy to be ready: %v", err)
 
 			By("Verifying node labels reflect time-slicing configuration")
 			clusterNodes, err := nodes.List(inittools.APIClient)
@@ -199,38 +203,6 @@ var _ = Describe("TimeSlicing", Ordered, Label(tsparams.LabelSuite), func() {
 	})
 })
 
-func EnsureAllGpuPodsAreRunning() {
-	Eventually(func() bool {
-		gpuPods, err := inittools.APIClient.Pods(GPUOperatorNamespace).List(
-			context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			glog.Errorf("Error listing GPU operator pods: %v", err)
-
-			return false
-		}
-
-		if len(gpuPods.Items) < 8 {
-			glog.V(gpuparams.GpuLogLevel).Infof("Waiting for GPU operator pods: %d/8+",
-				len(gpuPods.Items))
-
-			return false
-		}
-
-		for _, p := range gpuPods.Items {
-			glog.V(gpuparams.GpuLogLevel).Infof("Pod %s is %s", p.Name, p.Status.Phase)
-
-			for _, containerStatus := range p.Status.ContainerStatuses {
-				if !containerStatus.Ready && containerStatus.State.Terminated == nil {
-					return false
-				}
-			}
-		}
-
-		return true
-	}, EnsurePodsReadyTimeout, EnsurePodsReadyInterval).Should(BeTrue(),
-		"GPU operator pods did not become ready")
-}
-
 func EnsureOnlyOperatorIsRunning() {
 	Eventually(func() bool {
 		gpuPods, err := inittools.APIClient.Pods(GPUOperatorNamespace).List(
@@ -241,19 +213,33 @@ func EnsureOnlyOperatorIsRunning() {
 			return false
 		}
 
-		if len(gpuPods.Items) > 1 || len(gpuPods.Items) == 0 {
-			glog.V(gpuparams.GpuLogLevel).Infof(
-				"Waiting for cleanup: %d pods remaining", len(gpuPods.Items))
-
-			return false
-		}
+		var nonOperatorPods []string
 
 		for _, p := range gpuPods.Items {
-			for _, containerStatus := range p.Status.ContainerStatuses {
-				if !containerStatus.Ready && containerStatus.State.Terminated == nil {
-					return false
+			if p.Labels["app"] == "gpu-operator" {
+				for _, cs := range p.Status.ContainerStatuses {
+					if !cs.Ready && cs.State.Terminated == nil {
+						glog.V(gpuparams.GpuLogLevel).Infof(
+							"Operator pod %s not ready yet", p.Name)
+
+						return false
+					}
 				}
+
+				continue
 			}
+
+			if p.Status.Phase != corev1.PodSucceeded && p.DeletionTimestamp == nil {
+				nonOperatorPods = append(nonOperatorPods, p.Name)
+			}
+		}
+
+		if len(nonOperatorPods) > 0 {
+			glog.V(gpuparams.GpuLogLevel).Infof(
+				"Waiting for cleanup: %d non-operator pods remaining: %v",
+				len(nonOperatorPods), nonOperatorPods)
+
+			return false
 		}
 
 		return true
