@@ -214,6 +214,23 @@ in the last execution of either steps 1 or 2
 $ export NVIDIAGPU_CLEANUP=true
 ```
 
+### Testing Time-Slicing with GPU Operator
+
+To test GPU time-slicing, deploy the GPU Operator first, then run the time-slicing tests.
+The test creates a device plugin ConfigMap with time-slicing configuration, deploys a
+ClusterPolicy referencing it, and validates that multiple CUDA workloads run concurrently
+on a single time-sliced GPU.
+
+#### Steps to run time-slicing tests:
+
+1. Deploy the GPU Operator with cleanup disabled (same as MPS step 1 above)
+2. Run the time-slicing tests:
+```bash
+$ export TEST_FEATURES="timeslicing"
+$ export TEST_LABELS='nvidia-ci,timeslicing'
+$ make run-tests
+```
+
 ### Examples of Testing GPU Operator end-to-end
 
 Example running the end-to-end GPU Operator test case:

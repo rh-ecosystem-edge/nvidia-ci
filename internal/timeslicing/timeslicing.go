@@ -2,6 +2,7 @@ package timeslicing
 
 import (
 	"fmt"
+	"strings"
 
 	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
 	"github.com/golang/glog"
@@ -19,6 +20,18 @@ import (
 // CreateDevicePluginConfigMap creates a ConfigMap with the device plugin configuration for time-slicing.
 func CreateDevicePluginConfigMap(apiClient *clients.Settings, replicas int,
 	configMapName, configMapNamespace string, renameByDefault bool) (*configmap.Builder, error) {
+	if replicas <= 0 {
+		return nil, fmt.Errorf("replicas must be greater than 0, got %d", replicas)
+	}
+
+	if strings.TrimSpace(configMapName) == "" {
+		return nil, fmt.Errorf("configMapName must not be empty")
+	}
+
+	if strings.TrimSpace(configMapNamespace) == "" {
+		return nil, fmt.Errorf("configMapNamespace must not be empty")
+	}
+
 	config := map[string]any{
 		"version": "v1",
 		"sharing": map[string]any{
@@ -66,7 +79,7 @@ func CreateDevicePluginConfigMap(apiClient *clients.Settings, replicas int,
 // CreateClusterPolicyFromCSV creates a new ClusterPolicy from the CSV ALM example
 // with device plugin configuration referencing the time-slicing ConfigMap.
 func CreateClusterPolicyFromCSV(apiClient *clients.Settings,
-	gpuOperatorNamespace, clusterPolicyName string) (*nvidiagpu.Builder, error) {
+	gpuOperatorNamespace, clusterPolicyName, configMapName string) (*nvidiagpu.Builder, error) {
 	glog.V(gpuparams.GpuLogLevel).Infof("Creating ClusterPolicy %s from CSV ALM example with time-slicing config",
 		clusterPolicyName)
 
@@ -96,7 +109,7 @@ func CreateClusterPolicyFromCSV(apiClient *clients.Settings,
 		clusterPolicy.Definition.Spec.DevicePlugin.Config = &nvidiagpuv1.DevicePluginConfig{}
 	}
 
-	clusterPolicy.Definition.Spec.DevicePlugin.Config.Name = "plugin-config"
+	clusterPolicy.Definition.Spec.DevicePlugin.Config.Name = configMapName
 	clusterPolicy.Definition.Spec.DevicePlugin.Config.Default = "plugin-config.yaml"
 
 	createdPolicy, err := clusterPolicy.Create()
@@ -112,6 +125,13 @@ func CreateClusterPolicyFromCSV(apiClient *clients.Settings,
 
 // CreateTimeSlicingTestPod returns a Pod spec configured for time-slicing validation.
 func CreateTimeSlicingTestPod(podName, podNamespace, image string) *corev1.Pod {
+	if strings.TrimSpace(podName) == "" || strings.TrimSpace(podNamespace) == "" || strings.TrimSpace(image) == "" {
+		glog.Errorf("CreateTimeSlicingTestPod: podName, podNamespace, and image must not be empty "+
+			"(got podName=%q, podNamespace=%q, image=%q)", podName, podNamespace, image)
+
+		return nil
+	}
+
 	isTrue := true
 	isFalse := false
 
