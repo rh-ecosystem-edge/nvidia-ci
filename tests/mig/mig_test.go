@@ -21,10 +21,7 @@ var (
 	nfdInstance = operatorconfig.NewCustomConfig()
 	burn        = nvidiagpu.NewDefaultGPUBurnConfig()
 
-	WorkerNodeSelector = map[string]string{
-		inittools.GeneralConfig.WorkerLabel: "",
-		nvidiagpu.NvidiaGPULabel:            "true",
-	}
+	WorkerNodeSelector map[string]string
 
 	BurnImageName = map[string]string{
 		"amd64": "quay.io/wabouham/gpu_burn_amd64:ubi9",
@@ -52,6 +49,12 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 			// Initialize CLI flag-derived values after flags are parsed
 			mig.ParseCLIParameters()
 			mig.LogCLIParameterValues()
+
+			WorkerNodeSelector = map[string]string{
+				inittools.GeneralConfig.WorkerLabel:                          "",
+				nvidiagpu.ResolveGPULabel(inittools.APIClient): "true",
+			}
+
 			nvidiaGPUConfig = nvidiagpuconfig.NewNvidiaGPUConfig()
 			Expect(nvidiaGPUConfig).ToNot(BeNil(), "Failed to initialize NvidiaGPUConfig")
 

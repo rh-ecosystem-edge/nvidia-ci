@@ -52,10 +52,7 @@ var (
 
 	InstallPlanApproval v1alpha1.Approval = "Automatic"
 
-	WorkerNodeSelector = map[string]string{
-		inittools.GeneralConfig.WorkerLabel: "",
-		nvidiagpu.NvidiaGPULabel:            "true",
-	}
+	WorkerNodeSelector map[string]string
 
 	BurnImageName = map[string]string{
 		"amd64": "quay.io/wabouham/gpu_burn_amd64:ubi9",
@@ -106,6 +103,12 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 		BeforeAll(func() {
 			glog.V(0).Infof("Start of the test case, BeforeAll")
+
+			WorkerNodeSelector = map[string]string{
+				inittools.GeneralConfig.WorkerLabel:                          "",
+				nvidiagpu.ResolveGPULabel(inittools.APIClient): "true",
+			}
+
 			if nvidiaGPUConfig.InstanceType == "" {
 				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE" +
 					" is not set, skipping scaling cluster")
@@ -278,7 +281,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			nfdcheck.CheckNfdInstallation(inittools.APIClient, nfd.OSLabel, nfd.GetAllowedOSLabels(), inittools.GeneralConfig.WorkerLabelMap, networkparams.LogLevel)
 
 			By("Check if at least one worker node is GPU enabled")
-			gpuNodeFound, _ := check.NodeWithLabel(inittools.APIClient, nvidiagpu.NvidiaGPULabel, inittools.GeneralConfig.WorkerLabelMap)
+			gpuLabel := nvidiagpu.ResolveGPULabel(inittools.APIClient)
+			gpuNodeFound, _ := check.NodeWithLabel(inittools.APIClient, gpuLabel, inittools.GeneralConfig.WorkerLabelMap)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("The check for Nvidia GPU label returned: %v", gpuNodeFound)
 
