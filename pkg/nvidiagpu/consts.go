@@ -14,11 +14,10 @@ const (
 	NvidiaGPUNamespace = "nvidia-gpu-operator"
 
 	// NvidiaGPULabel is the legacy NFD label for NVIDIA GPU presence (vendor ID only, pre-4.21).
-	NvidiaGPULabel = "feature.node.kubernetes.io/pci-10de.present"
-	// nfdLabelPrefix is the common prefix for NFD PCI labels.
-	nfdLabelPrefix = "feature.node.kubernetes.io/pci-"
-	// nfdNvidiaVendorSuffix is the NVIDIA vendor ID suffix in NFD PCI labels.
+	NvidiaGPULabel        = "feature.node.kubernetes.io/pci-10de.present"
+	nfdLabelPrefix        = "feature.node.kubernetes.io/pci-"
 	nfdNvidiaVendorSuffix = "_10de.present"
+
 	GPUPresentLabel                  = "nvidia.com/gpu.present"
 	GPUCapacityKey                   = "nvidia.com/gpu"
 	DevicePluginLabel                = "app=nvidia-device-plugin-daemonset"

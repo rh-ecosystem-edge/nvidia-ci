@@ -51,7 +51,7 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 			mig.LogCLIParameterValues()
 
 			WorkerNodeSelector = map[string]string{
-				inittools.GeneralConfig.WorkerLabel:                          "",
+				inittools.GeneralConfig.WorkerLabel:            "",
 				nvidiagpu.ResolveGPULabel(inittools.APIClient): "true",
 			}
 

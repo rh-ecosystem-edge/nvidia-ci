@@ -105,7 +105,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(0).Infof("Start of the test case, BeforeAll")
 
 			WorkerNodeSelector = map[string]string{
-				inittools.GeneralConfig.WorkerLabel:                          "",
+				inittools.GeneralConfig.WorkerLabel:            "",
 				nvidiagpu.ResolveGPULabel(inittools.APIClient): "true",
 			}
 
