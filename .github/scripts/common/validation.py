@@ -6,6 +6,9 @@ Shared validation logic for GPU Operator and Network Operator dashboards.
 from typing import Dict, Any
 import semver
 
+# Known infrastructure type identifiers (not OCP versions)
+INFRASTRUCTURE_TYPES = ["doca4", "bare-metal", "hosted", "unknown"]
+
 
 def is_valid_ocp_version(version: str) -> bool:
     """
@@ -25,8 +28,7 @@ def is_valid_ocp_version(version: str) -> bool:
         >>> is_valid_ocp_version("bare-metal")
         False
     """
-    invalid_keys = ["doca4", "bare-metal", "hosted", "unknown"]
-    if version.lower() in invalid_keys:
+    if version.lower() in INFRASTRUCTURE_TYPES:
         return False
     if not version or not version[0].isdigit():
         return False
@@ -85,5 +87,4 @@ def is_infrastructure_type(value: str) -> bool:
     Returns:
         True if it's an infrastructure type, False otherwise
     """
-    infrastructure_types = ["doca4", "bare-metal", "hosted", "unknown"]
-    return value.lower() in infrastructure_types
+    return value.lower() in INFRASTRUCTURE_TYPES

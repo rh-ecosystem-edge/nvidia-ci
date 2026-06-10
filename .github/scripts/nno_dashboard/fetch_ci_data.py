@@ -9,7 +9,7 @@ where OpenShift CI stores Prow job artifacts.
 import argparse
 import json
 import re
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 
 from common import (
     logger,
@@ -336,7 +336,7 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
 def merge_and_save_results(
     new_results: Dict[str, Dict[str, Any]],
     output_filepath: str,
-    existing_results: Dict[str, Dict[str, Any]] = None
+    existing_results: Optional[Dict[str, Dict[str, Any]]] = None
 ) -> None:
     """
     Merge new results with existing results and save to file.
