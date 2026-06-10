@@ -18,7 +18,8 @@ def build_toc(ocp_keys: List[str]) -> str:
         HTML string containing the TOC
     """
     toc_links = ", ".join(
-        f'<a href="#ocp-{ocp_version}">{ocp_version}</a>' for ocp_version in ocp_keys
+        f'<a href="#ocp-{html.escape(ocp_version, quote=True)}">{html.escape(ocp_version)}</a>'
+        for ocp_version in ocp_keys
     )
     return f"""
 <div class="toc">
@@ -111,7 +112,8 @@ def build_history_bar(
         prow_url = result.get("prow_job_url", "#")
         history_html += f"""
     <div class='history-square {status_class}'
-         onclick='window.open("{prow_url}", "_blank")'>
+         data-url='{html.escape(prow_url, quote=True)}'
+         onclick='window.open(this.dataset.url, "_blank")'>
          <span class="history-square-tooltip">
           Status: {status} | Timestamp: {timestamp_str}
          </span>

@@ -129,6 +129,15 @@ def restructure_data_by_nno_version(ocp_data: Dict[str, Dict[str, Any]]) -> Dict
     return dict(nno_data)
 
 
+def _parse_version_safe(version_str: str) -> semver.VersionInfo:
+    """Parse a version string with fallback for invalid/unknown versions."""
+    try:
+        clean = version_str.split("(")[0].strip()
+        return semver.VersionInfo.parse(clean)
+    except (ValueError, AttributeError):
+        return semver.VersionInfo(0, 0, 0)
+
+
 def build_matrix_table(ocp_version: str, gpu_operators_data: Dict[str, Dict[str, Any]]) -> str:
     """
     Build a matrix table for a specific OCP version.
@@ -147,7 +156,7 @@ def build_matrix_table(ocp_version: str, gpu_operators_data: Dict[str, Dict[str,
     # Sort GPU operator versions using semantic versioning
     sorted_gpu_ops = sorted(
         gpu_operators_data.keys(),
-        key=lambda v: semver.VersionInfo.parse(v.split("(")[0].strip()) if v != "master-latest" else semver.VersionInfo(0, 0, 0),
+        key=lambda v: _parse_version_safe(v) if v != "master-latest" else semver.VersionInfo(0, 0, 0),
         reverse=True
     )
 
@@ -259,8 +268,8 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], templates_dir: str
 </html>"""
         return html_content
 
-    # Sort NNO versions
-    sorted_nno_versions = sorted(nno_data.keys(), reverse=True)
+    # Sort NNO versions using semantic versioning
+    sorted_nno_versions = sorted(nno_data.keys(), key=_parse_version_safe, reverse=True)
 
     # Build TOC
     toc_links = []
@@ -287,9 +296,13 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], templates_dir: str
     </div>
 """
 
-        # Sort OCP versions
+        # Sort OCP versions using semantic versioning (append .0 for major.minor format)
         ocp_versions = nno_info.get("ocp_versions", {})
-        sorted_ocp_versions = sorted(ocp_versions.keys(), reverse=True)
+        sorted_ocp_versions = sorted(
+            ocp_versions.keys(),
+            key=lambda v: _parse_version_safe(f"{v}.0"),
+            reverse=True
+        )
 
         # Build matrix table for each OCP version
         for ocp_version in sorted_ocp_versions:

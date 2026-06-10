@@ -178,4 +178,4 @@ This module is called by the GitHub Actions workflow in `.github/workflows/gener
 
 - [GPU Operator Dashboard](../gpu_operator_dashboard/) - Similar dashboard for GPU Operator
 - [Common Utilities](../common/) - Shared code across dashboards
-- [GitHub Actions Workflow](../../.github/workflows/generate_matrix_page.yaml) - CI automation
+- [GitHub Actions Workflow](../../workflows/generate_matrix_page.yaml) - CI automation

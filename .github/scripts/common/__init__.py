@@ -45,7 +45,7 @@ from common.data_fetching import (
     int_or_none,
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022
     # Utils
     "get_logger",
     "logger",
