@@ -32,7 +32,7 @@ from common import (
 NNO_TEST_PATH_REGEX = re.compile(
     r"pr-logs/pull/(?P<repo>[^/]+)/(?P<pr_number>\d+)/"
     r"(?P<job_name>(?:rehearse-\d+-)?pull-ci-rh-ecosystem-edge-nvidia-ci-main-"
-    r"(?P<infrastructure>[^-]+)-nvidia-network-operator-(?P<test_type>.+))/"
+    r"(?P<infrastructure>.+?)-nvidia-network-operator-(?P<test_type>.+))/"
     r"(?P<build_id>[^/]+)"
 )
 

@@ -5,9 +5,10 @@ Matrix-style layout organized by Network Operator version.
 """
 
 import argparse
+import html
 import json
 import semver
-from typing import Dict, List, Any, Set
+from typing import Dict, List, Any
 from datetime import datetime, timezone
 from collections import defaultdict
 
@@ -109,7 +110,10 @@ def restructure_data_by_nno_version(ocp_data: Dict[str, Dict[str, Any]]) -> Dict
 
         for flavor_name, flavor_data in test_flavors.items():
             # Map flavor to column
-            column = FLAVOR_COLUMN_MAP.get(flavor_name, "Other")
+            column = FLAVOR_COLUMN_MAP.get(flavor_name)
+            if column is None:
+                logger.warning(f"Unmapped test flavor: {flavor_name!r}, skipping")
+                continue
 
             for result in flavor_data.get("results", []):
                 nno_version = result.get("operator_version") or result.get("gpu_operator_version", "Unknown")
@@ -117,13 +121,17 @@ def restructure_data_by_nno_version(ocp_data: Dict[str, Dict[str, Any]]) -> Dict
 
                 status = result.get("test_status", "UNKNOWN")
                 url = result.get("prow_job_url", "#")
+                timestamp = int(result.get("job_timestamp", 0))
 
-                # Store result
-                if column not in nno_data[nno_version]["ocp_versions"][ocp_major_minor]["gpu_operators"][gpu_operator_version]:
-                    nno_data[nno_version]["ocp_versions"][ocp_major_minor]["gpu_operators"][gpu_operator_version][column] = {
+                # Store result - keep the entry with the latest timestamp
+                cell = nno_data[nno_version]["ocp_versions"][ocp_major_minor]["gpu_operators"][gpu_operator_version]
+                existing = cell.get(column)
+                if existing is None or timestamp > existing.get("job_timestamp", 0):
+                    cell[column] = {
                         "status": status,
                         "url": url,
-                        "hardware": "ConnectX-6 Dx"  # TODO: Extract from test data if available
+                        "hardware": "ConnectX-6 Dx",  # TODO: Extract from test data if available
+                        "job_timestamp": timestamp,
                     }
 
     return dict(nno_data)
@@ -199,7 +207,7 @@ def build_matrix_table(ocp_version: str, gpu_operators_data: Dict[str, Dict[str,
         test_results = gpu_operators_data[gpu_op_version]
 
         table_html += f"""        <tr>
-          <td class="version-cell">{gpu_op_version}</td>
+          <td class="version-cell">{html.escape(gpu_op_version)}</td>
 """
 
         # Add cells for each active test flavor column
@@ -207,8 +215,8 @@ def build_matrix_table(ocp_version: str, gpu_operators_data: Dict[str, Dict[str,
             if column in test_results:
                 result = test_results[column]
                 status = result.get("status", "UNKNOWN")
-                url = result.get("url", "#")
-                hardware = result.get("hardware", "")
+                url = html.escape(result.get("url", "#"), quote=True)
+                hardware = html.escape(result.get("hardware", ""))
 
                 if status == "SUCCESS":
                     icon = "✓"
@@ -221,7 +229,7 @@ def build_matrix_table(ocp_version: str, gpu_operators_data: Dict[str, Dict[str,
                     css_class = "pending"
 
                 if status in ["SUCCESS", "FAILURE"]:
-                    table_html += f'          <td><a href="{url}" target="_blank" class="{css_class}">{icon}</a>'
+                    table_html += f'          <td><a href="{url}" target="_blank" rel="noopener noreferrer" class="{css_class}">{icon}</a>'
                 else:
                     table_html += f'          <td><span class="{css_class}">{icon}</span>'
 
