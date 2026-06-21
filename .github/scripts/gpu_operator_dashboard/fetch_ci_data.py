@@ -2,15 +2,21 @@
 import argparse
 import json
 import re
-import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Set
 
-import requests
 from pydantic import BaseModel
 import semver
 
 from common.utils import logger
+from common.gcs_utils import (
+    GCS_API_BASE_URL,
+    GCS_MAX_RESULTS_PER_REQUEST,
+    http_get_json,
+    fetch_gcs_file_content,
+    build_prow_job_url,
+)
+from common.data_fetching import int_or_none
 
 
 # Constants for version field names
@@ -23,12 +29,6 @@ STATUS_FAILURE = "FAILURE"
 STATUS_ABORTED = "ABORTED"
 
 
-# =============================================================================
-# Constants
-# =============================================================================
-
-GCS_API_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o"
-
 # Regular expression to match test result paths.
 TEST_RESULT_PATH_REGEX = re.compile(
     r"pr-logs/pull/(?P<repo>[^/]+)/(?P<pr_number>\d+)/"
@@ -37,37 +37,11 @@ TEST_RESULT_PATH_REGEX = re.compile(
     r"(?P<build_id>[^/]+)"
 )
 
-# Maximum number of results per GCS API request for pagination
-GCS_MAX_RESULTS_PER_REQUEST = 1000
 
 
 # =============================================================================
 # Data Fetching & JSON Update Functions
 # =============================================================================
-
-def http_get_json(url: str, params: Dict[str, Any] | None = None, headers: Dict[str, str] | None = None) -> Dict[str, Any]:
-    """Send an HTTP GET request and return the JSON response."""
-    response = requests.get(url, params=params, headers=headers, timeout=30)
-    response.raise_for_status()
-    return response.json()
-
-
-def fetch_gcs_file_content(file_path: str) -> str:
-    """Fetch the raw text content from a file in GCS."""
-    logger.info(f"Fetching file content for {file_path}")
-    response = requests.get(
-        url=f"{GCS_API_BASE_URL}/{urllib.parse.quote_plus(file_path)}",
-        params={"alt": "media"},
-        timeout=30,
-    )
-    response.raise_for_status()
-    return response.content.decode("UTF-8")
-
-
-def build_prow_job_url(finished_json_path: str) -> str:
-    directory_path = finished_json_path[:-len('/finished.json')]
-    return f"https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/{directory_path}"
-
 
 # --- Pydantic Model and Domain Model for Test Results ---
 
@@ -633,15 +607,6 @@ def merge_and_save_results(
 # =============================================================================
 # Main Workflow: Update JSON
 # =============================================================================
-
-def int_or_none(value: Optional[str]) -> Optional[int]:
-    """Convert string to int or None for unlimited."""
-    if value is None:
-        return None
-    if value.lower() in ('none', 'unlimited'):
-        return None
-    return int(value)
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Test Matrix Utility")
