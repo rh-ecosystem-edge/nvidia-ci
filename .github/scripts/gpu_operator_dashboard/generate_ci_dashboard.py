@@ -8,39 +8,10 @@ from datetime import datetime, timezone
 
 from common.utils import logger
 from common.templates import load_template
+from common.html_builders import build_toc, build_notes
+from common.validation import has_valid_semantic_versions
 from gpu_operator_dashboard.fetch_ci_data import (
     OCP_FULL_VERSION, GPU_OPERATOR_VERSION, STATUS_ABORTED)
-
-
-def has_valid_semantic_versions(result: Dict[str, Any]) -> bool:
-    """
-    Check if both ocp_full_version and gpu_operator_version contain valid semantic versions.
-
-    Args:
-        result: Test result dictionary containing version fields
-
-    Returns:
-        True if both versions are valid semantic versions, False otherwise
-    """
-    try:
-        ocp_version = result.get(OCP_FULL_VERSION, "")
-        gpu_version = result.get(GPU_OPERATOR_VERSION, "")
-
-        if not ocp_version or not gpu_version:
-            return False
-
-        # Parse OCP version (should be like "4.14.1")
-        semver.VersionInfo.parse(ocp_version)
-
-        # Parse GPU operator version (may have suffix like "23.9.0(bundle)" - extract version part)
-        gpu_version_clean = gpu_version.split("(")[0].strip()
-        semver.VersionInfo.parse(gpu_version_clean)
-
-    except (ValueError, TypeError):
-        logger.warning(f"Invalid semantic version in result: ocp={result.get(OCP_FULL_VERSION)}, gpu={result.get(GPU_OPERATOR_VERSION)}")
-        return False
-    else:
-        return True
 
 
 def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]]) -> str:
@@ -67,7 +38,7 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]]) -> str:
         for r in release_results:
             # Only include entries with valid semantic versions
             # Ignore ABORTED results for regular (non-bundle) results
-            if has_valid_semantic_versions(r) and r.get("test_status") != STATUS_ABORTED:
+            if has_valid_semantic_versions(r, operator_key=GPU_OPERATOR_VERSION) and r.get("test_status") != STATUS_ABORTED:
                 regular_results.append(r)
         notes_html = build_notes(notes)
         table_rows_html = build_catalog_table_rows(regular_results)
@@ -169,38 +140,6 @@ def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
     return rows_html
 
 
-def build_notes(notes: List[str]) -> str:
-    """
-    Build an HTML snipped with manual notes for an OCP version
-    """
-    if not notes:
-        return ""
-
-    items = "\n".join(f'<li class="note-item">{n}</li>' for n in notes)
-    return f"""
-  <div class="section-label">Notes</div>
-  <div class="note-items">
-    <ul>
-      {items}
-    </ul>
-  </div>
-    """
-
-
-def build_toc(ocp_keys: List[str]) -> str:
-    """
-    Build a TOC of OpenShift versions
-    """
-    toc_links = ", ".join(
-        f'<a href="#ocp-{ocp_version}">{ocp_version}</a>' for ocp_version in ocp_keys)
-    return f"""
-<div class="toc">
-    <div class="ocp-version-header">OpenShift Versions</div>
-    {toc_links}
-</div>
-    """
-
-
 def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
     """
     Build a small HTML snippet that displays info about GPU bundle statuses
@@ -232,9 +171,11 @@ def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
             status_class = "history-aborted"
         bundle_timestamp = datetime.fromtimestamp(
             int(bundle["job_timestamp"]), timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        prow_url = html.escape(bundle["prow_job_url"], quote=True)
         bundle_html += f"""
     <div class='history-square {status_class}'
-         onclick='window.open("{bundle["prow_job_url"]}", "_blank")'>
+         data-url='{prow_url}'
+         onclick='window.open(this.dataset.url, "_blank")'>
          <span class="history-square-tooltip">
           Status: {status} | Timestamp: {bundle_timestamp}
          </span>

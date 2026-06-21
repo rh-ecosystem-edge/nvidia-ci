@@ -75,10 +75,9 @@ class TestBuildBundleInfo(TestCase):
             '<div class=\'history-square history-success\'', bundle_html)
         self.assertIn(
             '<div class=\'history-square history-failure\'', bundle_html)
-        self.assertIn(
-            'onclick=\'window.open("https://example.com/job1", "_blank")\'', bundle_html)
-        self.assertIn(
-            'onclick=\'window.open("https://example.com/job2", "_blank")\'', bundle_html)
+        self.assertIn("data-url='https://example.com/job1'", bundle_html)
+        self.assertIn("data-url='https://example.com/job2'", bundle_html)
+        self.assertIn("onclick='window.open(this.dataset.url, \"_blank\")'", bundle_html)
 
     def test_status_classes(self):
         """Test that different statuses get different CSS classes."""
@@ -289,7 +288,7 @@ class TestSemanticVersionValidation(TestCase):
             "job_timestamp": "1712345678"
         }
 
-        self.assertTrue(has_valid_semantic_versions(valid_result))
+        self.assertTrue(has_valid_semantic_versions(valid_result, operator_key=GPU_OPERATOR_VERSION))
 
     def test_gpu_version_with_suffix(self):
         """Test that GPU versions with suffix (like bundle) are handled correctly."""
@@ -301,7 +300,7 @@ class TestSemanticVersionValidation(TestCase):
             "job_timestamp": "1712345678"
         }
 
-        self.assertTrue(has_valid_semantic_versions(result_with_suffix))
+        self.assertTrue(has_valid_semantic_versions(result_with_suffix, operator_key=GPU_OPERATOR_VERSION))
 
     def test_invalid_ocp_version(self):
         """Test that invalid OCP versions are rejected."""
@@ -313,7 +312,7 @@ class TestSemanticVersionValidation(TestCase):
             "job_timestamp": "1712345678"
         }
 
-        self.assertFalse(has_valid_semantic_versions(invalid_ocp_result))
+        self.assertFalse(has_valid_semantic_versions(invalid_ocp_result, operator_key=GPU_OPERATOR_VERSION))
 
     def test_invalid_gpu_version(self):
         """Test that invalid GPU operator versions are rejected."""
@@ -325,7 +324,7 @@ class TestSemanticVersionValidation(TestCase):
             "job_timestamp": "1712345678"
         }
 
-        self.assertFalse(has_valid_semantic_versions(invalid_gpu_result))
+        self.assertFalse(has_valid_semantic_versions(invalid_gpu_result, operator_key=GPU_OPERATOR_VERSION))
 
     def test_missing_versions(self):
         """Test that missing version fields are rejected."""
@@ -336,7 +335,7 @@ class TestSemanticVersionValidation(TestCase):
             "prow_job_url": "https://example.com/job1",
             "job_timestamp": "1712345678"
         }
-        self.assertFalse(has_valid_semantic_versions(missing_ocp))
+        self.assertFalse(has_valid_semantic_versions(missing_ocp, operator_key=GPU_OPERATOR_VERSION))
 
         # Missing GPU version
         missing_gpu = {
@@ -345,7 +344,7 @@ class TestSemanticVersionValidation(TestCase):
             "prow_job_url": "https://example.com/job1",
             "job_timestamp": "1712345678"
         }
-        self.assertFalse(has_valid_semantic_versions(missing_gpu))
+        self.assertFalse(has_valid_semantic_versions(missing_gpu, operator_key=GPU_OPERATOR_VERSION))
 
     def test_empty_versions(self):
         """Test that empty version fields are rejected."""
@@ -357,7 +356,7 @@ class TestSemanticVersionValidation(TestCase):
             "job_timestamp": "1712345678"
         }
 
-        self.assertFalse(has_valid_semantic_versions(empty_versions))
+        self.assertFalse(has_valid_semantic_versions(empty_versions, operator_key=GPU_OPERATOR_VERSION))
 
     def test_master_version_rejected(self):
         """Test that 'master' GPU version is rejected for regular results."""
@@ -369,7 +368,7 @@ class TestSemanticVersionValidation(TestCase):
             "job_timestamp": "1712345678"
         }
 
-        self.assertFalse(has_valid_semantic_versions(master_version))
+        self.assertFalse(has_valid_semantic_versions(master_version, operator_key=GPU_OPERATOR_VERSION))
 
     def test_integration_with_table_rows(self):
         """Test that invalid semantic versions are filtered out in the full processing flow."""
@@ -403,7 +402,7 @@ class TestSemanticVersionValidation(TestCase):
         ]
 
         # Filter results using the same logic as the main code
-        filtered_results = [r for r in regular_results if has_valid_semantic_versions(r)]
+        filtered_results = [r for r in regular_results if has_valid_semantic_versions(r, operator_key=GPU_OPERATOR_VERSION)]
 
         # Only the valid entry should remain
         self.assertEqual(len(filtered_results), 1)
