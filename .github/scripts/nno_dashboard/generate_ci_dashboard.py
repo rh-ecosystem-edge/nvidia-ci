@@ -12,14 +12,11 @@ from typing import Dict, List, Any
 from datetime import datetime, timezone
 from collections import defaultdict
 
-from common import (
-    logger,
-    load_template,
-    OCP_FULL_VERSION,
-    OPERATOR_VERSION,
-    is_valid_ocp_version,
-    sanitize_id,
-)
+from common.utils import logger
+from common.templates import load_template
+from common.data_structures import OCP_FULL_VERSION, OPERATOR_VERSION
+from common.validation import is_valid_ocp_version
+from common.html_builders import sanitize_id
 
 
 # Map test flavors from job names to display columns
