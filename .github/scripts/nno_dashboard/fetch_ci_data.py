@@ -11,20 +11,22 @@ import json
 import re
 from typing import Dict, Any, List, Tuple, Optional
 
-from common import (
-    logger,
+from common.utils import logger
+from common.gcs_utils import (
     fetch_gcs_file_content,
     fetch_filtered_files,
     build_prow_job_url,
     build_job_history_url,
+)
+from common.data_structures import (
     TestResult,
     OCP_FULL_VERSION,
     OPERATOR_VERSION,
     STATUS_SUCCESS,
     STATUS_FAILURE,
     STATUS_ABORTED,
-    is_valid_ocp_version,
 )
+from common.validation import is_valid_ocp_version
 
 
 # Regular expression to match Network Operator test result paths
