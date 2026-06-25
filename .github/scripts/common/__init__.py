@@ -15,6 +15,10 @@ try:
         STATUS_FAILURE,
         STATUS_ABORTED,
     )
+except ImportError:
+    pass
+
+try:
     from common.gcs_utils import (
         http_get_json,
         fetch_gcs_file_content,
@@ -24,6 +28,10 @@ try:
         GCS_API_BASE_URL,
         GCS_MAX_RESULTS_PER_REQUEST,
     )
+except ImportError:
+    pass
+
+try:
     from common.html_builders import (
         build_toc,
         build_notes,
@@ -31,11 +39,19 @@ try:
         build_last_updated_footer,
         sanitize_id,
     )
+except ImportError:
+    pass
+
+try:
     from common.validation import (
         is_valid_ocp_version,
         has_valid_semantic_versions,
         is_infrastructure_type,
     )
+except ImportError:
+    pass
+
+try:
     from common.data_fetching import (
         build_version_lookups,
         build_finished_lookup,
