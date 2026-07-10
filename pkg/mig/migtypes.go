@@ -108,7 +108,7 @@ func init() {
 	flag.IntVar(&PodDelay, "mixed.mig.pod-delay", 0, "delay in seconds between pod creation on mixed-mig testcase")
 	flag.IntVar(&SingleMigProfile, "single.mig.profile", -2, "index of the MIG profile to be used for single-mig testcase")
 	flag.StringVar(&MigInstances, "mixed.mig.instances", "-1", "comma-separated number of instances for mixed-mig testcase, defaults are for A100 GPU [2,0,1,1,0,0]")
-//	flag.IntVar(&TsPodCount, "time.slicing.pod-count", 1, "number of gpu-burn pods for time-slicing testcase (1-8)")
+	// flag.IntVar(&TsPodCount, "time.slicing.pod-count", 1, "number of gpu-burn pods for time-slicing testcase (1-8)")
 	flag.StringVar(&TsInstancesCSV, "time.slicing.instances", defaultTsInstancesCSV, "comma-separated time-slice counts per pod; sum must not exceed MaxTsInstance (100)")
 	flag.IntVar(&TsMonAfterPod, "time.slicing.mon-after-pod", 0, "minimum number of pods running before monitoring starts")
 	flag.BoolVar(&NoColor, "no-color", false, "disable color output")
