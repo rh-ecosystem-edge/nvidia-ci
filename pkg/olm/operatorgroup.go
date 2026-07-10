@@ -167,7 +167,7 @@ func PullOperatorGroup(apiClient *clients.Settings, groupName, nsName string) (*
 	}
 
 	if !builder.Exists() {
-		return nil, fmt.Errorf("OperatorGroup object named %s doesn't exist", nsName)
+		return nil, fmt.Errorf("OperatorGroup object named %s doesn't exist in namespace %s", groupName, nsName)
 	}
 
 	builder.Definition = builder.Object

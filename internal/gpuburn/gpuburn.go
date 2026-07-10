@@ -19,6 +19,7 @@ var (
 	isFalse bool = false
 	isTrue  bool = true
 
+	// Optional container args (e.g. time-slicing -m 12%) are appended after the fixed duration via "$@".
 	gpuBurnConfigMapData = map[string]string{
 		"entrypoint.sh": `#!/bin/bash
 		NUM_GPUS=$(nvidia-smi -L | wc -l)
@@ -26,7 +27,7 @@ var (
   			echo "ERROR No GPUs found"
 			exit 1
 		fi
-		./gpu_burn 300
+		./gpu_burn "$@" 300
 
 		if [ ! $? -eq 0 ]; then
 		  exit 1
@@ -71,9 +72,14 @@ func CreateGPUBurnPodWithMIG(apiClient *clients.Settings, podName, podNamespace 
 	// For single strategy MIGs, migProfile is "gpu" resulting in "nvidia.com/gpu".
 	// For other MIG profiles, migProfile is like "1g.5gb", and with required mig prefix: "nvidia.com/mig-1g.5gb".
 	var migResourceName string
+	var burnContainerArgs []string
 	switch migProfile {
 	case "gpu":
 		migResourceName = fmt.Sprintf("nvidia.com/%s", migProfile)
+	case "time-slicing":
+		migResourceName = "nvidia.com/gpu" // time-slicing uses gpu resource; pod Args forwarded by entrypoint.sh ("$@")
+		// burnContainerArgs = []string{"-m", "110%"}
+		burnContainerArgs = []string{"-m", "12%"}
 	default:
 		migResourceName = fmt.Sprintf("nvidia.com/mig-%s", migProfile)
 	}
@@ -118,6 +124,7 @@ func CreateGPUBurnPodWithMIG(apiClient *clients.Settings, podName, podNamespace 
 					Command: []string{
 						"/bin/entrypoint.sh",
 					},
+					Args: burnContainerArgs,
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceName(migResourceName): *resource.NewQuantity(int64(migCount), resource.DecimalSI),
