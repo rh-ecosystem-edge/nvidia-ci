@@ -79,8 +79,8 @@ func CreateGPUBurnConfigMap(apiClient *clients.Settings,
 	return createdConfigMapBuilderWithData.Object, nil
 }
 
-// CreateGPUBurnPodWithMIG returns a Pod configured with MIG resources
-func CreateGPUBurnPodWithMIG(apiClient *clients.Settings, podName, podNamespace string,
+// CreateGPUBurnPodWithParam returns a Pod configured with requested resources
+func CreateGPUBurnPodWithParam(apiClient *clients.Settings, podName, podNamespace string,
 	gpuBurnImage string, migProfile string, migCount int, timeout time.Duration) (*corev1.Pod, error) {
 	var volumeDefaultMode int32 = 0777
 
@@ -90,6 +90,7 @@ func CreateGPUBurnPodWithMIG(apiClient *clients.Settings, podName, podNamespace 
 
 	// Construct MIG resource name using the migProfile.
 	// For single strategy MIGs, migProfile is "gpu" resulting in "nvidia.com/gpu".
+	// any non-MIG profile is treated as gpu resource.
 	// For other MIG profiles, migProfile is like "1g.5gb", and with required mig prefix: "nvidia.com/mig-1g.5gb".
 	var migResourceName string
 	var burnContainerArgs []string
