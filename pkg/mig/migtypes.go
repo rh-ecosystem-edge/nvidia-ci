@@ -38,6 +38,13 @@ type MigPodInfo struct {
 	MigProfileInfo MIGProfileInfo // MIG profile information
 }
 
+// MigDefaultInfo holds a MIG profile name and its available instance count,
+// parsed from GFD node labels like nvidia.com/mig-2g.10gb.count=4.
+type MigDefaultInfo struct {
+	MigName string // e.g. "2g.10gb"
+	Count   int    // available instance count from the label value
+}
+
 type TsPodInfo struct {
 	PodName   string       // name of the pod
 	Namespace string       // namespace of the pod
@@ -78,12 +85,14 @@ var (
 	TsMonAfterPod     int   // minimum number of pods running before monitoring starts
 	MaxTsSlices       int   // max time-slice replicas per GPU (device plugin)
 	LimitForTsSlices  int   // limit for total number of time-slices to be launched by the testcase
-	BurnTimeParam     int
+	MaxGPUParam       int   // --nvidia-ci.max-gpu CLI parameter (raw, before clamping)
+	BurnTimeParam     int   // --nvidia-ci.burntime CLI parameter (raw, before clamping)
 )
 
 const (
 	defaultMigInstances     int = -1  // parameter not provided
 	defaultSingleMigProfile int = -2  // parameter not provided
+	defaultMaxGPU           int = -1  // parameter not provided; defaults to 1 at runtime
 	defaultBurnTime         int = 60  // seconds
 	minBurnTime             int = 30  // seconds
 	maxBurnTime             int = 300 // seconds
@@ -108,6 +117,7 @@ func init() {
 	flag.IntVar(&TsMonAfterPod, "time.slicing.mon-after-pod", 0, "minimum number of pods running before monitoring starts")
 	flag.IntVar(&MaxTsSlices, "time.slicing.max-running-slices", DefaultMaxTsSlices, "max time-slice replicas per GPU (device plugin)")
 	flag.IntVar(&LimitForTsSlices, "time.slicing.limit", DefaultLimitForTsSlices, "max total time-slice count launched by the testcase")
+	flag.IntVar(&MaxGPUParam, "nvidia-ci.max-gpu", defaultMaxGPU, "max nvidia.com/gpu to request per gpu-burn pod (1..node GPU count); defaults to 1")
 	flag.BoolVar(&NoColor, "no-color", false, "disable color output")
 	flag.IntVar(&BurnTimeParam, "nvidia-ci.burntime", defaultBurnTime,
 		fmt.Sprintf("gpu_burn workload duration in seconds (%d-%d, default %d)", minBurnTime, maxBurnTime, defaultBurnTime))
