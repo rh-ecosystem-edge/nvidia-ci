@@ -619,7 +619,7 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 			if podInfo.Pod.Exists() {
 				// skip if the pod was failed, testcase collects logs for the pods anyway
 				ret := isFailed(podInfo.Pod, podInfo.Namespace)
-				if ret == true {
+				if ret {
 					continue
 				}
 				ret1 := isRunning(podInfo.Pod, podInfo.Namespace)
@@ -643,7 +643,7 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 	for _, podInfo := range tsPodInfo {
 		if podInfo.Pod.Exists() {
 			ret := isFailed(podInfo.Pod, podInfo.Namespace)
-			if ret == true {
+			if ret {
 				continue
 			}
 			isCompleted(podInfo.Pod, podInfo.Namespace)
@@ -1159,7 +1159,7 @@ func updateTimeSlicingDevicePluginConfigMap(apiClient *clients.Settings, gpuProd
 		},
 		Data: data,
 	}
-	cms := apiClient.CoreV1Interface.ConfigMaps(ns)
+	cms := apiClient.ConfigMaps(ns)
 	created, err := cms.Create(context.TODO(), cm, metav1.CreateOptions{})
 	if err == nil {
 		glog.V(gpuparams.GpuLogLevel).Infof("Created ConfigMap %s/%s for device-plugin time-slicing", ns, timeSlicingDevicePluginConfigMapName)
@@ -1215,7 +1215,7 @@ func captureTimeSlicingConfigSnapshot(apiClient *clients.Settings) (*timeSlicing
 	}
 
 	ns := nvidiagpu.NvidiaGPUNamespace
-	existing, getErr := apiClient.CoreV1Interface.ConfigMaps(ns).Get(
+	existing, getErr := apiClient.ConfigMaps(ns).Get(
 		context.TODO(), timeSlicingDevicePluginConfigMapName, metav1.GetOptions{})
 	if getErr == nil {
 		snap.configMapExisted = true
@@ -1254,7 +1254,7 @@ func removeDevicePluginConfigNodeLabels(apiClient *clients.Settings, nodeSelecto
 func restoreTimeSlicingDevicePluginConfigMap(apiClient *clients.Settings, snap *timeSlicingConfigSnapshot) error {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "restoreTimeSlicingDevicePluginConfigMap"))
 	ns := nvidiagpu.NvidiaGPUNamespace
-	cms := apiClient.CoreV1Interface.ConfigMaps(ns)
+	cms := apiClient.ConfigMaps(ns)
 
 	if !snap.configMapExisted {
 		err := cms.Delete(context.TODO(), timeSlicingDevicePluginConfigMapName, metav1.DeleteOptions{})
@@ -1735,6 +1735,11 @@ func isRunning(gpuPod *pod.Builder, namespace string) int {
 		return 0
 	case corev1.PodRunning:
 		return 1
+	case corev1.PodPending, corev1.PodUnknown:
+		// fall through to WaitUntilInStatus
+	case corev1.PodFailed:
+		isFailed(gpuPod, namespace)
+		return 3
 	}
 
 	// Waiting for the pod to reach Running phase, if it was not already.
@@ -1863,8 +1868,9 @@ func MonitorTimeslicingGPULoad(burn *nvidiagpu.GPUBurnConfig, podInfo TsPodInfo,
 		activePendingOrRunning = true
 	case corev1.PodSucceeded:
 		By(fmt.Sprintf("Completed pod %s", name))
-	default:
-		// PodUnknown, etc. — treat as still in progress
+	case corev1.PodFailed:
+		// isFailed already called above
+	case corev1.PodUnknown:
 		activePendingOrRunning = true
 	}
 
@@ -2302,10 +2308,8 @@ func GetPidsFromPmon(output string, index int) (bool, []int) {
 	})
 }
 
-// pid vs pod
 type PodInfo struct {
 	PodName string
-	pid     int
 }
 
 func GetPodsWithPids(apiClient *clients.Settings, nodeSelector map[string]string, pids []int) (bool, []PodInfo) {
