@@ -767,6 +767,13 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					err)
 			}
 
+			By("Disable MIG if configured on GPU nodes")
+			migActive, err := mig.IsMig(WorkerNodeSelector)
+			Expect(err).ToNot(HaveOccurred(), "error checking MIG status on GPU nodes: %v", err)
+			if migActive {
+				mig.DisableMig(WorkerNodeSelector)
+			}
+
 			By("Create GPU Burn namespace 'test-gpu-burn'")
 			gpuBurnNsBuilder := namespace.NewBuilder(inittools.APIClient, burn.Namespace)
 			if gpuBurnNsBuilder.Exists() {
