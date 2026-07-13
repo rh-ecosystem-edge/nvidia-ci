@@ -784,6 +784,26 @@ func IsLabelInFilter(label string) bool {
 	return labelInFilter
 }
 
+// AnyLabelInFilter checks if any of the given labels is present in the Ginkgo label filter.
+func AnyLabelInFilter(labels ...string) bool {
+	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "AnyLabelInFilter"))
+	filterQuery := GinkgoLabelFilter()
+	glog.V(gpuparams.Gpu100LogLevel).Infof("Checking if any of labels %v is present in Ginkgo label filter: %s", labels, filterQuery)
+
+	if filterQuery == "" {
+		return false
+	}
+
+	for _, label := range labels {
+		if strings.Contains(filterQuery, label) {
+			glog.V(gpuparams.GpuLogLevel).Infof("Label '%s' is present in Ginkgo label filter", label)
+			return true
+		}
+	}
+
+	return false
+}
+
 // ShouldKeepOperator checks if the operator should be kept based on test labels and upgrade channel
 func ShouldKeepOperator(labelsToCheck []string) bool {
 	glog.V(gpuparams.Gpu100LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "ShouldKeepOperator"))

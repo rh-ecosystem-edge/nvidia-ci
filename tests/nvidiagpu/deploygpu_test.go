@@ -245,7 +245,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			nfd.EnsureNFDIsInstalled(inittools.APIClient, nfdInstance, ocpVersion, gpuparams.GpuLogLevel)
 
-			if mig.IsLabelInFilter("single-mig") || mig.IsLabelInFilter("mixed-mig") || mig.IsLabelInFilter("time-slicing") {
+			if mig.AnyLabelInFilter("single-mig", "mixed-mig", "time-slicing") {
 				mig.ParseCLIParameters()
 				mig.LogCLIParameterValues()
 			}
