@@ -216,7 +216,7 @@ $ export TEST_LABELS='nvidia-ci,gpu,single-mig,mixed-mig,time-slicing'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
-$ make run-tests ARGS="-- --single.mig.profile=1" --time.slicing.instances="3,8"
+$ make run-tests ARGS="-- --single.mig.profile=1 --time.slicing.instances=3,8"
 ```
 
 1. Running only MIG testcases on an existing cluster which has GPU operator installed,
@@ -240,7 +240,7 @@ $ export TEST_LABELS='single-mig,mixed-mig,time-slicing'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
-$ make run-mig-tests ARGS="-- --mixed.mig.instances='1,0,1,1' --mixed.mig.pod-delay=35" --time.slicing.instances="1,1,1,1,1,1,1,1"
+$ make run-mig-tests ARGS="-- --mixed.mig.instances='1,0,1,1' --mixed.mig.pod-delay=35 --time.slicing.instances=1,1,1,1,1,1,1,1"
 ```
 
 

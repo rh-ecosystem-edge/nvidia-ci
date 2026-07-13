@@ -491,6 +491,7 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 	By("Create time-slicing config")
 	_, err = CreateTimeSlicingConfig(inittools.APIClient, workerNodeSelector, "", MaxTsSlices)
 	Expect(err).ToNot(HaveOccurred(), "error creating time-slicing config: %v", err)
+	timeSlicingSetupStarted = true
 
 	// Check and create test-gpu-burn namespace if it is missing
 	By("Create test-gpu-burn namespace")
@@ -550,6 +551,7 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 	status, pids := GetPidsFromPmon(output, 2)
 
 	glog.V(gpuparams.GpuLogLevel).Infof("Time-slicing pod pids: %v with status: %s", pids, status)
+	Expect(len(pids)).To(Equal(0), "pre-test pmon check: expected no GPU compute pids before time-slicing test, got %v", pids)
 
 	By("Checking pre-testing time-slicing status, pid status for existing pids")
 	cmd = []string{"nvidia-smi", "--query-compute-apps=pid,process_name,used_memory,timestamp,gpu_name,gpu_bus_id,gpu_serial,gpu_uuid", "--format=csv,nounits"}
@@ -563,9 +565,7 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 
 	glog.V(gpuparams.GpuLogLevel).Infof("Time-slicing pod pids: %v with status: %s", pids, status)
 
-	status, podInfo := GetPodsWithPids(inittools.APIClient, workerNodeSelector, pids)
-	Expect(status).To(BeTrue(), "Error getting pod info: %v", err)
-	glog.V(gpuparams.GpuLogLevel).Infof("Time-slicing pod info: %v", podInfo)
+	GetPodsWithPids(inittools.APIClient, workerNodeSelector, pids)
 
 	By("Deploy gpu-burn pod with time-slicing in test-gpu-burn namespace")
 	var tsPodInfo []TsPodInfo
@@ -1139,9 +1139,6 @@ func CreateTimeSlicingConfig(apiClient *clients.Settings, workerNodeSelector map
 	glog.V(gpuparams.GpuLogLevel).Infof("Set ClusterPolicy %s spec.devicePlugin.config.name=%q default=%q",
 		nvidiagpu.ClusterPolicyName, timeSlicingDevicePluginConfigMapName, product)
 
-	if err := applyDevicePluginConfigNodeLabels(apiClient, out.Data, workerNodeSelector); err != nil {
-		return nil, err
-	}
 	return out, nil
 }
 
@@ -1728,9 +1725,9 @@ func isRunning(gpuPod *pod.Builder, namespace string) int {
 	// This is to avoid waiting, if the pod is already in Running or Succeeded phase.
 	// If pod was Completed (or Running) already, there's no need to wait.
 	// Avoiding the timeout in case it is Completed already is preferred.
-	_, err := pod.Pull(inittools.APIClient, gpuPod.Definition.Name, namespace)
+	pulledPod, err := pod.Pull(inittools.APIClient, gpuPod.Definition.Name, namespace)
 	Expect(err).ToNot(HaveOccurred(), "Pod %s does not exist in namespace %s with error: %v", gpuPod.Definition.Name, namespace, err)
-	switch gpuPod.Object.Status.Phase {
+	switch pulledPod.Object.Status.Phase {
 	case corev1.PodSucceeded:
 		return 0
 	case corev1.PodRunning:
@@ -1895,9 +1892,7 @@ func MonitorTimeslicingGPULoad(burn *nvidiagpu.GPUBurnConfig, podInfo TsPodInfo,
 		glog.V(gpuparams.GpuLogLevel).Infof("\ntime-slicing monitor: nvidia-smi CSV:\n%s\n",
 			outCSV)
 
-		status, podInfo := GetPodsWithPids(inittools.APIClient, workerNodeSelector, pids)
-		Expect(status).To(BeTrue(), "Error getting pod info: %v", err)
-		glog.V(gpuparams.GpuLogLevel).Infof("Time-slicing pod info: %v", podInfo)
+		GetPodsWithPids(inittools.APIClient, workerNodeSelector, pids)
 	}
 	time.Sleep(pollInterval)
 }
@@ -2308,19 +2303,13 @@ func GetPidsFromPmon(output string, index int) (bool, []int) {
 	})
 }
 
-type PodInfo struct {
-	PodName string
-}
 
-func GetPodsWithPids(apiClient *clients.Settings, nodeSelector map[string]string, pids []int) (bool, []PodInfo) {
-	glog.V(gpuparams.Gpu100LogLevel).Infof("GetPodsWithPids")
-	// var podInfo []PodInfo
-	// return true, []PodInfo(PodInfo{PodName: "pod1", pid: 1})
+func GetPodsWithPids(apiClient *clients.Settings, nodeSelector map[string]string, pids []int) {
+	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "GetPidsWithRegex"))
 	glog.V(gpuparams.GpuLogLevel).Infof("Time-slicing pod pids: %v", pids)
 	for _, pid := range pids {
 		glog.V(gpuparams.GpuLogLevel).Infof("Time-slicing pod pid: %d", pid)
 		podName := fmt.Sprintf("pod-%d", pid)
 		glog.V(gpuparams.GpuLogLevel).Infof("Time-slicing pod name: %s", podName)
 	}
-	return true, []PodInfo{}
 }
