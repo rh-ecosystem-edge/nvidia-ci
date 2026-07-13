@@ -2359,7 +2359,6 @@ func GetPidsFromPmon(output string, index int) (bool, []int) {
 	})
 }
 
-
 func GetPodsWithPids(apiClient *clients.Settings, nodeSelector map[string]string, pids []int) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "GetPidsWithRegex"))
 	glog.V(gpuparams.GpuLogLevel).Infof("Time-slicing pod pids: %v", pids)
