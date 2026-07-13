@@ -98,7 +98,7 @@ const (
 	MaxTsSlices       int = 8 // max time-slice replicas per GPU (device plugin)
 	// MaxTsInstance is the maximum sum of per-pod time-slice counts for one GPU.
 	MaxTsInstance int = 100
-	// defaultTsInstancesCSV has MaxTsSlices entries; the first TsPodCount values are used.
+	// defaultTsInstancesCSV may have up to MaxTsSlices entries, however their sum may not exceed MaxTsInstance (100)
 	defaultTsInstancesCSV = "8" // e.g. "8,1,3,2,6,5,8,8"
 	//defaultTsMonAfterPod   int = 1 // start monitoring pods after 1 pod is running
 )
