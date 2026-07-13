@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math/rand"
 
-	// "os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -37,7 +36,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	// "sigs.k8s.io/yaml"
 )
 
 // TestSingleMIGGPUBurn performs the GPU Burn test with single strategy MIG Configuration
@@ -623,7 +621,7 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 					continue
 				}
 				ret1 := isRunningStatus(podInfo.Pod, podInfo.Namespace)
-				if ret1 > 1 { // monitor once, and wait until pod is completed
+				if ret1 >= 1 { // monitor once, and wait until pod is completed
 					// skip if the pod was already succeeded
 					MonitorTimeslicingGPULoad(burn, podInfo, workerNodeSelector)
 					// pmonOut := GetCmdOutput(inittools.APIClient, workerNodeSelector, []string{"nvidia-smi", "pmon", "-d", "1", "-c", "1"})
@@ -2259,24 +2257,6 @@ func GetCmdOutput(apiClient *clients.Settings, nodeSelector map[string]string, c
 	return output
 }
 
-func CheckGPUBurnPids(apiClient *clients.Settings, nodeSelector map[string]string, cmd []string) string {
-	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "CheckGPUBurnPids"))
-	podName, namespace := findDriverPodOnNode(apiClient, nodeSelector)
-
-	// send command to driver pod (usually nvidia-smi)
-	// e.g. cmd := []string{"nvidia-smi", "pmon", "-c", "1"}
-	var cmd1 string
-	for _, cmd := range cmd {
-		cmd1 = cmd1 + cmd + " "
-	}
-	glog.V(gpuparams.Gpu10LogLevel).Infof("oc rsh -n %s pod/%s %v", namespace, podName, cmd1)
-	output, err := ExecCmdInPod(apiClient, podName, namespace, cmd, 30*time.Second)
-	Expect(err).ToNot(HaveOccurred(), "Error getting MIG profiles: %v", err)
-	glog.V(gpuparams.Gpu100LogLevel).Infof("Available MIG instance profiles: \n%s", output)
-
-	return output
-}
-
 // CSVLineRe matches one data line from "nvidia-smi --<cmd> --format=csv,nounits" at the time.
 // FindAllStringSubmatch returns one element per line: matches[0] = [fullMatch, cap1, cap2, ...].
 // So capture groups are matches[0][1]=pid, matches[0][2]=process_name, matches[0][3]=used_memory, ..., matches[0][8]=gpu_uuid.
@@ -2360,7 +2340,7 @@ func GetPidsFromPmon(output string, index int) (bool, []int) {
 }
 
 func GetPodsWithPids(apiClient *clients.Settings, nodeSelector map[string]string, pids []int) {
-	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "GetPidsWithRegex"))
+	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "GetPodsWithPids"))
 	glog.V(gpuparams.GpuLogLevel).Infof("Time-slicing pod pids: %v", pids)
 	for _, pid := range pids {
 		glog.V(gpuparams.GpuLogLevel).Infof("Time-slicing pod pid: %d", pid)
