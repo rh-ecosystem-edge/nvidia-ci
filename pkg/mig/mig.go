@@ -657,6 +657,12 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 		if podInfo.Pod.Exists() {
 			// Second parameter guides on how old logs can be retrieved.
 			gpuBurnMigLogs := GetGPUBurnPodLogs(podInfo.Pod, maxPodIndex-i)
+			if strings.TrimSpace(gpuBurnMigLogs) == "" {
+				fullLogs, err := podInfo.Pod.GetFullLog("gpu-burn-ctr")
+				Expect(err).ToNot(HaveOccurred(), "error getting full gpu-burn logs for %s: %v",
+					podInfo.Pod.Definition.Name, err)
+				gpuBurnMigLogs = fullLogs
+			}
 			// CheckGPUBurnPodLogs(gpuBurnMigLogs, 1) // only 1 GPU used for time-slicing
 			CheckTimeSlicingGPUBurnPodLogs(gpuBurnMigLogs)
 		}
