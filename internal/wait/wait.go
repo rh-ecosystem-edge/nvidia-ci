@@ -118,11 +118,8 @@ func DeploymentCreated(apiClient *clients.Settings, deploymentName, deploymentNa
 		context.TODO(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
 			deploymentPulled, err := deployment.Pull(apiClient, deploymentName, deploymentNamespace)
 			if err != nil {
-				// Missing Deployment is expected until OLM creates it. deployment.Pull wraps absence as
-				// a custom error (not always apierrors.IsNotFound); only those should keep polling.
-				missingMsg := fmt.Sprintf("deployment object %s doesn't exist in namespace %s",
-					deploymentName, deploymentNamespace)
-				if apierrors.IsNotFound(err) || err.Error() == missingMsg {
+				// Missing Deployment is expected until OLM creates it; keep polling only for NotFound.
+				if apierrors.IsNotFound(err) {
 					glog.V(gpuparams.GpuLogLevel).Infof(
 						"Deployment '%s' not yet present in namespace '%s': %v",
 						deploymentName, deploymentNamespace, err)
