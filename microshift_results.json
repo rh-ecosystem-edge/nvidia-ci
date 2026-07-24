@@ -1,11 +1,102 @@
 {
-  "4.14": [
+  "4.16": [
     {
-      "num": 2015145614974652416,
-      "timestamp": 1769285804,
+      "num": 2079616597420412928,
+      "timestamp": 1784656393,
       "status": "SUCCESS",
-      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6140/pull-ci-openshift-microshift-release-4.14-e2e-aws-nvidia-device-plugin-nightly/2015145614974652416/",
-      "microshift_version": "4.14.0_0.nightly_2026_01_24_144911_20260112084201_955a7aea6"
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/7084/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2079616597420412928/",
+      "microshift_version": "4.16.63"
+    },
+    {
+      "num": 2068727627119595520,
+      "timestamp": 1782061798,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6913/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2068727627119595520/",
+      "microshift_version": "4.16.63"
+    },
+    {
+      "num": 2067274221163122688,
+      "timestamp": 1781715445,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6893/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2067274221163122688/",
+      "microshift_version": "4.16.63"
+    },
+    {
+      "num": 2064628768730779648,
+      "timestamp": 1781084041,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6814/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2064628768730779648/",
+      "microshift_version": "4.16.63"
+    },
+    {
+      "num": 2064008856496771072,
+      "timestamp": 1780935435,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6831/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2064008856496771072/",
+      "microshift_version": "4.16.63"
+    },
+    {
+      "num": 2057507597430296576,
+      "timestamp": 1779385662,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6717/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2057507597430296576/",
+      "microshift_version": "4.16.58"
+    },
+    {
+      "num": 2051698661074669568,
+      "timestamp": 1778002382,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6628/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2051698661074669568/",
+      "microshift_version": "4.16.58"
+    },
+    {
+      "num": 2047305606473191424,
+      "timestamp": 1776953221,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6529/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2047305606473191424/",
+      "microshift_version": "4.16.58"
+    },
+    {
+      "num": 2046619012745400320,
+      "timestamp": 1776789688,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6555/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2046619012745400320/",
+      "microshift_version": "4.16.58"
+    },
+    {
+      "num": 2040821832596066304,
+      "timestamp": 1775408725,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6463/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2040821832596066304/",
+      "microshift_version": "4.16.58"
+    },
+    {
+      "num": 2035384624351285248,
+      "timestamp": 1774111270,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6387/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2035384624351285248/",
+      "microshift_version": "4.16.58"
+    },
+    {
+      "num": 2032370724060008448,
+      "timestamp": 1773392250,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6343/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2032370724060008448/",
+      "microshift_version": "4.16.47"
+    },
+    {
+      "num": 2029596710962991104,
+      "timestamp": 1772730879,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6316/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2029596710962991104/",
+      "microshift_version": "4.16.47"
+    },
+    {
+      "num": 2028845148175077376,
+      "timestamp": 1772551754,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openshift_microshift/6298/pull-ci-openshift-microshift-release-4.16-e2e-aws-nvidia-device-plugin/2028845148175077376/",
+      "microshift_version": "4.16.47"
     }
   ]
 }
