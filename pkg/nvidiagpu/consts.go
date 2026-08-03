@@ -53,7 +53,7 @@ const (
 
 	BurnPodCreationTimeout = 5 * time.Minute
 
-	BurnPodRunningTimeout = 3 * time.Minute
+	BurnPodRunningTimeout = 8 * time.Minute
 	BurnPodSuccessTimeout = 8 * time.Minute
 
 	BurnLogCollectionPeriod = 500 * time.Second
