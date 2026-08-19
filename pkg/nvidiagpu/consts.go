@@ -53,6 +53,13 @@ const (
 
 	BurnPodCreationTimeout = 5 * time.Minute
 
+	// BurnPodScheduledTimeout is the Phase 1 timeout: how long to wait for the pod to be
+	// scheduled onto a GPU node. Scheduling failure means no GPU node is available and
+	// the test should fail fast without waiting for image pull.
+	BurnPodScheduledTimeout = 1 * time.Minute
+
+	// BurnPodRunningTimeout is the Phase 2 timeout: how long to wait for the pod to reach
+	// Running phase after scheduling is confirmed. This covers slow image pulls.
 	BurnPodRunningTimeout = 8 * time.Minute
 	BurnPodSuccessTimeout = 8 * time.Minute
 

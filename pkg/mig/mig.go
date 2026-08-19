@@ -932,11 +932,19 @@ func DeployGPUWorkload(
 
 // waitForGPUBurnPodToComplete waits for the GPU burn pod to reach Running phase,
 // then waits for it to complete and reach Succeeded phase.
+// It uses a two-phase timeout: Phase 1 checks scheduling (fast fail if no GPU node),
+// Phase 2 waits for Running (tolerates slow image pulls).
 func waitForGPUBurnPodToComplete(gpuMigPodPulled *pod.Builder, namespace string) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Wait for GPU burn pod to complete"))
-	err := gpuMigPodPulled.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
-	Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod with MIG in "+
-		"namespace '%s' to go to Running phase: %v", namespace, err)
+
+	err := gpuMigPodPulled.WaitUntilScheduled(nvidiagpu.BurnPodScheduledTimeout)
+	Expect(err).ToNot(HaveOccurred(), "gpu-burn MIG pod in namespace '%s' was not scheduled "+
+		"(no GPU node available): %v", namespace, err)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod with MIG is scheduled onto a GPU node")
+
+	err = gpuMigPodPulled.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
+	Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod with MIG in namespace '%s' "+
+		"to reach Running phase (image pull may have taken too long): %v", namespace, err)
 	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod with MIG now in Running phase")
 
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Wait for up to %s for gpu-burn pod to complete", nvidiagpu.BurnPodSuccessTimeout)
@@ -972,8 +980,10 @@ func logPodEvents(podName, namespace string) {
 	}
 }
 
-// isRunning checks and waits for the GPU burn pod to reach the Running phase.
-// It first checks it quickly and if necessary, it waits for it to reach the Running phase.
+// isRunning checks and waits for the GPU burn pod to reach the Running phase using a two-phase
+// timeout: Phase 1 checks that the pod is scheduled (fast fail if no GPU node), Phase 2 waits
+// for Running (tolerates slow image pulls).
+// It first checks quickly and if the pod is already Running or Succeeded, it returns immediately.
 // Log validation ensures that the logs are from the pod that was created at the start of the test.
 func isRunning(gpuPod *pod.Builder, namespace string) {
 	// This is to avoid waiting, if the pod is already in Running or Succeeded phase.
@@ -984,18 +994,24 @@ func isRunning(gpuPod *pod.Builder, namespace string) {
 	if gpuPod.Object.Status.Phase == corev1.PodRunning || gpuPod.Object.Status.Phase == corev1.PodSucceeded {
 		return
 	}
-	// Waiting for the pod to reach Running phase, if it was not already.
-	// If the pod is left in Pending state, timeout will occur.
+
+	// Phase 1: verify the pod can be scheduled onto a GPU node. Fail fast if not.
+	err = gpuPod.WaitUntilScheduled(nvidiagpu.BurnPodScheduledTimeout)
+	Expect(err).ToNot(HaveOccurred(), "gpu-burn MIG pod in namespace '%s' was not scheduled "+
+		"(no GPU node available): %v", namespace, err)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod with MIG is scheduled onto a GPU node")
+
+	// Phase 2: wait for Running, tolerating time needed for image pull.
 	err = gpuPod.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
 	var err2 error
 	var pod2 *pod.Builder
 	if err != nil {
-		// pod exists, but is not running
+		// pod was scheduled but did not reach Running — likely image pull issue
 		// Using pod2 to avoid confusion with previous pod pull
 		pod2, err2 = pod.Pull(inittools.APIClient, gpuPod.Definition.Name, namespace)
 		Expect(err2).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod with MIG in "+
-			"namespace '%s' to go to Running phase: %v\n Pod is likely Pending for some reason", namespace, err)
-		glog.V(gpuparams.Gpu10LogLevel).Infof("Pod %s is likely Pending for some reason: %s (%s). Error: %v, Error2: %v",
+			"namespace '%s' to reach Running phase (image pull may have taken too long): %v", namespace, err)
+		glog.V(gpuparams.Gpu10LogLevel).Infof("Pod %s did not reach Running: %s (%s). Error: %v, Error2: %v",
 			pod2.Definition.Name, pod2.Object.Status.Phase, pod2.Object.Status.Reason, err, err2)
 		logPodEvents(pod2.Definition.Name, namespace)
 	}

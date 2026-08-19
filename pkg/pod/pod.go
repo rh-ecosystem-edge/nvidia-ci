@@ -293,6 +293,41 @@ func (builder *Builder) WaitUntilRunning(timeout time.Duration) error {
 	return builder.WaitUntilInStatus(corev1.PodRunning, timeout)
 }
 
+// WaitUntilScheduled waits until the pod has been scheduled onto a node, indicated by the
+// PodScheduled condition being True, or until the pod has already reached Running phase
+// directly (edge case where scheduling and start happen between poll cycles).
+// If the timeout expires before scheduling is confirmed, an error is returned.
+func (builder *Builder) WaitUntilScheduled(timeout time.Duration) error {
+	if valid, err := builder.validate(); !valid {
+		return err
+	}
+
+	glog.V(100).Infof("Waiting for the defined period until pod %s in namespace %s is scheduled",
+		builder.Definition.Name, builder.Definition.Namespace)
+
+	return wait.PollUntilContextTimeout(
+		context.TODO(), pollingInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			updatedPod, err := builder.apiClient.Pods(builder.Definition.Namespace).Get(
+				ctx, builder.Definition.Name, metav1.GetOptions{})
+			if err != nil {
+				return false, nil
+			}
+
+			// If the pod jumped straight to Running (or beyond), scheduling is implicitly done.
+			if updatedPod.Status.Phase == corev1.PodRunning || updatedPod.Status.Phase == corev1.PodSucceeded {
+				return true, nil
+			}
+
+			for _, cond := range updatedPod.Status.Conditions {
+				if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionTrue {
+					return true, nil
+				}
+			}
+
+			return false, nil
+		})
+}
+
 // WaitUntilInStatus waits for the duration of the defined timeout or until the pod gets to a specific status.
 func (builder *Builder) WaitUntilInStatus(status corev1.PodPhase, timeout time.Duration) error {
 	if valid, err := builder.validate(); !valid {
