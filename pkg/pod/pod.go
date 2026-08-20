@@ -313,21 +313,25 @@ func (builder *Builder) WaitUntilScheduled(timeout time.Duration) error {
 				return false, nil
 			}
 
-			// Pod failed before or during scheduling — no point waiting further.
-			if updatedPod.Status.Phase == corev1.PodFailed {
-				return false, fmt.Errorf("pod %s/%s failed before being scheduled (reason: %s)",
-					updatedPod.Namespace, updatedPod.Name, updatedPod.Status.Reason)
-			}
+			// Check all success conditions first so a pod that was scheduled and then
+			// immediately failed is not misclassified as a scheduling failure.
 
-			// If the pod jumped straight to Running (or beyond), scheduling is implicitly done.
-			if updatedPod.Status.Phase == corev1.PodRunning || updatedPod.Status.Phase == corev1.PodSucceeded {
-				return true, nil
-			}
-
+			// PodScheduled=True confirms the scheduler placed the pod on a node.
 			for _, cond := range updatedPod.Status.Conditions {
 				if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionTrue {
 					return true, nil
 				}
+			}
+
+			// If the pod jumped straight to Running or Succeeded, scheduling is implicitly done.
+			if updatedPod.Status.Phase == corev1.PodRunning || updatedPod.Status.Phase == corev1.PodSucceeded {
+				return true, nil
+			}
+
+			// Only classify as a scheduling failure if PodScheduled was never set to True.
+			if updatedPod.Status.Phase == corev1.PodFailed {
+				return false, fmt.Errorf("pod %s/%s failed without being scheduled (reason: %s)",
+					updatedPod.Namespace, updatedPod.Name, updatedPod.Status.Reason)
 			}
 
 			return false, nil
