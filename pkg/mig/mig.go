@@ -932,12 +932,44 @@ func DeployGPUWorkload(
 
 // waitForGPUBurnPodToComplete waits for the GPU burn pod to reach Running phase,
 // then waits for it to complete and reach Succeeded phase.
+// It uses a two-phase timeout: Phase 1 checks scheduling (fast fail if no GPU node),
+// Phase 2 waits for Running (tolerates slow image pulls).
 func waitForGPUBurnPodToComplete(gpuMigPodPulled *pod.Builder, namespace string) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Wait for GPU burn pod to complete"))
-	err := gpuMigPodPulled.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
-	Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod with MIG in "+
-		"namespace '%s' to go to Running phase: %v", namespace, err)
-	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod with MIG now in Running phase")
+
+	// Refresh pod state — the caller's snapshot may be stale.
+	gpuMigPodPulled, err := pod.Pull(inittools.APIClient, gpuMigPodPulled.Definition.Name, namespace)
+	Expect(err).ToNot(HaveOccurred(), "failed to pull gpu-burn pod in namespace '%s': %v", namespace, err)
+
+	// Early-exit: pod already completed before we started waiting.
+	if gpuMigPodPulled.Object.Status.Phase == corev1.PodSucceeded {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod already in Succeeded phase, skipping wait")
+
+		return
+	}
+
+	// Phase 1: confirm the pod is scheduled within the timeout window.
+	err = gpuMigPodPulled.WaitUntilScheduled(nvidiagpu.BurnPodScheduledTimeout)
+	Expect(err).ToNot(HaveOccurred(), "gpu-burn MIG pod in namespace '%s' was not scheduled "+
+		"within the timeout (scheduler may be busy or pod may have failed early): %v", namespace, err)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod with MIG is scheduled onto a GPU node")
+
+	// Phase 2: wait for Running or Succeeded, tolerating time needed for image pull and fast completions.
+	err = gpuMigPodPulled.WaitUntilRunningOrSucceeded(nvidiagpu.BurnPodRunningTimeout)
+	if err != nil {
+		// Pull a fresh snapshot for diagnostic logging only.
+		pod2, err2 := pod.Pull(inittools.APIClient, gpuMigPodPulled.Definition.Name, namespace)
+		if err2 == nil {
+			glog.V(gpuparams.Gpu10LogLevel).Infof("Pod %s did not reach Running or Succeeded: %s (%s). Error: %v",
+				pod2.Definition.Name, pod2.Object.Status.Phase, pod2.Object.Status.Reason, err)
+			logPodEvents(pod2.Definition.Name, namespace)
+		}
+
+		Expect(err).ToNot(HaveOccurred(), "gpu-burn pod with MIG in namespace '%s' did not reach "+
+			"Running or Succeeded phase (pod may have failed or image pull may have taken too long): %v", namespace, err)
+	}
+
+	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod with MIG now in Running or Succeeded phase")
 
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Wait for up to %s for gpu-burn pod to complete", nvidiagpu.BurnPodSuccessTimeout)
 	err = gpuMigPodPulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.BurnPodSuccessTimeout)
@@ -972,32 +1004,42 @@ func logPodEvents(podName, namespace string) {
 	}
 }
 
-// isRunning checks and waits for the GPU burn pod to reach the Running phase.
-// It first checks it quickly and if necessary, it waits for it to reach the Running phase.
+// isRunning checks and waits for the GPU burn pod to reach the Running phase using a two-phase
+// timeout: Phase 1 checks that the pod is scheduled (fast fail if no GPU node), Phase 2 waits
+// for Running (tolerates slow image pulls).
+// It first checks quickly and if the pod is already Running or Succeeded, it returns immediately.
 // Log validation ensures that the logs are from the pod that was created at the start of the test.
 func isRunning(gpuPod *pod.Builder, namespace string) {
 	// This is to avoid waiting, if the pod is already in Running or Succeeded phase.
 	// If pod was Completed (or Running) already, there's no need to wait.
 	// Avoiding the timeout in case it is Completed already is preferred.
-	_, err := pod.Pull(inittools.APIClient, gpuPod.Definition.Name, namespace)
-	Expect(err).ToNot(HaveOccurred(), "Pod %s does not exist in namespace %s with error: %v", gpuPod.Definition.Name, namespace, err)
+	// Save the pod name before the pull so we can reference it safely even if Pull returns nil.
+	podName := gpuPod.Definition.Name
+	gpuPod, err := pod.Pull(inittools.APIClient, podName, namespace)
+	Expect(err).ToNot(HaveOccurred(), "Pod %s does not exist in namespace %s with error: %v", podName, namespace, err)
 	if gpuPod.Object.Status.Phase == corev1.PodRunning || gpuPod.Object.Status.Phase == corev1.PodSucceeded {
 		return
 	}
-	// Waiting for the pod to reach Running phase, if it was not already.
-	// If the pod is left in Pending state, timeout will occur.
-	err = gpuPod.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
-	var err2 error
-	var pod2 *pod.Builder
+
+	// Phase 1: confirm the pod is scheduled within the timeout window.
+	err = gpuPod.WaitUntilScheduled(nvidiagpu.BurnPodScheduledTimeout)
+	Expect(err).ToNot(HaveOccurred(), "gpu-burn MIG pod in namespace '%s' was not scheduled "+
+		"within the timeout (scheduler may be busy or pod may have failed early): %v", namespace, err)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod with MIG is scheduled onto a GPU node")
+
+	// Phase 2: wait for Running or Succeeded, tolerating time needed for image pull and fast completions.
+	err = gpuPod.WaitUntilRunningOrSucceeded(nvidiagpu.BurnPodRunningTimeout)
 	if err != nil {
-		// pod exists, but is not running
-		// Using pod2 to avoid confusion with previous pod pull
-		pod2, err2 = pod.Pull(inittools.APIClient, gpuPod.Definition.Name, namespace)
-		Expect(err2).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod with MIG in "+
-			"namespace '%s' to go to Running phase: %v\n Pod is likely Pending for some reason", namespace, err)
-		glog.V(gpuparams.Gpu10LogLevel).Infof("Pod %s is likely Pending for some reason: %s (%s). Error: %v, Error2: %v",
-			pod2.Definition.Name, pod2.Object.Status.Phase, pod2.Object.Status.Reason, err, err2)
-		logPodEvents(pod2.Definition.Name, namespace)
+		// Pull a fresh snapshot for diagnostic logging only.
+		pod2, err2 := pod.Pull(inittools.APIClient, gpuPod.Definition.Name, namespace)
+		if err2 == nil {
+			glog.V(gpuparams.Gpu10LogLevel).Infof("Pod %s did not reach Running or Succeeded: %s (%s). Error: %v",
+				pod2.Definition.Name, pod2.Object.Status.Phase, pod2.Object.Status.Reason, err)
+			logPodEvents(pod2.Definition.Name, namespace)
+		}
+
+		Expect(err).ToNot(HaveOccurred(), "gpu-burn pod with MIG in namespace '%s' did not reach "+
+			"Running or Succeeded phase (pod may have failed or image pull may have taken too long): %v", namespace, err)
 	}
 }
 
