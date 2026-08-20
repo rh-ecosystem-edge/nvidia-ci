@@ -1013,8 +1013,10 @@ func isRunning(gpuPod *pod.Builder, namespace string) {
 	// This is to avoid waiting, if the pod is already in Running or Succeeded phase.
 	// If pod was Completed (or Running) already, there's no need to wait.
 	// Avoiding the timeout in case it is Completed already is preferred.
-	gpuPod, err := pod.Pull(inittools.APIClient, gpuPod.Definition.Name, namespace)
-	Expect(err).ToNot(HaveOccurred(), "Pod %s does not exist in namespace %s with error: %v", gpuPod.Definition.Name, namespace, err)
+	// Save the pod name before the pull so we can reference it safely even if Pull returns nil.
+	podName := gpuPod.Definition.Name
+	gpuPod, err := pod.Pull(inittools.APIClient, podName, namespace)
+	Expect(err).ToNot(HaveOccurred(), "Pod %s does not exist in namespace %s with error: %v", podName, namespace, err)
 	if gpuPod.Object.Status.Phase == corev1.PodRunning || gpuPod.Object.Status.Phase == corev1.PodSucceeded {
 		return
 	}

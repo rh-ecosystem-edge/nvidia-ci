@@ -852,8 +852,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By(fmt.Sprintf("Wait for up to %s for gpu-burn pod to be in Running or Succeeded phase (Phase 2)", nvidiagpu.BurnPodRunningTimeout))
 			err = gpuPodPulled.WaitUntilRunningOrSucceeded(nvidiagpu.BurnPodRunningTimeout)
-			Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod in namespace '%s' "+
-				"to reach Running or Succeeded phase (image pull may have taken too long): %v", burn.Namespace, err)
+			Expect(err).ToNot(HaveOccurred(), "gpu-burn pod in namespace '%s' did not reach Running or "+
+				"Succeeded phase (pod may have failed or image pull may have taken too long): %v", burn.Namespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Running or Succeeded phase")
 
 			By(fmt.Sprintf("Wait for up to %s for gpu-burn pod to run to completion and be in Succeeded phase/Completed status", nvidiagpu.BurnPodSuccessTimeout))
@@ -1093,8 +1093,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By(fmt.Sprintf("Wait for up to %s for re-deployed burn pod to be in Running or Succeeded phase (Phase 2)", nvidiagpu.RedeployedBurnPodRunningTimeout))
 			err = gpuBurnPod2Pulled.WaitUntilRunningOrSucceeded(nvidiagpu.RedeployedBurnPodRunningTimeout)
-			Expect(err).ToNot(HaveOccurred(), "timeout waiting for re-deployed gpu-burn pod in namespace '%s' "+
-				"to reach Running or Succeeded phase (image pull may have taken too long): %v", burn.Namespace, err)
+			Expect(err).ToNot(HaveOccurred(), "re-deployed gpu-burn pod in namespace '%s' did not reach Running or "+
+				"Succeeded phase (pod may have failed or image pull may have taken too long): %v", burn.Namespace, err)
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Running or Succeeded phase")
 
 			By(fmt.Sprintf("Wait for up to %s for re-deployed burn pod to run to completion and be in Succeeded phase/Completed status", nvidiagpu.RedeployedBurnPodSuccessTimeout))

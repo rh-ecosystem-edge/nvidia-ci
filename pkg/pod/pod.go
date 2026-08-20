@@ -382,13 +382,19 @@ func (builder *Builder) WaitUntilInStatus(status corev1.PodPhase, timeout time.D
 				return false, nil
 			}
 
-			// Pod failed — short-circuit immediately instead of waiting out the full timeout.
+			// Check the requested phase first — this preserves support for callers that
+			// explicitly wait for PodFailed (e.g. WaitUntilInStatus(corev1.PodFailed, ...)).
+			if updatePod.Status.Phase == status {
+				return true, nil
+			}
+
+			// Pod failed for any other requested phase — short-circuit instead of timing out.
 			if updatePod.Status.Phase == corev1.PodFailed {
 				return false, fmt.Errorf("pod %s/%s failed while waiting for phase %s (reason: %s)",
 					updatePod.Namespace, updatePod.Name, status, updatePod.Status.Reason)
 			}
 
-			return updatePod.Status.Phase == status, nil
+			return false, nil
 		})
 }
 
