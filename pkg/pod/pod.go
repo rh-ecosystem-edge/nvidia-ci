@@ -313,6 +313,12 @@ func (builder *Builder) WaitUntilScheduled(timeout time.Duration) error {
 				return false, nil
 			}
 
+			// Pod failed before or during scheduling — no point waiting further.
+			if updatedPod.Status.Phase == corev1.PodFailed {
+				return false, fmt.Errorf("pod %s/%s failed before being scheduled (reason: %s)",
+					updatedPod.Namespace, updatedPod.Name, updatedPod.Status.Reason)
+			}
+
 			// If the pod jumped straight to Running (or beyond), scheduling is implicitly done.
 			if updatedPod.Status.Phase == corev1.PodRunning || updatedPod.Status.Phase == corev1.PodSucceeded {
 				return true, nil
@@ -325,6 +331,37 @@ func (builder *Builder) WaitUntilScheduled(timeout time.Duration) error {
 			}
 
 			return false, nil
+		})
+}
+
+// WaitUntilRunningOrSucceeded waits until the pod reaches Running or Succeeded phase within the
+// given timeout. This is used as phase-2 of the GPU burn wait flow: a pod that completes very
+// quickly between poll cycles will be in Succeeded rather than Running, and must not be treated
+// as a timeout failure.
+func (builder *Builder) WaitUntilRunningOrSucceeded(timeout time.Duration) error {
+	if valid, err := builder.validate(); !valid {
+		return err
+	}
+
+	glog.V(100).Infof("Waiting for the defined period until pod %s in namespace %s is Running or Succeeded",
+		builder.Definition.Name, builder.Definition.Namespace)
+
+	return wait.PollUntilContextTimeout(
+		context.TODO(), pollingInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			updatedPod, err := builder.apiClient.Pods(builder.Definition.Namespace).Get(
+				ctx, builder.Definition.Name, metav1.GetOptions{})
+			if err != nil {
+				return false, nil
+			}
+
+			// Pod failed — short-circuit immediately instead of waiting out the full timeout.
+			if updatedPod.Status.Phase == corev1.PodFailed {
+				return false, fmt.Errorf("pod %s/%s failed while waiting for Running or Succeeded (reason: %s)",
+					updatedPod.Namespace, updatedPod.Name, updatedPod.Status.Reason)
+			}
+
+			return updatedPod.Status.Phase == corev1.PodRunning ||
+				updatedPod.Status.Phase == corev1.PodSucceeded, nil
 		})
 }
 
@@ -343,6 +380,12 @@ func (builder *Builder) WaitUntilInStatus(status corev1.PodPhase, timeout time.D
 				ctx, builder.Definition.Name, metav1.GetOptions{})
 			if err != nil {
 				return false, nil
+			}
+
+			// Pod failed — short-circuit immediately instead of waiting out the full timeout.
+			if updatePod.Status.Phase == corev1.PodFailed {
+				return false, fmt.Errorf("pod %s/%s failed while waiting for phase %s (reason: %s)",
+					updatePod.Namespace, updatePod.Name, status, updatePod.Status.Reason)
 			}
 
 			return updatePod.Status.Phase == status, nil
