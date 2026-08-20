@@ -149,7 +149,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(0).Infof("CleanupAfterTest: %v", cleanupAfterTest)
 
 			// if any of the following labels are present, the operator should be kept
-			labelsToCheck = []string{"operator-upgrade", "single-mig", "mixed-mig"}
+			labelsToCheck = []string{"operator-upgrade", "single-mig", "mixed-mig", "time-slicing"}
 			glog.V(0).Infof("LabelsToCheck: %v", labelsToCheck)
 
 			if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
@@ -245,7 +245,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			nfd.EnsureNFDIsInstalled(inittools.APIClient, nfdInstance, ocpVersion, gpuparams.GpuLogLevel)
 
-			if mig.IsLabelInFilter("single-mig") || mig.IsLabelInFilter("mixed-mig") {
+			if mig.AnyLabelInFilter("single-mig", "mixed-mig", "time-slicing") {
 				mig.ParseCLIParameters()
 				mig.LogCLIParameterValues()
 			}
@@ -726,6 +726,13 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					err)
 			}
 
+			By("Disable MIG if configured on GPU nodes")
+			migActive, err := mig.IsMig(WorkerNodeSelector)
+			Expect(err).ToNot(HaveOccurred(), "error checking MIG status on GPU nodes: %v", err)
+			if migActive {
+				mig.DisableMig(WorkerNodeSelector)
+			}
+
 			By("Create GPU Burn namespace 'test-gpu-burn'")
 			gpuBurnNsBuilder := namespace.NewBuilder(inittools.APIClient, burn.Namespace)
 			if gpuBurnNsBuilder.Exists() {
@@ -1127,6 +1134,16 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				Skip("Test skipped: 'mixed-mig' label not present in ginkgo label filter")
 			}
 			mig.TestMixedMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
+		})
+
+		It("Test GPU workload with timeslicing", Label("time-slicing"), func() {
+			// Skip if time-slicing label is not in the ginkgo label filter
+			if !mig.IsLabelInFilter("time-slicing") {
+				glog.V(gpuparams.GpuLogLevel).Infof("Skipping test: 'time-slicing' label not present in ginkgo label filter")
+				Skip("Test skipped: 'time-slicing' label not present in ginkgo label filter")
+			}
+			cleanup := cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck)
+			mig.TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanup)
 		})
 	})
 })
