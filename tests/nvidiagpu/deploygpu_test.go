@@ -844,11 +844,17 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				}
 			}()
 
-			By(fmt.Sprintf("Wait for up to %s for gpu-burn pod to be in Running phase", nvidiagpu.BurnPodRunningTimeout))
-			err = gpuPodPulled.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.BurnPodRunningTimeout)
-			Expect(err).ToNot(HaveOccurred(), "timeout waiting for gpu-burn pod in "+
-				"namespace '%s' to go to Running phase:  %v ", burn.Namespace, err)
-			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Running phase")
+			By(fmt.Sprintf("Wait for up to %s for gpu-burn pod to be scheduled onto a GPU node (Phase 1)", nvidiagpu.BurnPodScheduledTimeout))
+			err = gpuPodPulled.WaitUntilScheduled(nvidiagpu.BurnPodScheduledTimeout)
+			Expect(err).ToNot(HaveOccurred(), "gpu-burn pod in namespace '%s' was not scheduled "+
+				"(no GPU node available): %v", burn.Namespace, err)
+			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod is scheduled onto a GPU node")
+
+			By(fmt.Sprintf("Wait for up to %s for gpu-burn pod to be in Running or Succeeded phase (Phase 2)", nvidiagpu.BurnPodRunningTimeout))
+			err = gpuPodPulled.WaitUntilRunningOrSucceeded(nvidiagpu.BurnPodRunningTimeout)
+			Expect(err).ToNot(HaveOccurred(), "gpu-burn pod in namespace '%s' did not reach Running or "+
+				"Succeeded phase (pod may have failed or image pull may have taken too long): %v", burn.Namespace, err)
+			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Running or Succeeded phase")
 
 			By(fmt.Sprintf("Wait for up to %s for gpu-burn pod to run to completion and be in Succeeded phase/Completed status", nvidiagpu.BurnPodSuccessTimeout))
 			err = gpuPodPulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.BurnPodSuccessTimeout)
@@ -1079,11 +1085,17 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				}
 			}()
 
-			By(fmt.Sprintf("Wait for up to %s for re-deployed burn pod to be in Running phase", nvidiagpu.RedeployedBurnPodRunningTimeout))
-			err = gpuBurnPod2Pulled.WaitUntilInStatus(corev1.PodRunning, nvidiagpu.RedeployedBurnPodRunningTimeout)
-			Expect(err).ToNot(HaveOccurred(), "timeout waiting for re-deployed gpu-burn pod in "+
-				"namespace '%s' to go to Running phase:  %v ", burn.Namespace, err)
-			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Running phase")
+			By(fmt.Sprintf("Wait for up to %s for re-deployed burn pod to be scheduled onto a GPU node (Phase 1)", nvidiagpu.BurnPodScheduledTimeout))
+			err = gpuBurnPod2Pulled.WaitUntilScheduled(nvidiagpu.BurnPodScheduledTimeout)
+			Expect(err).ToNot(HaveOccurred(), "re-deployed gpu-burn pod in namespace '%s' was not scheduled "+
+				"(no GPU node available after upgrade): %v", burn.Namespace, err)
+			glog.V(gpuparams.GpuLogLevel).Infof("re-deployed gpu-burn pod is scheduled onto a GPU node")
+
+			By(fmt.Sprintf("Wait for up to %s for re-deployed burn pod to be in Running or Succeeded phase (Phase 2)", nvidiagpu.RedeployedBurnPodRunningTimeout))
+			err = gpuBurnPod2Pulled.WaitUntilRunningOrSucceeded(nvidiagpu.RedeployedBurnPodRunningTimeout)
+			Expect(err).ToNot(HaveOccurred(), "re-deployed gpu-burn pod in namespace '%s' did not reach Running or "+
+				"Succeeded phase (pod may have failed or image pull may have taken too long): %v", burn.Namespace, err)
+			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod now in Running or Succeeded phase")
 
 			By(fmt.Sprintf("Wait for up to %s for re-deployed burn pod to run to completion and be in Succeeded phase/Completed status", nvidiagpu.RedeployedBurnPodSuccessTimeout))
 			err = gpuBurnPod2Pulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.RedeployedBurnPodSuccessTimeout)

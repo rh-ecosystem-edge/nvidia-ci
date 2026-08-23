@@ -293,6 +293,82 @@ func (builder *Builder) WaitUntilRunning(timeout time.Duration) error {
 	return builder.WaitUntilInStatus(corev1.PodRunning, timeout)
 }
 
+// WaitUntilScheduled waits until the pod has been scheduled onto a node, indicated by the
+// PodScheduled condition being True, or until the pod has already reached Running phase
+// directly (edge case where scheduling and start happen between poll cycles).
+// If the timeout expires before scheduling is confirmed, an error is returned.
+func (builder *Builder) WaitUntilScheduled(timeout time.Duration) error {
+	if valid, err := builder.validate(); !valid {
+		return err
+	}
+
+	glog.V(100).Infof("Waiting for the defined period until pod %s in namespace %s is scheduled",
+		builder.Definition.Name, builder.Definition.Namespace)
+
+	return wait.PollUntilContextTimeout(
+		context.TODO(), pollingInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			updatedPod, err := builder.apiClient.Pods(builder.Definition.Namespace).Get(
+				ctx, builder.Definition.Name, metav1.GetOptions{})
+			if err != nil {
+				return false, nil
+			}
+
+			// Check all success conditions first so a pod that was scheduled and then
+			// immediately failed is not misclassified as a scheduling failure.
+
+			// PodScheduled=True confirms the scheduler placed the pod on a node.
+			for _, cond := range updatedPod.Status.Conditions {
+				if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionTrue {
+					return true, nil
+				}
+			}
+
+			// If the pod jumped straight to Running or Succeeded, scheduling is implicitly done.
+			if updatedPod.Status.Phase == corev1.PodRunning || updatedPod.Status.Phase == corev1.PodSucceeded {
+				return true, nil
+			}
+
+			// Only classify as a scheduling failure if PodScheduled was never set to True.
+			if updatedPod.Status.Phase == corev1.PodFailed {
+				return false, fmt.Errorf("pod %s/%s failed without being scheduled (reason: %s)",
+					updatedPod.Namespace, updatedPod.Name, updatedPod.Status.Reason)
+			}
+
+			return false, nil
+		})
+}
+
+// WaitUntilRunningOrSucceeded waits until the pod reaches Running or Succeeded phase within the
+// given timeout. This is used as phase-2 of the GPU burn wait flow: a pod that completes very
+// quickly between poll cycles will be in Succeeded rather than Running, and must not be treated
+// as a timeout failure.
+func (builder *Builder) WaitUntilRunningOrSucceeded(timeout time.Duration) error {
+	if valid, err := builder.validate(); !valid {
+		return err
+	}
+
+	glog.V(100).Infof("Waiting for the defined period until pod %s in namespace %s is Running or Succeeded",
+		builder.Definition.Name, builder.Definition.Namespace)
+
+	return wait.PollUntilContextTimeout(
+		context.TODO(), pollingInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			updatedPod, err := builder.apiClient.Pods(builder.Definition.Namespace).Get(
+				ctx, builder.Definition.Name, metav1.GetOptions{})
+			if err != nil {
+				return false, nil
+			}
+
+			// Pod failed — short-circuit immediately instead of waiting out the full timeout.
+			if updatedPod.Status.Phase == corev1.PodFailed {
+				return false, fmt.Errorf("pod %s/%s failed while waiting for Running or Succeeded (reason: %s)",
+					updatedPod.Namespace, updatedPod.Name, updatedPod.Status.Reason)
+			}
+
+			return updatedPod.Status.Phase == corev1.PodRunning ||
+				updatedPod.Status.Phase == corev1.PodSucceeded, nil
+		})
+}
+
 // WaitUntilInStatus waits for the duration of the defined timeout or until the pod gets to a specific status.
 func (builder *Builder) WaitUntilInStatus(status corev1.PodPhase, timeout time.Duration) error {
 	if valid, err := builder.validate(); !valid {
@@ -310,7 +386,19 @@ func (builder *Builder) WaitUntilInStatus(status corev1.PodPhase, timeout time.D
 				return false, nil
 			}
 
-			return updatePod.Status.Phase == status, nil
+			// Check the requested phase first — this preserves support for callers that
+			// explicitly wait for PodFailed (e.g. WaitUntilInStatus(corev1.PodFailed, ...)).
+			if updatePod.Status.Phase == status {
+				return true, nil
+			}
+
+			// Pod failed for any other requested phase — short-circuit instead of timing out.
+			if updatePod.Status.Phase == corev1.PodFailed {
+				return false, fmt.Errorf("pod %s/%s failed while waiting for phase %s (reason: %s)",
+					updatePod.Namespace, updatePod.Name, status, updatePod.Status.Reason)
+			}
+
+			return false, nil
 		})
 }
 
