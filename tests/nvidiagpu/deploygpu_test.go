@@ -666,10 +666,12 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			if nvidiaGPUConfig.UsePrecompiledDriver {
 				glog.V(gpuparams.GpuLogLevel).Infof("UsePrecompiledDriver is enabled, discovering driver version from registry")
 
+				gpuNodeSelector := fmt.Sprintf("%s=,%s=true",
+					inittools.GeneralConfig.WorkerLabel, nvidiagpu.NvidiaGPULabel)
 				workerNodes, err := nodes.List(inittools.APIClient,
-					metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
-				Expect(err).ToNot(HaveOccurred(), "Failed to list worker nodes")
-				Expect(workerNodes).ToNot(BeEmpty(), "No worker nodes found")
+					metav1.ListOptions{LabelSelector: gpuNodeSelector})
+				Expect(err).ToNot(HaveOccurred(), "Failed to list GPU worker nodes")
+				Expect(workerNodes).ToNot(BeEmpty(), "No GPU worker nodes found")
 
 				kernelVersion := workerNodes[0].Object.Status.NodeInfo.KernelVersion
 				glog.V(gpuparams.GpuLogLevel).Infof("Worker node kernel version: %s", kernelVersion)
@@ -678,18 +680,23 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				Expect(err).ToNot(HaveOccurred(), "Failed to discover precompiled driver version: %v", err)
 				glog.V(gpuparams.GpuLogLevel).Infof("Discovered precompiled driver version: %s", driverVersion)
 
-				precompiledPatch := fmt.Sprintf(
-					`[{"op": "add", "path": "/spec/driver/usePrecompiled", "value": true},`+
-						`{"op": "add", "path": "/spec/driver/repository", "value": "%s"},`+
-						`{"op": "add", "path": "/spec/driver/image", "value": "%s"},`+
-						`{"op": "add", "path": "/spec/driver/version", "value": "%s"}]`,
-					nvidiagpu.PrecompiledDriverRepoField, nvidiagpu.PrecompiledDriverImageField, driverVersion)
-
-				if clusterPolicyPatch == "" {
-					clusterPolicyPatch = precompiledPatch
-				} else {
-					clusterPolicyPatch = clusterPolicyPatch[:len(clusterPolicyPatch)-1] + "," + precompiledPatch[1:]
+				precompiledOps := []map[string]interface{}{
+					{"op": "add", "path": "/spec/driver/usePrecompiled", "value": true},
+					{"op": "add", "path": "/spec/driver/repository", "value": nvidiagpu.PrecompiledDriverRepoField},
+					{"op": "add", "path": "/spec/driver/image", "value": nvidiagpu.PrecompiledDriverImageField},
+					{"op": "add", "path": "/spec/driver/version", "value": driverVersion},
 				}
+
+				var combinedOps []map[string]interface{}
+				if clusterPolicyPatch != "" {
+					err = json.Unmarshal([]byte(clusterPolicyPatch), &combinedOps)
+					Expect(err).ToNot(HaveOccurred(), "Failed to parse existing ClusterPolicy patch")
+				}
+				combinedOps = append(combinedOps, precompiledOps...)
+
+				patchBytes, err := json.Marshal(combinedOps)
+				Expect(err).ToNot(HaveOccurred(), "Failed to marshal combined ClusterPolicy patch")
+				clusterPolicyPatch = string(patchBytes)
 
 				glog.V(gpuparams.GpuLogLevel).Infof("Combined ClusterPolicy patch: %s", clusterPolicyPatch)
 			}
