@@ -21,6 +21,7 @@ import (
 
 	nfd "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfdcheck"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nodes"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"
 
@@ -660,13 +661,46 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Deploy ClusterPolicy")
 
+			clusterPolicyPatch := nvidiaGPUConfig.ClusterPolicyPatch
+
+			if nvidiaGPUConfig.UsePrecompiledDriver {
+				glog.V(gpuparams.GpuLogLevel).Infof("UsePrecompiledDriver is enabled, discovering driver version from registry")
+
+				workerNodes, err := nodes.List(inittools.APIClient,
+					metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker="})
+				Expect(err).ToNot(HaveOccurred(), "Failed to list worker nodes")
+				Expect(workerNodes).ToNot(BeEmpty(), "No worker nodes found")
+
+				kernelVersion := workerNodes[0].Object.Status.NodeInfo.KernelVersion
+				glog.V(gpuparams.GpuLogLevel).Infof("Worker node kernel version: %s", kernelVersion)
+
+				driverVersion, err := nvidiagpu.DiscoverPrecompiledDriverVersion(inittools.APIClient, kernelVersion)
+				Expect(err).ToNot(HaveOccurred(), "Failed to discover precompiled driver version: %v", err)
+				glog.V(gpuparams.GpuLogLevel).Infof("Discovered precompiled driver version: %s", driverVersion)
+
+				precompiledPatch := fmt.Sprintf(
+					`[{"op": "add", "path": "/spec/driver/usePrecompiled", "value": true},`+
+						`{"op": "add", "path": "/spec/driver/repository", "value": "%s"},`+
+						`{"op": "add", "path": "/spec/driver/image", "value": "%s"},`+
+						`{"op": "add", "path": "/spec/driver/version", "value": "%s"}]`,
+					nvidiagpu.PrecompiledDriverRepoField, nvidiagpu.PrecompiledDriverImageField, driverVersion)
+
+				if clusterPolicyPatch == "" {
+					clusterPolicyPatch = precompiledPatch
+				} else {
+					clusterPolicyPatch = clusterPolicyPatch[:len(clusterPolicyPatch)-1] + "," + precompiledPatch[1:]
+				}
+
+				glog.V(gpuparams.GpuLogLevel).Infof("Combined ClusterPolicy patch: %s", clusterPolicyPatch)
+			}
+
 			var clusterPolicyBuilder *nvidiagpu.Builder
-			if nvidiaGPUConfig.ClusterPolicyPatch == "" {
+			if clusterPolicyPatch == "" {
 				glog.V(gpuparams.GpuLogLevel).Infof("Creating default ClusterPolicy from CSV almExamples without modifications")
 				clusterPolicyBuilder = nvidiagpu.NewBuilderFromObjectString(inittools.APIClient, almExamples)
 			} else {
-				glog.V(gpuparams.GpuLogLevel).Infof("Creating default ClusterPolicy from CSV almExamples and aplying a patch")
-				clusterPolicyBuilder = nvidiagpu.NewBuilderFromObjectStringAndPatch(inittools.APIClient, almExamples, nvidiaGPUConfig.ClusterPolicyPatch)
+				glog.V(gpuparams.GpuLogLevel).Infof("Creating default ClusterPolicy from CSV almExamples and applying a patch")
+				clusterPolicyBuilder = nvidiagpu.NewBuilderFromObjectStringAndPatch(inittools.APIClient, almExamples, clusterPolicyPatch)
 			}
 
 			createdClusterPolicyBuilder, err := clusterPolicyBuilder.Create()
