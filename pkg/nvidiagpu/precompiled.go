@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
@@ -24,7 +25,8 @@ const (
 	PrecompiledDriverRepoField  = precompiledRegistry + "/" + precompiledNamespace
 	PrecompiledDriverImageField = precompiledImage
 
-	precompiledRepository = precompiledNamespace + "/" + precompiledImage
+	precompiledRepository      = precompiledNamespace + "/" + precompiledImage
+	registryRequestTimeout     = 30 * time.Second
 )
 
 type dockerConfigJSON struct {
@@ -110,7 +112,17 @@ func DiscoverPrecompiledDriverVersion(apiClient *clients.Settings, kernelVersion
 func listRegistryTags(authBase64 string) ([]string, error) {
 	tagsURL := fmt.Sprintf("https://%s/v2/%s/tags/list", precompiledRegistry, precompiledRepository)
 
-	resp, err := http.Get(tagsURL)
+	client := &http.Client{Timeout: registryRequestTimeout}
+
+	ctx, cancel := context.WithTimeout(context.Background(), registryRequestTimeout)
+	defer cancel()
+
+	challengeReq, err := http.NewRequestWithContext(ctx, "GET", tagsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create registry request: %w", err)
+	}
+
+	resp, err := client.Do(challengeReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to contact registry: %w", err)
 	}
@@ -121,7 +133,7 @@ func listRegistryTags(authBase64 string) ([]string, error) {
 	}
 
 	wwwAuth := resp.Header.Get("WWW-Authenticate")
-	token, err := obtainRegistryToken(wwwAuth, authBase64)
+	token, err := obtainRegistryToken(client, wwwAuth, authBase64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain registry token: %w", err)
 	}
@@ -130,20 +142,24 @@ func listRegistryTags(authBase64 string) ([]string, error) {
 	nextURL := tagsURL
 
 	for nextURL != "" {
-		req, err := http.NewRequest("GET", nextURL, nil)
+		reqCtx, reqCancel := context.WithTimeout(context.Background(), registryRequestTimeout)
+		req, err := http.NewRequestWithContext(reqCtx, "GET", nextURL, nil)
 		if err != nil {
+			reqCancel()
 			return nil, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
+			reqCancel()
 			return nil, fmt.Errorf("failed to list tags: %w", err)
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
+			reqCancel()
 			return nil, fmt.Errorf("registry returned %d: %s", resp.StatusCode, string(body))
 		}
 
@@ -152,6 +168,7 @@ func listRegistryTags(authBase64 string) ([]string, error) {
 		}
 		body, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
+		reqCancel()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
@@ -167,11 +184,15 @@ func listRegistryTags(authBase64 string) ([]string, error) {
 	return allTags, nil
 }
 
-func obtainRegistryToken(wwwAuth, authBase64 string) (string, error) {
+func obtainRegistryToken(client *http.Client, wwwAuth, authBase64 string) (string, error) {
 	params := parseWWWAuthenticate(wwwAuth)
 	realm, ok := params["realm"]
 	if !ok {
 		return "", fmt.Errorf("no realm in WWW-Authenticate header: %s", wwwAuth)
+	}
+
+	if err := validateRegistryURL(realm); err != nil {
+		return "", fmt.Errorf("untrusted token realm %q: %w", realm, err)
 	}
 
 	tokenURL := realm
@@ -184,7 +205,10 @@ func obtainRegistryToken(wwwAuth, authBase64 string) (string, error) {
 		tokenURL += sep + "scope=" + url.QueryEscape(scope)
 	}
 
-	req, err := http.NewRequest("GET", tokenURL, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), registryRequestTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", tokenURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -199,7 +223,7 @@ func obtainRegistryToken(wwwAuth, authBase64 string) (string, error) {
 	}
 	req.SetBasicAuth(parts[0], parts[1])
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to request token: %w", err)
 	}
@@ -240,6 +264,24 @@ func parseWWWAuthenticate(header string) map[string]string {
 	return params
 }
 
+var allowedRegistryHosts = map[string]bool{
+	"registry.redhat.io": true,
+}
+
+func validateRegistryURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("scheme %q is not https", parsed.Scheme)
+	}
+	if !allowedRegistryHosts[parsed.Hostname()] {
+		return fmt.Errorf("host %q is not an allowed registry host", parsed.Hostname())
+	}
+	return nil
+}
+
 func getNextPageURL(linkHeader string) string {
 	if linkHeader == "" {
 		return ""
@@ -255,6 +297,9 @@ func getNextPageURL(linkHeader string) string {
 		urlPart = strings.TrimSuffix(urlPart, ">")
 		if strings.HasPrefix(urlPart, "/") {
 			return "https://" + precompiledRegistry + urlPart
+		}
+		if validateRegistryURL(urlPart) != nil {
+			return ""
 		}
 		return urlPart
 	}
