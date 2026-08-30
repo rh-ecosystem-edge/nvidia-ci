@@ -680,6 +680,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				Expect(err).ToNot(HaveOccurred(), "Failed to discover precompiled driver version: %v", err)
 				glog.V(gpuparams.GpuLogLevel).Infof("Discovered precompiled driver version: %s", driverVersion)
 
+				//nolint:goconst
 				precompiledOps := []map[string]interface{}{
 					{"op": "add", "path": "/spec/driver/usePrecompiled", "value": true},
 					{"op": "add", "path": "/spec/driver/repository", "value": nvidiagpu.PrecompiledDriverRepoField},

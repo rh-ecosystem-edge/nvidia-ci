@@ -25,8 +25,8 @@ const (
 	PrecompiledDriverRepoField  = precompiledRegistry + "/" + precompiledNamespace
 	PrecompiledDriverImageField = precompiledImage
 
-	precompiledRepository      = precompiledNamespace + "/" + precompiledImage
-	registryRequestTimeout     = 30 * time.Second
+	precompiledRepository  = precompiledNamespace + "/" + precompiledImage
+	registryRequestTimeout = 30 * time.Second
 )
 
 type dockerConfigJSON struct {
