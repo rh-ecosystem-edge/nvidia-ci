@@ -16,6 +16,7 @@ type NvidiaGPUConfig struct {
 	OperatorUpgradeToChannel           string `envconfig:"NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL"`
 	GPUFallbackCatalogsourceIndexImage string `envconfig:"NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"`
 	ClusterPolicyPatch                 string `envconfig:"NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH"`
+	UsePrecompiledDriver               bool   `envconfig:"NVIDIAGPU_USE_PRECOMPILED_DRIVER" default:"false"`
 }
 
 // NewNvidiaGPUConfig returns an instance of NvidiaGPUConfig.
