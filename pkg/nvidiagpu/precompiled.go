@@ -17,11 +17,14 @@ import (
 )
 
 const (
-	PrecompiledDriverRepoField  = "registry.redhat.io/nvidia"
-	PrecompiledDriverImageField = "gpu-driver-rhel9"
+	precompiledRegistry  = "registry.redhat.io"
+	precompiledNamespace = "nvidia"
+	precompiledImage     = "gpu-driver-rhel9"
 
-	precompiledRegistry   = "registry.redhat.io"
-	precompiledRepository = "nvidia/gpu-driver-rhel9"
+	PrecompiledDriverRepoField  = precompiledRegistry + "/" + precompiledNamespace
+	PrecompiledDriverImageField = precompiledImage
+
+	precompiledRepository = precompiledNamespace + "/" + precompiledImage
 )
 
 type dockerConfigJSON struct {
