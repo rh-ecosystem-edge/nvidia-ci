@@ -114,7 +114,7 @@ func listRegistryTags(authBase64 string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to contact registry: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		return nil, fmt.Errorf("expected 401 from registry, got %d", resp.StatusCode)
@@ -143,7 +143,7 @@ func listRegistryTags(authBase64 string) ([]string, error) {
 
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return nil, fmt.Errorf("registry returned %d: %s", resp.StatusCode, string(body))
 		}
 
@@ -151,7 +151,7 @@ func listRegistryTags(authBase64 string) ([]string, error) {
 			Tags []string `json:"tags"`
 		}
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
@@ -203,7 +203,7 @@ func obtainRegistryToken(wwwAuth, authBase64 string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to request token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
