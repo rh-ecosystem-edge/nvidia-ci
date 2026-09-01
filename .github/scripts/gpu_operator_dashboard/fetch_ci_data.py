@@ -29,8 +29,8 @@ STATUS_FAILURE = "FAILURE"
 STATUS_ABORTED = "ABORTED"
 
 
-# Regular expression to match test result paths (set dynamically in main() via --job-suffix).
-TEST_RESULT_PATH_REGEX = None
+# Regular expression to match test result paths.
+# Initialized with the default pattern (no suffix); main() overrides when --job-suffix is provided.
 
 
 def build_test_result_regex(job_suffix=""):
@@ -56,6 +56,8 @@ def build_test_result_regex(job_suffix=""):
         r"(?P<build_id>[^/]+)"
     )
 
+
+TEST_RESULT_PATH_REGEX = build_test_result_regex()
 
 
 # =============================================================================
