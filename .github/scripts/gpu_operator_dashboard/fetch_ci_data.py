@@ -29,13 +29,32 @@ STATUS_FAILURE = "FAILURE"
 STATUS_ABORTED = "ABORTED"
 
 
-# Regular expression to match test result paths.
-TEST_RESULT_PATH_REGEX = re.compile(
-    r"pr-logs/pull/(?P<repo>[^/]+)/(?P<pr_number>\d+)/"
-    r"(?P<job_name>(?:rehearse-\d+-)?pull-ci-rh-ecosystem-edge-nvidia-ci-main-"
-    r"(?P<ocp_version>\d+\.\d+)-stable-nvidia-gpu-operator-e2e-(?P<gpu_version>\d+-\d+-x|master))/"
-    r"(?P<build_id>[^/]+)"
-)
+# Regular expression to match test result paths (set dynamically in main() via --job-suffix).
+TEST_RESULT_PATH_REGEX = None
+
+
+def build_test_result_regex(job_suffix=""):
+    """Build the regex for matching test result paths.
+
+    Args:
+        job_suffix: Optional suffix appended to job names (e.g. "-signed").
+                    When set, only jobs ending with that suffix are matched,
+                    and the "master" variant is excluded.
+    """
+    if job_suffix:
+        gpu_version_pattern = r"\d+-\d+-x"
+        suffix = re.escape(job_suffix)
+    else:
+        gpu_version_pattern = r"\d+-\d+-x|master"
+        suffix = ""
+
+    return re.compile(
+        r"pr-logs/pull/(?P<repo>[^/]+)/(?P<pr_number>\d+)/"
+        r"(?P<job_name>(?:rehearse-\d+-)?pull-ci-rh-ecosystem-edge-nvidia-ci-main-"
+        r"(?P<ocp_version>\d+\.\d+)-stable-nvidia-gpu-operator-e2e-"
+        r"(?P<gpu_version>" + gpu_version_pattern + r")" + suffix + r")/"
+        r"(?P<build_id>[^/]+)"
+    )
 
 
 
@@ -618,12 +637,22 @@ def main() -> None:
                         help="Path to the updated (merged) data file")
     parser.add_argument("--bundle_result_limit", type=int_or_none, default=None,
                         help="Number of latest bundle results (jobs ending with '-master') to keep per version. Non-bundle results are kept without limit. Omit or use 'unlimited' for no limit. (default: unlimited)")
+    parser.add_argument("--job-suffix", default="",
+                        help="Suffix appended to job names to filter (e.g. '-signed'). "
+                             "Only jobs ending with this suffix will be matched.")
     args = parser.parse_args()
 
+    global TEST_RESULT_PATH_REGEX
+    TEST_RESULT_PATH_REGEX = build_test_result_regex(args.job_suffix)
+
     # Update JSON data.
-    with open(args.baseline_data_filepath, "r") as f:
-        existing_results: Dict[str, Dict[str, Any]] = json.load(f)
-    logger.info(f"Loaded baseline data with {len(existing_results)} OCP versions")
+    try:
+        with open(args.baseline_data_filepath, "r") as f:
+            existing_results: Dict[str, Dict[str, Any]] = json.load(f)
+        logger.info(f"Loaded baseline data with {len(existing_results)} OCP versions")
+    except FileNotFoundError:
+        logger.info(f"No baseline data at {args.baseline_data_filepath}, starting fresh")
+        existing_results = {}
 
     local_results: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
     if args.pr_number.lower() == "all":
