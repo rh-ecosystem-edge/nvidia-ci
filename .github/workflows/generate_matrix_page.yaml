@@ -35,6 +35,8 @@ jobs:
         run: |
           echo "DASHBOARD_DATA_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.json" >> "$GITHUB_ENV"
           echo "DASHBOARD_HTML_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.html" >> "$GITHUB_ENV"
+          echo "SIGNED_DASHBOARD_DATA_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_signed_matrix.json" >> "$GITHUB_ENV"
+          echo "SIGNED_DASHBOARD_HTML_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_signed_matrix.html" >> "$GITHUB_ENV"
           echo "NNO_DASHBOARD_DATA_FILEPATH=${DASHBOARD_OUTPUT_DIR}/network_operator_matrix.json" >> "$GITHUB_ENV"
           echo "NNO_DASHBOARD_HTML_FILEPATH=${DASHBOARD_OUTPUT_DIR}/network_operator_matrix.html" >> "$GITHUB_ENV"
           echo "GH_PAGES_BRANCH=${{ github.event.inputs.gh_pages_branch || 'gh-pages' }}" >> "$GITHUB_ENV"
@@ -79,6 +81,11 @@ jobs:
             --pr_number "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
             --baseline_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
             --merged_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}"
+          PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.fetch_ci_data \
+            --pr_number "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
+            --baseline_data_filepath "${{ env.SIGNED_DASHBOARD_DATA_FILEPATH }}" \
+            --merged_data_filepath "${{ env.SIGNED_DASHBOARD_DATA_FILEPATH }}" \
+            --job-suffix="-signed"
           PYTHONPATH=.github/scripts python -m nno_dashboard.fetch_ci_data \
             --pr_number "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
             --baseline_data_filepath "${{ env.NNO_DASHBOARD_DATA_FILEPATH }}" \
@@ -97,6 +104,15 @@ jobs:
             GPU_CHANGED=true
           fi
 
+          # Check if Signed GPU Operator JSON changed
+          SIGNED_CHANGED=false
+          if [[ ${{ github.event_name }} == "pull_request_target" ]] && git diff --exit-code gpu_operator_signed_matrix.json; then
+            echo "Signed GPU Operator: no changes"
+          else
+            echo "Signed GPU Operator: changes detected"
+            SIGNED_CHANGED=true
+          fi
+
           # Check if Network Operator JSON changed
           NNO_CHANGED=false
           if [[ ${{ github.event_name }} == "pull_request_target" ]] && git diff --exit-code network_operator_matrix.json; then
@@ -113,6 +129,14 @@ jobs:
             PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.generate_ci_dashboard \
               --dashboard_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
               --dashboard_html_filepath "${{ env.DASHBOARD_HTML_FILEPATH }}"
+          fi
+
+          if [ "$SIGNED_CHANGED" = true ]; then
+            echo "Generating Signed GPU Operator dashboard..."
+            PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.generate_ci_dashboard \
+              --dashboard_data_filepath "${{ env.SIGNED_DASHBOARD_DATA_FILEPATH }}" \
+              --dashboard_html_filepath "${{ env.SIGNED_DASHBOARD_HTML_FILEPATH }}" \
+              --title "Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift (precompiled/signed)"
           fi
 
           if [ "$NNO_CHANGED" = true ]; then

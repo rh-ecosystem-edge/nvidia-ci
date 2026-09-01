@@ -14,7 +14,10 @@ from gpu_operator_dashboard.fetch_ci_data import (
     OCP_FULL_VERSION, GPU_OPERATOR_VERSION, STATUS_ABORTED)
 
 
-def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]]) -> str:
+DEFAULT_TITLE = "Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift"
+
+
+def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], title: str = DEFAULT_TITLE) -> str:
     """
     Build the final HTML report by:
       1. Reading the header template,
@@ -22,6 +25,7 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]]) -> str:
       3. Reading the footer template and injecting the last-updated time.
     """
     header_template = load_template("header.html")
+    header_template = header_template.replace(DEFAULT_TITLE, title)
     html_content = header_template
     main_table_template = load_template("main_table.html")
     sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
@@ -191,13 +195,15 @@ def main():
                         help="Path to to html file for the dashboard")
     parser.add_argument("--dashboard_data_filepath", required=True,
                         help="Path to the file containing the versions for the dashboard")
+    parser.add_argument("--title", default=DEFAULT_TITLE,
+                        help="Dashboard title (default: %(default)s)")
     args = parser.parse_args()
     with open(args.dashboard_data_filepath, "r") as f:
         ocp_data = json.load(f)
     logger.info(
         f"Loaded JSON data with keys: {list(ocp_data.keys())} from {args.dashboard_data_filepath}")
 
-    html_content = generate_test_matrix(ocp_data)
+    html_content = generate_test_matrix(ocp_data, title=args.title)
 
     with open(args.dashboard_html_filepath, "w", encoding="utf-8") as f:
         f.write(html_content)
