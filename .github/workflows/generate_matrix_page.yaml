@@ -104,9 +104,9 @@ jobs:
             GPU_CHANGED=true
           fi
 
-          # Check if Signed GPU Operator JSON changed
+          # Check if Signed GPU Operator JSON changed (also triggers on new untracked file)
           SIGNED_CHANGED=false
-          if [[ ${{ github.event_name }} == "pull_request_target" ]] && git diff --exit-code gpu_operator_signed_matrix.json; then
+          if [[ ${{ github.event_name }} == "pull_request_target" ]] && git ls-files --error-unmatch gpu_operator_signed_matrix.json 2>/dev/null && git diff --exit-code gpu_operator_signed_matrix.json; then
             echo "Signed GPU Operator: no changes"
           else
             echo "Signed GPU Operator: changes detected"
