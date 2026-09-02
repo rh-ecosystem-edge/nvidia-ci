@@ -45,6 +45,23 @@ jobs:
           SETTINGS_FILE_PATH: ".github/scripts/gpu_operator_versions/settings.json"
           TEST_TO_TRIGGER_FILE_PATH: ".github/scripts/generated-files/tests_to_trigger.txt"
           CHECK_CATALOG_AVAILABILITY: "true"
+      - name: Update Signed Versions
+        id: read_signed_tests
+        run: |
+          mkdir -p $(dirname ${TEST_TO_TRIGGER_FILE_PATH})
+          PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions
+          {
+           echo 'TEST_TRIGGERS_SIGNED<<EOF'
+           cat ${TEST_TO_TRIGGER_FILE_PATH}
+           echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+        env:
+          VERSION_FILE_PATH: ".github/scripts/gpu_operator_versions/signed_versions.json"
+          SETTINGS_FILE_PATH: ".github/scripts/gpu_operator_versions/signed_settings.json"
+          TEST_TO_TRIGGER_FILE_PATH: ".github/scripts/generated-files/signed_tests_to_trigger.txt"
+          TEST_COMMAND_SUFFIX: "-signed"
+          CHECK_CATALOG_AVAILABILITY: "true"
       - name: Create Pull Request
         id: create-pr
         uses: peter-evans/create-pull-request@v7
@@ -57,6 +74,7 @@ jobs:
 
             ```
             ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
+            ${{ steps.read_signed_tests.outputs.TEST_TRIGGERS_SIGNED }}
             /ok-to-test
             /approve
             ```
@@ -74,12 +92,14 @@ jobs:
           GH_TOKEN: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
           PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
           TEST_TRIGGERS: ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
+          TEST_TRIGGERS_SIGNED: ${{ steps.read_signed_tests.outputs.TEST_TRIGGERS_SIGNED }}
         run: |
-          if [ -z "${TEST_TRIGGERS//[[:space:]]/}" ]; then
+          ALL_TRIGGERS="${TEST_TRIGGERS}"$'\n'"${TEST_TRIGGERS_SIGNED}"
+          if [ -z "${ALL_TRIGGERS//[[:space:]]/}" ]; then
             echo "No test triggers to comment; skipping."
             exit 0
           fi
-          gh pr comment "${PR_NUMBER}" --body "${TEST_TRIGGERS}"
+          gh pr comment "${PR_NUMBER}" --body "${ALL_TRIGGERS}"
 
       - name: Notify on failure
         if: failure()

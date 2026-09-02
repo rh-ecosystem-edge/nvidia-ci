@@ -11,7 +11,7 @@ from gpu_operator_versions.catalog_checker import (
 )
 
 # Constants
-test_command_template = "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}"
+test_command_template = "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}{suffix}"
 
 # Version type constants
 VERSION_MASTER = "master"
@@ -198,12 +198,14 @@ def create_tests_matrix(diffs: dict, ocp_releases: list, gpu_releases: list,
 
 
 def create_tests_commands(diffs: dict, ocp_releases: list, gpu_releases: list,
-                         support_matrix: dict, gpu_catalog_entries: list[dict] | None = None) -> set[str]:
+                         support_matrix: dict, gpu_catalog_entries: list[dict] | None = None,
+                         test_command_suffix: str = "") -> set[str]:
     """
     Create test commands from diffs.
 
     Args:
         gpu_catalog_entries: Optional NVIDIA GPU operator catalog entries for availability checking
+        test_command_suffix: Suffix appended to test command job names (e.g., "-signed")
 
     Returns:
         Set of test command strings and comment strings (e.g., warnings)
@@ -218,7 +220,8 @@ def create_tests_commands(diffs: dict, ocp_releases: list, gpu_releases: list,
 
         # Generate test command
         gpu_version_suffix = version2suffix(gpu_version)
-        tests_commands.add(test_command_template.format(ocp_version=ocp_version, gpu_version=gpu_version_suffix))
+        tests_commands.add(test_command_template.format(
+            ocp_version=ocp_version, gpu_version=gpu_version_suffix, suffix=test_command_suffix))
 
     return tests_commands
 
@@ -336,6 +339,13 @@ def main():
     gpu_versions = get_operator_versions(settings)
     ocp_versions = fetch_ocp_versions(settings)
 
+    if settings.signed_gpu_min_channel:
+        min_parts = tuple(int(x) for x in settings.signed_gpu_min_channel.split('.'))
+        gpu_versions = {
+            k: v for k, v in gpu_versions.items()
+            if tuple(int(x) for x in k.split('.')) >= min_parts
+        }
+
     new_versions = {
         VERSION_GPU_MAIN_LATEST: sha,
         VERSION_GPU_OPERATOR: gpu_versions,
@@ -367,12 +377,21 @@ def main():
     # to ensure tests are only generated for versions actually tracked in versions.json
     gpu_releases = get_latest_versions(list(final_versions[VERSION_GPU_OPERATOR].keys()), 2)
 
+    # Filter GPU channels to only those >= signed_gpu_min_channel when running in signed mode
+    if settings.signed_gpu_min_channel:
+        min_parts = tuple(int(x) for x in settings.signed_gpu_min_channel.split('.'))
+        gpu_releases = [
+            g for g in gpu_releases
+            if tuple(int(x) for x in g.split('.')) >= min_parts
+        ]
+
     tests_commands = create_tests_commands(
         diffs,
         ocp_releases,
         gpu_releases,
         settings.support_matrix,
-        gpu_catalog_entries  # Pass GPU operator catalog entries for warning generation
+        gpu_catalog_entries,
+        test_command_suffix=settings.test_command_suffix
     )
     save_tests_commands(tests_commands, settings.tests_to_trigger_file_path)
 

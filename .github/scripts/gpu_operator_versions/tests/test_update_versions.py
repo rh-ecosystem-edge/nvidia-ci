@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from gpu_operator_versions.update_versions import (
     calculate_diffs,
+    create_tests_commands,
     create_tests_matrix,
     filter_new_gpu_versions_by_catalog
 )
@@ -378,6 +379,36 @@ class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
         self.assertIn('gpu-operator', diffs)
         self.assertEqual(diffs['gpu-operator'], {'25.4': '25.4.0'})
         self.assertNotIn('25.3', diffs['gpu-operator'])
+
+
+class TestCreateTestsCommands(unittest.TestCase):
+
+    def test_default_no_suffix(self):
+        """Commands without suffix should match existing behavior."""
+        diff = {'ocp': {'4.20': '4.20.36'}}
+        commands = create_tests_commands(
+            diff, ['4.20'], ['26.3'], default_support_matrix)
+        self.assertIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x', commands)
+
+    def test_signed_suffix(self):
+        """Commands with suffix should append it to job names."""
+        diff = {'ocp': {'4.20': '4.20.36'}}
+        commands = create_tests_commands(
+            diff, ['4.20'], ['26.3'], default_support_matrix,
+            test_command_suffix='-signed')
+        self.assertIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x-signed', commands)
+        self.assertNotIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x', commands)
+
+    def test_signed_suffix_master(self):
+        """Master bundle changes with suffix should produce master-signed commands."""
+        diff = {'gpu-main-latest': 'B'}
+        commands = create_tests_commands(
+            diff, ['4.21', '4.22'], ['26.3'], default_support_matrix,
+            test_command_suffix='-signed')
+        self.assertTrue(
+            all('-signed' in cmd for cmd in commands if cmd.startswith('/test')))
+        self.assertTrue(
+            any('master-signed' in cmd for cmd in commands))
 
 
 if __name__ == '__main__':
