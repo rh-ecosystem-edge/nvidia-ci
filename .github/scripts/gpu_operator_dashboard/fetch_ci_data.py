@@ -42,7 +42,7 @@ def build_test_result_regex(job_suffix=""):
                     and the "master" variant is excluded.
     """
     if job_suffix:
-        gpu_version_pattern = r"\d+-\d+-x"
+        gpu_version_pattern = r"\d+-\d+-x|master"
         suffix = re.escape(job_suffix)
     else:
         gpu_version_pattern = r"\d+-\d+-x|master"
@@ -435,7 +435,7 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
         results_by_ocp[ocp_version]["job_history_links"].add(job_history_url)
 
         # Determine if this is a bundle test (job ends with '-master') or release test
-        if job_name.endswith('-master'):
+        if gpu_suffix == 'master':
             results_by_ocp[ocp_version]["bundle_tests"].append(result.to_dict())
         else:
             # Only include in release tests if it has exact semantic versions and is not ABORTED
