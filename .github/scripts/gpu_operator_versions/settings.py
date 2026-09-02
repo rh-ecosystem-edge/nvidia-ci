@@ -10,12 +10,15 @@ class Settings:
     request_timeout_sec: int
     support_matrix: dict
     check_catalog_availability: bool
+    test_command_suffix: str
+    signed_gpu_min_channel: str
 
     def __init__(self):
         self.version_file_path = os.getenv("VERSION_FILE_PATH")
         self.tests_to_trigger_file_path = os.getenv("TEST_TO_TRIGGER_FILE_PATH")
         self.request_timeout_sec = int(os.getenv("REQUEST_TIMEOUT_SECONDS", 30))
         self.check_catalog_availability = os.getenv("CHECK_CATALOG_AVAILABILITY", "false").lower() == "true"
+        self.test_command_suffix = os.getenv("TEST_COMMAND_SUFFIX", "")
 
         # Settings file can be specified via env var or defaults to settings.json in same directory
         self.settings_file_path = os.getenv(
@@ -30,6 +33,9 @@ class Settings:
 
         # Load support matrix
         self.support_matrix = self._load_support_matrix()
+
+        # Minimum GPU operator channel for signed/precompiled tests (e.g., "26.3")
+        self.signed_gpu_min_channel = self.support_matrix.get("signed_gpu_min_channel", "")
 
         # Get ignored_versions from support matrix or fall back to env var
         self.ignored_versions = self.support_matrix.get(
