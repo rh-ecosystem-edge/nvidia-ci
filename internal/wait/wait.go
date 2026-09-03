@@ -143,36 +143,25 @@ func DeploymentCreated(apiClient *clients.Settings, deploymentName, deploymentNa
 	return err == nil
 }
 
-// NodeLabelExists waits for at least one node with the specified label selector to have a label with the given key and value.
+// NodeLabelExists waits for at least one node matching the nodeSelector to also have a label with the given key and value.
 func NodeLabelExists(apiClient *clients.Settings, labelKey, labelValue string, nodeSelector labels.Set, pollInterval,
 	timeout time.Duration) error {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Waiting for node label '%s'='%s' on nodes with selector: %v", labelKey, labelValue, nodeSelector)
+	// Merge nodeSelector with the target label so the API returns only nodes that match both.
+	mergedSelector := make(labels.Set, len(nodeSelector)+1)
+	for k, v := range nodeSelector {
+		mergedSelector[k] = v
+	}
+	mergedSelector[labelKey] = labelValue
+
 	return wait.PollUntilContextTimeout(
 		context.TODO(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-			nodeBuilders, err := nodes.List(apiClient, metav1.ListOptions{LabelSelector: nodeSelector.String()})
-
+			nodeBuilders, err := nodes.List(apiClient, metav1.ListOptions{LabelSelector: mergedSelector.String()})
 			if err != nil {
 				glog.V(gpuparams.GpuLogLevel).Infof("Error listing nodes: %v", err)
-
 				return false, err
 			}
-
-			for _, node := range nodeBuilders {
-				glog.V(gpuparams.Gpu10LogLevel).Infof("Checking node '%s' for label '%s'", node.Object.Name, labelKey)
-				if value, ok := node.Object.Labels[labelKey]; ok && value == labelValue {
-					glog.V(gpuparams.Gpu100LogLevel).Infof("Found label '%s' with value '%s' on node '%s'", labelKey, labelValue, node.Object.Name)
-
-					// this exits out of the PollUntilContextTimeout()
-					return true, nil
-				} else {
-					glog.V(gpuparams.Gpu10LogLevel).Infof("Label '%s'='%s' not found on node '%s'", labelKey, labelValue, node.Object.Name)
-					return false, nil
-				}
-			}
-
-			glog.V(gpuparams.Gpu10LogLevel).Infof("Label '%s'='%s' not found yet, retrying...", labelKey, labelValue)
-
-			return false, nil
+			return len(nodeBuilders) > 0, nil
 		})
 }
 
