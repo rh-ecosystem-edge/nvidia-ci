@@ -6,7 +6,7 @@ from unittest import mock, TestCase
 
 from gpu_operator_dashboard.fetch_ci_data import (
     merge_and_save_results, OCP_FULL_VERSION, GPU_OPERATOR_VERSION,
-    STATUS_SUCCESS, STATUS_FAILURE, STATUS_ABORTED)
+    DRIVER_BRANCH, STATUS_SUCCESS, STATUS_FAILURE, STATUS_ABORTED)
 
 # Testing final logic of generate_ci_dashboard.py which stores the JSON test data
 
@@ -393,6 +393,53 @@ class TestSaveToJson(TestCase):
         # Should keep only the newer SUCCESS result
         self.assertEqual(len(saved_data["4.14"]["release_tests"]), 1)
         self.assertEqual(saved_data["4.14"]["release_tests"][0]["job_timestamp"], "1712345680")
+
+
+    def test_driver_branch_preserved_through_merge(self):
+        """Test that driver_branch is preserved when present and absent when not."""
+        item_with_branch = {
+            OCP_FULL_VERSION: "4.22.13",
+            GPU_OPERATOR_VERSION: "26.3.3",
+            "test_status": STATUS_SUCCESS,
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/648/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-3-x-signed/100",
+            "job_timestamp": "1788519296",
+            DRIVER_BRANCH: "580.178.04"
+        }
+        item_without_branch = {
+            OCP_FULL_VERSION: "4.22.12",
+            GPU_OPERATOR_VERSION: "26.3.3",
+            "test_status": STATUS_SUCCESS,
+            "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/647/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-3-x/200",
+            "job_timestamp": "1788519200",
+        }
+
+        new_data = {
+            "4.22": {
+                "release_tests": [item_with_branch],
+                "bundle_tests": []
+            }
+        }
+        existing_data = {
+            "4.22": {
+                "bundle_tests": [],
+                "release_tests": [item_without_branch]
+            }
+        }
+
+        data_file = os.path.join(self.output_dir, self.test_file)
+        merge_and_save_results(new_data, data_file, existing_data)
+
+        with open(data_file, 'r') as f:
+            saved_data = json.load(f)
+
+        results = saved_data["4.22"]["release_tests"]
+        self.assertEqual(len(results), 2)
+
+        result_with = next(r for r in results if r[OCP_FULL_VERSION] == "4.22.13")
+        self.assertEqual(result_with[DRIVER_BRANCH], "580.178.04")
+
+        result_without = next(r for r in results if r[OCP_FULL_VERSION] == "4.22.12")
+        self.assertNotIn(DRIVER_BRANCH, result_without)
 
 
 if __name__ == '__main__':

@@ -22,6 +22,7 @@ from common.data_fetching import int_or_none
 # Constants for version field names
 OCP_FULL_VERSION = "ocp_full_version"
 GPU_OPERATOR_VERSION = "gpu_operator_version"
+DRIVER_BRANCH = "driver_branch"
 
 # Constants for job statuses
 STATUS_SUCCESS = "SUCCESS"
@@ -87,15 +88,19 @@ class TestResult:
     test_status: str
     prow_job_url: str
     job_timestamp: str
+    driver_branch: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             OCP_FULL_VERSION: self.ocp_full_version,
             GPU_OPERATOR_VERSION: self.gpu_operator_version,
             "test_status": self.test_status,
             "prow_job_url": self.prow_job_url,
             "job_timestamp": self.job_timestamp,
         }
+        if self.driver_branch:
+            result[DRIVER_BRANCH] = self.driver_branch
+        return result
 
     def composite_key(self) -> TestResultKey:
         repo, pr_number, job_name, build_id = extract_build_components(self.prow_job_url)
@@ -160,18 +165,20 @@ def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, An
     return all_items
 
 
-def fetch_pr_files(pr_number: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+def fetch_pr_files(pr_number: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Fetch all required file types for a PR using targeted filtering."""
     logger.info(f"Fetching files for PR #{pr_number}")
 
-    # Fetch the 3 file types we need using glob patterns
+    # Fetch the 4 file types we need using glob patterns
     all_finished_files = fetch_filtered_files(pr_number, "**/finished.json")
     ocp_version_files = fetch_filtered_files(
         pr_number, "**/gpu-operator-e2e/artifacts/ocp.version")
     gpu_version_files = fetch_filtered_files(
         pr_number, "**/gpu-operator-e2e/artifacts/operator.version")
+    driver_branch_files = fetch_filtered_files(
+        pr_number, "**/gpu-operator-e2e/artifacts/driver.branches")
 
-    return all_finished_files, ocp_version_files, gpu_version_files
+    return all_finished_files, ocp_version_files, gpu_version_files, driver_branch_files
 
 
 def extract_build_components(path: str) -> Tuple[str, str, str, str]:
@@ -268,16 +275,17 @@ def filter_gpu_finished_files(all_finished_files: List[Dict[str, Any]]) -> Tuple
 def build_files_lookup(
     finished_files: List[Dict[str, Any]],
     ocp_version_files: List[Dict[str, Any]],
-    gpu_version_files: List[Dict[str, Any]]
+    gpu_version_files: List[Dict[str, Any]],
+    driver_branch_files: Optional[List[Dict[str, Any]]] = None
 ) -> Tuple[Dict[Tuple[str, str, str], Dict[str, Dict[str, Any]]], Set[Tuple[str, str, str]]]:
     """Build a single lookup dictionary mapping build keys to all their related files.
 
     Returns a dictionary where each key (pr_number, job_name, build_id) maps to a structure containing
-    all related files: {finished: file, ocp: file, gpu: file}
+    all related files: {finished: file, ocp: file, gpu: file, driver_branch: file}
 
     Much cleaner than maintaining three separate lookup dictionaries.
     """
-    build_files = {}  # {(pr_number, job_name, build_id): {finished: file, ocp: file, gpu: file}}
+    build_files = {}  # {(pr_number, job_name, build_id): {finished: file, ocp: file, gpu: file, driver_branch: file}}
     all_builds = set()
 
     # Combine all files into a single list with their file type
@@ -288,6 +296,8 @@ def build_files_lookup(
         all_files_with_type.append((file_item, 'ocp'))
     for file_item in gpu_version_files:
         all_files_with_type.append((file_item, 'gpu'))
+    for file_item in (driver_branch_files or []):
+        all_files_with_type.append((file_item, 'driver_branch'))
 
     # Process all files in a single pass - parse each path only once
     for file_item, file_type in all_files_with_type:
@@ -367,16 +377,25 @@ def process_single_build(
     ocp_version_file = build_file_set.get('ocp')
     gpu_version_file = build_file_set.get('gpu')
 
+    # Read driver branch artifact if present
+    driver_branch = ""
+    driver_branch_file = build_file_set.get('driver_branch')
+    if driver_branch_file:
+        driver_branch = fetch_gcs_file_content(driver_branch_file['name']).strip()
+        logger.info(f"Found driver branch for build {build_id}: {driver_branch}")
+
     if ocp_version_file and gpu_version_file:
         exact_ocp = fetch_gcs_file_content(ocp_version_file['name']).strip()
         exact_gpu_version = fetch_gcs_file_content(
             gpu_version_file['name']).strip()
         result = TestResult(exact_ocp, exact_gpu_version,
-                            status, job_url, timestamp)
+                            status, job_url, timestamp,
+                            driver_branch=driver_branch)
     else:
         # Use base versions
         result = TestResult(ocp_version, gpu_suffix,
-                            status, job_url, timestamp)
+                            status, job_url, timestamp,
+                            driver_branch=driver_branch)
 
     return result
 
@@ -389,7 +408,7 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
     logger.info(f"Fetching test data for PR #{pr_number}")
 
     # Step 1: Fetch all required files
-    all_finished_files, ocp_version_files, gpu_version_files = fetch_pr_files(
+    all_finished_files, ocp_version_files, gpu_version_files, driver_branch_files = fetch_pr_files(
         pr_number)
 
     # Step 2: Filter to get the preferred finished.json files (nested when available, otherwise top-level)
@@ -397,7 +416,7 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
 
     # Step 3: Build single unified lookup for all file types
     build_files, all_builds = build_files_lookup(
-        finished_files, ocp_version_files, gpu_version_files)
+        finished_files, ocp_version_files, gpu_version_files, driver_branch_files)
 
     logger.info(f"Found {len(all_builds)} builds to process")
 
