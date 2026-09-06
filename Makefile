@@ -77,6 +77,10 @@ run-mig-tests: get-gpu-operator-must-gather get-nfd-must-gather
 	@echo "Executing mig-tests runner script"
 	scripts/mig-tests.sh $(ARGS)
 
+run-dra-native-tests: get-gpu-operator-must-gather get-nfd-must-gather ## Run the dra-native test suite (NVIDIADriver/GPUCluster, GPU Operator >= 26.7.0)
+	@echo "Executing dra-native test-runner script"
+	TEST_FEATURES=dra-native scripts/test-runner.sh $(ARGS)
+
 test-bm-arm-deployment: ## Test bare-metal ARM deployment
 	/bin/bash tests/gpu-operator-arm-bm/uninstall-gpu-operator.sh
 	/bin/bash tests/gpu-operator-arm-bm/install-gpu-operator.sh

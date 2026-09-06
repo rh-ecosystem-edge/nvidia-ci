@@ -86,6 +86,11 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 - `NVIDIAGPU_USE_PRECOMPILED_DRIVER`: boolean flag to enable precompiled/signed driver testing. When set to `true`, the test discovers the latest precompiled driver version from `registry.redhat.io/nvidia/gpu-driver-rhel9` and patches the ClusterPolicy to use it - Default value is `false` - _optional_
 - `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
 
+DRA Native-specific parameters (`tests/dra-native`, see [DRA Native test](#dra-native-test) section below) for the script are controlled by the following environment variables:
+- `DRANATIVE_CATALOGSOURCE`: custom catalogsource to install the GPU Operator from. If not specified, the default "certified-operators" catalog is used - _optional_
+- `DRANATIVE_SUBSCRIPTION_CHANNEL`: subscription channel to install the GPU Operator from. Must resolve to a GPU Operator version >= 26.7.0 for the test to exercise anything (e.g. `v26.7`). If not specified, the package's default channel is used, which may resolve to a version older than 26.7.0, in which case the test is skipped - _optional, but effectively required to reach a meaningful result_
+- `DRANATIVE_CLEANUP`: boolean flag to clean up all resources created by the test (GPUCluster, NVIDIADriver, CSV, Subscription, OperatorGroup, Namespace, NFD) after execution - Default value is true - _required only when cleanup is not needed_
+
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
 - `NVIDIANETWORK_CATALOGSOURCE`: custom catalogsource to be used.  If not specified, the default "certified-operators" catalog is used - _optional_
 - `NVIDIANETWORK_SUBSCRIPTION_CHANNEL`: specific subscription channel to be used.  If not specified, the latest channel is used - _optional_
@@ -230,6 +235,58 @@ on a single time-sliced GPU.
 $ export TEST_FEATURES="timeslicing"
 $ export TEST_LABELS='nvidia-ci,timeslicing'
 $ make run-tests
+```
+
+### DRA Native test
+
+The `dra-native` suite (`tests/dra-native`) validates GPU Operator's native/CR-based DRA
+(Dynamic Resource Allocation) enablement stack, introduced in GPU Operator **26.7.0**.
+Unlike the pre-release DRA suites (`tests/dra/gpuallocation`, `tests/dra/computedomain`),
+which assume a `ClusterPolicy` is already deployed and install the DRA driver separately via
+a Helm chart, this suite deploys the GPU Operator and lets it manage the DRA driver itself
+through two new, GPU-Operator-owned custom resources: `NVIDIADriver` and `GPUCluster`.
+`ClusterPolicy` is never created by this suite.
+
+It is a fully standalone, self-contained suite (it does not need to run after any other
+suite) and is recommended to be executed through the `make run-dra-native-tests` make target.
+
+#### What it does
+
+1. Installs NFD, the same way the base `nvidiagpu` suite does.
+2. Installs the GPU Operator via OLM (namespace, OperatorGroup, Subscription, waits for the
+   operator Deployment and its CSV to succeed).
+3. Checks whether the installed GPU Operator version serves the `GPUCluster` CRD. If it
+   doesn't (i.e. the installed version is < 26.7.0), the test is skipped.
+4. Creates a minimal `NVIDIADriver` and a minimal `GPUCluster` custom resource, built directly
+   from the CSV's `alm-examples` (the operator's own suggested minimal samples), and waits for
+   both to reach the `ready` state.
+5. Validates GPU functionality by executing `nvidia-smi` inside the driver pod(s) rendered by
+   `NVIDIADriver`.
+
+#### Steps to run the DRA Native test:
+
+```bash
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DUMP_FAILED_TESTS=true
+$ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-dra-native-logs-dir
+$ export TEST_TRACE=true
+$ export VERBOSE_LEVEL=100
+$ export DRANATIVE_CATALOGSOURCE="certified-operators"
+$ export DRANATIVE_SUBSCRIPTION_CHANNEL="v26.7"  # must resolve to GPU Operator >= 26.7.0
+$ make run-dra-native-tests
+Executing dra-native test-runner script
+scripts/test-runner.sh
+ginkgo -timeout=24h --keep-going --require-suite -r ./tests/dra-native
+```
+
+#### Cleanup:
+
+By default (`DRANATIVE_CLEANUP=true`), the GPUCluster, NVIDIADriver, CSV, Subscription,
+OperatorGroup, GPU Operator namespace and NFD are all removed at the end of the run. To leave
+them in place for inspection (e.g. to manually inspect the rendered DRA driver pods, or debug
+a failure), set:
+```bash
+$ export DRANATIVE_CLEANUP=false
 ```
 
 ### Examples of Testing GPU Operator end-to-end

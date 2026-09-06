@@ -19,6 +19,20 @@ const (
 	ClusterPolicyName                = "gpu-cluster-policy"
 	OperatorDefaultMasterBundleImage = "ghcr.io/nvidia/gpu-operator/gpu-operator-bundle:main-latest"
 
+	// GPUClusterName is the required metadata.name of the singleton GPUCluster CR (the
+	// GPU Operator's DRA-based software-enablement stack, introduced in GPU Operator
+	// 26.7.0). Upstream enforces this exact name via CRD validation.
+	GPUClusterName = "gpu-cluster"
+
+	// GPUClusterAPIGroup, GPUClusterAPIVersion and GPUClusterResource identify the
+	// GPUCluster CRD (nvidia.com/v1alpha1, resource "gpuclusters"). A generated Go type for
+	// GPUCluster is not yet available in the vendored github.com/NVIDIA/gpu-operator module,
+	// so GPUClusterBuilder interacts with it as an unstructured/dynamic resource using these.
+	GPUClusterAPIGroup   = "nvidia.com"
+	GPUClusterAPIVersion = "v1alpha1"
+	GPUClusterResource   = "gpuclusters"
+	GPUClusterKind       = "GPUCluster"
+
 	CustomCatalogSourcePublisherName = "Red Hat"
 
 	CustomCatalogSourceDisplayName = "Certified Operators Custom"

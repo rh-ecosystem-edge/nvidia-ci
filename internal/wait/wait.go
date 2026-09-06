@@ -19,6 +19,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// stateReady is the common "ready" value used by the .status.state field of ClusterPolicy,
+// NVIDIADriver and GPUCluster.
+const stateReady = "ready"
+
 // ClusterPolicyReady Waits until clusterPolicy is Ready.
 func ClusterPolicyReady(apiClient *clients.Settings, clusterPolicyName string, pollInterval, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(
@@ -31,7 +35,7 @@ func ClusterPolicyReady(apiClient *clients.Settings, clusterPolicyName string, p
 				return false, err
 			}
 
-			if clusterPolicy.Object != nil && clusterPolicy.Object.Status.State == "ready" {
+			if clusterPolicy.Object != nil && clusterPolicy.Object.Status.State == stateReady {
 				glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy %s in now in %s state",
 					clusterPolicy.Object.Name, clusterPolicy.Object.Status.State)
 
@@ -78,6 +82,63 @@ func ClusterPolicyNotReady(apiClient *clients.Settings, clusterPolicyName string
 
 			glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy %s is currently in %s state",
 				clusterPolicy.Object.Name, clusterPolicy.Object.Status.State)
+
+			return false, nil
+		})
+}
+
+// NVIDIADriverReady waits until the named NVIDIADriver reaches the "ready" state.
+func NVIDIADriverReady(apiClient *clients.Settings, nvidiaDriverName string, pollInterval, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(
+		context.TODO(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			nvidiaDriverBuilder, err := nvidiagpu.PullNVIDIADriver(apiClient, nvidiaDriverName)
+
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("NVIDIADriver pull from cluster error: %s\n", err)
+
+				return false, nil
+			}
+
+			if nvidiaDriverBuilder.Object != nil && nvidiaDriverBuilder.Object.Status.State == stateReady {
+				glog.V(gpuparams.GpuLogLevel).Infof("NVIDIADriver %s is now in %s state",
+					nvidiaDriverBuilder.Object.Name, nvidiaDriverBuilder.Object.Status.State)
+
+				return true, nil
+			}
+
+			if nvidiaDriverBuilder.Object == nil {
+				glog.V(gpuparams.GpuLogLevel).Info("NVIDIADriver object is nil")
+
+				return false, nil
+			}
+
+			glog.V(gpuparams.GpuLogLevel).Infof("NVIDIADriver %s is currently in %s state",
+				nvidiaDriverBuilder.Object.Name, nvidiaDriverBuilder.Object.Status.State)
+
+			return false, nil
+		})
+}
+
+// GPUClusterReady waits until the named GPUCluster reaches the "ready" state.
+func GPUClusterReady(apiClient *clients.Settings, gpuClusterName string, pollInterval, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(
+		context.TODO(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			gpuClusterBuilder, err := nvidiagpu.PullGPUCluster(apiClient, gpuClusterName)
+
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("GPUCluster pull from cluster error: %s\n", err)
+
+				return false, nil
+			}
+
+			state := gpuClusterBuilder.State()
+			if state == stateReady {
+				glog.V(gpuparams.GpuLogLevel).Infof("GPUCluster %s is now in %s state", gpuClusterName, state)
+
+				return true, nil
+			}
+
+			glog.V(gpuparams.GpuLogLevel).Infof("GPUCluster %s is currently in %q state", gpuClusterName, state)
 
 			return false, nil
 		})
