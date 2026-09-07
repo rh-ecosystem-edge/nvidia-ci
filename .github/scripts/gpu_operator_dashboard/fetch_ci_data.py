@@ -534,22 +534,21 @@ def merge_release_tests(
 
     Note: Both inputs are filtered to exclude ABORTED and non-exact semantic versions.
     """
-    # Group all results by version combination
+    # Group all results by version combination.
+    # New results go first so that on equal timestamps the stable sort
+    # keeps freshly fetched data ahead of existing baseline entries.
     results_by_version = {}  # {(ocp_version, gpu_version): [results]}
 
-    # Process existing results (apply filtering to clean up legacy data)
+    for item in new_tests:
+        result = TestResult(**item)
+        if result.has_exact_versions() and result.test_status != STATUS_ABORTED:
+            version_key = get_version_key(result)
+            results_by_version.setdefault(version_key, []).append(result)
+
     for item in existing_tests:
         result = TestResult(**item)
         version_key = get_version_key(result)
         results_by_version.setdefault(version_key, []).append(result)
-
-    # Process new results (should already be filtered, but apply for safety)
-    for item in new_tests:
-        result = TestResult(**item)
-        # Filter: only include results with exact semantic versions and not ABORTED
-        if result.has_exact_versions() and result.test_status != STATUS_ABORTED:
-            version_key = get_version_key(result)
-            results_by_version.setdefault(version_key, []).append(result)
 
     # Keep exactly one result per version key
     final_results = []
