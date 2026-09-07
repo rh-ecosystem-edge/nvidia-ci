@@ -71,7 +71,7 @@ Pass ginkgo CLI parameters via `ARGS`: `make run-tests ARGS="-- --single.mig.pro
 
 ### Linting
 
-golangci-lint v2 with config in `.golangci.y ~/tmpml`. Enabled linters beyond defaults: `decorder`, `exhaustive`, `goconst`, `importas`, `loggercheck`, `wastedassign`, `nolintlint`, `revive`. File naming enforced by revive's `filename-format` rule: `^[a-z][a-z0-9]*(_suite_test|_test|_linux|_darwin|_windows|_amd64|_arm64)?\.go$`.
+golangci-lint v2 with config in `.golangci.yml`. Enabled linters beyond defaults: `decorder`, `exhaustive`, `goconst`, `importas`, `loggercheck`, `wastedassign`, `nolintlint`, `revive`. File naming enforced by revive's `filename-format` rule: `^[a-z][a-z0-9]*(_suite_test|_test|_linux|_darwin|_windows|_amd64|_arm64)?\.go$`.
 
 ### Dashboard local preview
 
