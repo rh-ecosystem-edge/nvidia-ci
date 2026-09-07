@@ -11,7 +11,7 @@ from common.templates import load_template
 from common.html_builders import build_toc, build_notes
 from common.validation import has_valid_semantic_versions
 from gpu_operator_dashboard.fetch_ci_data import (
-    OCP_FULL_VERSION, GPU_OPERATOR_VERSION, STATUS_ABORTED)
+    OCP_FULL_VERSION, GPU_OPERATOR_VERSION, DRIVER_BRANCH, STATUS_ABORTED)
 
 
 DEFAULT_TITLE = "Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift"
@@ -31,6 +31,13 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], title: str = DEFAU
     sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
     html_content += build_toc(sorted_ocp_keys)
 
+    # Check if any result has driver_branch data
+    show_driver_branch = any(
+        r.get(DRIVER_BRANCH)
+        for version_data in ocp_data.values()
+        for r in version_data.get("release_tests", [])
+    )
+
     for ocp_key in sorted_ocp_keys:
         notes = ocp_data[ocp_key].get("notes", [])
         bundle_results = ocp_data[ocp_key].get("bundle_tests", [])
@@ -45,13 +52,15 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], title: str = DEFAU
             if has_valid_semantic_versions(r, operator_key=GPU_OPERATOR_VERSION) and r.get("test_status") != STATUS_ABORTED:
                 regular_results.append(r)
         notes_html = build_notes(notes)
-        table_rows_html = build_catalog_table_rows(regular_results)
+        table_rows_html = build_catalog_table_rows(regular_results, show_driver_branch)
         bundle_info_html = build_bundle_info(bundle_results)
         table_block = main_table_template
         table_block = table_block.replace("{ocp_key}", ocp_key)
         table_block = table_block.replace("{table_rows}", table_rows_html)
         table_block = table_block.replace("{bundle_info}", bundle_info_html)
         table_block = table_block.replace("{notes}", notes_html)
+        extra_headers = "<th>Driver branch</th>" if show_driver_branch else ""
+        table_block = table_block.replace("{extra_headers}", extra_headers)
         html_content += table_block
 
     footer_template = load_template("footer.html")
@@ -61,7 +70,7 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], title: str = DEFAU
     return html_content
 
 
-def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
+def build_catalog_table_rows(regular_results: List[Dict[str, Any]], show_driver_branch: bool = False) -> str:
     """
     Build the <tr> rows for the table, grouped by the full OCP version.
 
@@ -134,10 +143,15 @@ def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
 
         gpu_links_html = ", ".join(gpu_links)
 
+        driver_branch_cell = ""
+        if show_driver_branch:
+            branches = sorted({r.get(DRIVER_BRANCH, "") for r in sorted_results} - {""})
+            driver_branch_cell = f'\n          <td>{", ".join(branches)}</td>'
+
         rows_html += f"""
         <tr>
           <td class="version-cell">{ocp_full}</td>
-          <td>{gpu_links_html}</td>
+          <td>{gpu_links_html}</td>{driver_branch_cell}
         </tr>
         """
 
