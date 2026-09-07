@@ -71,7 +71,15 @@ Pass ginkgo CLI parameters via `ARGS`: `make run-tests ARGS="-- --single.mig.pro
 
 ### Linting
 
-golangci-lint v2 with config in `.golangci.yml`. Enabled linters beyond defaults: `decorder`, `exhaustive`, `goconst`, `importas`, `loggercheck`, `wastedassign`, `nolintlint`, `revive`. File naming enforced by revive's `filename-format` rule: `^[a-z][a-z0-9]*(_suite_test|_test|_linux|_darwin|_windows|_amd64|_arm64)?\.go$`.
+golangci-lint v2 with config in `.golangci.y ~/tmpml`. Enabled linters beyond defaults: `decorder`, `exhaustive`, `goconst`, `importas`, `loggercheck`, `wastedassign`, `nolintlint`, `revive`. File naming enforced by revive's `filename-format` rule: `^[a-z][a-z0-9]*(_suite_test|_test|_linux|_darwin|_windows|_amd64|_arm64)?\.go$`.
+
+### Dashboard local preview
+
+When generating dashboard HTML locally for preview, copy `styles.css` from `gh-pages` into the output directory so the browser finds it:
+```bash
+git show upstream/gh-pages:styles.css > /tmp/styles.css
+```
+Then generate HTML into the same directory (`/tmp/`).
 
 ### Vendoring
 
