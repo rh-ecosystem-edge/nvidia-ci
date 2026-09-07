@@ -31,11 +31,13 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], title: str = DEFAU
     sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
     html_content += build_toc(sorted_ocp_keys)
 
-    # Check if any result has driver_branch data
+    # Check if any renderable result has driver_branch data
     show_driver_branch = any(
         r.get(DRIVER_BRANCH)
         for version_data in ocp_data.values()
         for r in version_data.get("release_tests", [])
+        if has_valid_semantic_versions(r, operator_key=GPU_OPERATOR_VERSION)
+        and r.get("test_status") != STATUS_ABORTED
     )
 
     for ocp_key in sorted_ocp_keys:
@@ -146,7 +148,8 @@ def build_catalog_table_rows(regular_results: List[Dict[str, Any]], show_driver_
         driver_branch_cell = ""
         if show_driver_branch:
             branches = sorted({r.get(DRIVER_BRANCH, "") for r in sorted_results} - {""})
-            driver_branch_cell = f'\n          <td>{", ".join(branches)}</td>'
+            escaped = [html.escape(b) for b in branches]
+            driver_branch_cell = f'\n          <td>{", ".join(escaped)}</td>'
 
         rows_html += f"""
         <tr>
