@@ -547,8 +547,9 @@ def merge_release_tests(
 
     for item in existing_tests:
         result = TestResult(**item)
-        version_key = get_version_key(result)
-        results_by_version.setdefault(version_key, []).append(result)
+        if result.has_exact_versions() and result.test_status != STATUS_ABORTED:
+            version_key = get_version_key(result)
+            results_by_version.setdefault(version_key, []).append(result)
 
     # Keep exactly one result per version key
     final_results = []
