@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import json
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Set
@@ -476,8 +477,11 @@ def process_closed_prs(results_by_ocp: Dict[str, Dict[str, List[Dict[str, Any]]]
               "per_page": "100", "page": "1"}
     headers = {
         "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
+        "X-GitHub-Api-Version": "2022-11-28",
     }
+    token = os.getenv("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     response_data = http_get_json(url, params=params, headers=headers)
     for pr in response_data:
         pr_number = str(pr["number"])
