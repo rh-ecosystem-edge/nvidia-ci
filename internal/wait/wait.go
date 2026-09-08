@@ -19,9 +19,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-// stateReady is the common "ready" value used by the .status.state field of ClusterPolicy,
-// NVIDIADriver and GPUCluster.
-const stateReady = "ready"
+// stateReady and stateNotReady are the common "ready"/"notReady" values used by the
+// .status.state field of ClusterPolicy, NVIDIADriver and GPUCluster.
+const (
+	stateReady    = "ready"
+	stateNotReady = "notReady"
+)
 
 // ClusterPolicyReady Waits until clusterPolicy is Ready.
 func ClusterPolicyReady(apiClient *clients.Settings, clusterPolicyName string, pollInterval, timeout time.Duration) error {
@@ -68,7 +71,7 @@ func ClusterPolicyNotReady(apiClient *clients.Settings, clusterPolicyName string
 				return false, err
 			}
 
-			if clusterPolicy.Object != nil && clusterPolicy.Object.Status.State == "notReady" {
+			if clusterPolicy.Object != nil && clusterPolicy.Object.Status.State == stateNotReady {
 				glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy %s is now in %s state",
 					clusterPolicy.Object.Name, clusterPolicy.Object.Status.State)
 

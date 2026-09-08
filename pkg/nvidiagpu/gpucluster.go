@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
@@ -14,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	apiwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 )
@@ -207,6 +209,42 @@ func (builder *GPUClusterBuilder) Delete() (*GPUClusterBuilder, error) {
 	builder.Object = nil
 
 	return builder, nil
+}
+
+// DeleteAndWait removes a GPUCluster and waits for it to be fully gone (i.e. for the
+// "gpucluster.nvidia.com/dra-resourceclaim" finalizer it carries to be cleared) before
+// returning. This matters because that finalizer is processed by the GPU Operator's own
+// controller: callers that tear down the operator's namespace/Subscription/CSV right after
+// issuing the delete (without waiting) risk killing that controller before it clears the
+// finalizer, permanently orphaning the object and leaving the namespace stuck Terminating.
+func (builder *GPUClusterBuilder) DeleteAndWait(timeout time.Duration) error {
+	if valid, err := builder.validate(); !valid {
+		return err
+	}
+
+	glog.V(100).Infof("Deleting GPUCluster %s and waiting for the removal to complete", builder.Definition.GetName())
+
+	if _, err := builder.Delete(); err != nil {
+		return err
+	}
+
+	return apiwait.PollUntilContextTimeout(
+		context.TODO(), 2*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+			_, err := builder.Get()
+			if err == nil {
+				// Object still exists (e.g. a finalizer is still pending); keep polling.
+				return false, nil
+			}
+
+			if k8serrors.IsNotFound(err) {
+				return true, nil
+			}
+
+			// Any other error (transient API failure, RBAC, etc.) must not be mistaken for
+			// successful deletion; propagate it so the caller can see the real problem
+			// instead of proceeding as if the finalizer had already cleared.
+			return false, err
+		})
 }
 
 // Create makes a GPUCluster in the cluster and stores the created object in the struct.

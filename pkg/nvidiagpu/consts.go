@@ -33,6 +33,16 @@ const (
 	GPUClusterResource   = "gpuclusters"
 	GPUClusterKind       = "GPUCluster"
 
+	// NativeDRAOwnerLabelKey/NativeDRAOwnerLabelValue mark an NVIDIADriver object as created
+	// by this test suite's native-dra testcase. NVIDIADriver has no enforced/well-known name
+	// (unlike GPUCluster), so cleanup code that needs to discover an instance by listing
+	// (e.g. a standalone cleanup run in a separate process that doesn't have the exact name in
+	// memory) must scope that list to this label, never list unfiltered: an unfiltered list
+	// would also match - and risk deleting - a cluster's pre-existing native DRA installation
+	// that this suite never created.
+	NativeDRAOwnerLabelKey   = "nvidia-ci.rh-ecosystem-edge.io/created-by"
+	NativeDRAOwnerLabelValue = "native-dra-test"
+
 	CustomCatalogSourcePublisherName = "Red Hat"
 
 	CustomCatalogSourceDisplayName = "Certified Operators Custom"

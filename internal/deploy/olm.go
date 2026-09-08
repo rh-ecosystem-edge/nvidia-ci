@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
+	apiwait "k8s.io/apimachinery/pkg/util/wait"
 )
 
 // Default timeouts/poll intervals used by InstallOperatorFromCatalog when the corresponding
@@ -19,6 +21,8 @@ const (
 	defaultDeploymentCreationCheckInterval = 30 * time.Second
 	defaultDeploymentCreationTimeout       = 4 * time.Minute
 	defaultDeploymentReadyTimeout          = 4 * time.Minute
+	defaultInstalledCSVCheckInterval       = 10 * time.Second
+	defaultInstalledCSVTimeout             = 5 * time.Minute
 	defaultCSVSucceededCheckInterval       = 60 * time.Second
 	defaultCSVSucceededTimeout             = 15 * time.Minute
 )
@@ -57,6 +61,8 @@ type OLMInstallConfig struct {
 	DeploymentCreationCheckInterval time.Duration
 	DeploymentCreationTimeout       time.Duration
 	DeploymentReadyTimeout          time.Duration
+	InstalledCSVCheckInterval       time.Duration
+	InstalledCSVTimeout             time.Duration
 	CSVSucceededCheckInterval       time.Duration
 	CSVSucceededTimeout             time.Duration
 }
@@ -162,23 +168,22 @@ func InstallOperatorFromCatalog(apiClient *clients.Settings, logLevel glog.Level
 	}
 
 	if !operatorDeployment.IsReady(deploymentReadyTimeout) {
-		return result, fmt.Errorf("Deployment %q in namespace %q did not become ready within %s",
+		return result, fmt.Errorf("deployment %q in namespace %q did not become ready within %s",
 			cfg.DeploymentName, cfg.Namespace, deploymentReadyTimeout)
 	}
 
-	glog.V(logLevel).Infof("Listing ClusterServiceVersions in namespace %q", cfg.Namespace)
+	installedCSVCheckInterval := durationOrDefault(cfg.InstalledCSVCheckInterval, defaultInstalledCSVCheckInterval)
+	installedCSVTimeout := durationOrDefault(cfg.InstalledCSVTimeout, defaultInstalledCSVTimeout)
 
-	csvBuilderList, err := olm.ListClusterServiceVersion(apiClient, cfg.Namespace)
+	glog.V(logLevel).Infof("Waiting up to %s for Subscription %q to report an installed CSV",
+		installedCSVTimeout, cfg.SubscriptionName)
+
+	csvName, err := waitForInstalledCSV(apiClient, cfg.SubscriptionName, cfg.Namespace,
+		installedCSVCheckInterval, installedCSVTimeout)
 	if err != nil {
-		return result, fmt.Errorf("failed to list ClusterServiceVersions in namespace %q: %w", cfg.Namespace, err)
+		return result, fmt.Errorf("failed to determine the CSV installed by Subscription %q in namespace %q: %w",
+			cfg.SubscriptionName, cfg.Namespace, err)
 	}
-
-	if len(csvBuilderList) != 1 {
-		return result, fmt.Errorf("expected exactly one ClusterServiceVersion in namespace %q, found %d",
-			cfg.Namespace, len(csvBuilderList))
-	}
-
-	csvName := csvBuilderList[0].Definition.Name
 
 	glog.V(logLevel).Infof("Waiting up to %s for CSV %q to reach the Succeeded phase", csvTimeout, csvName)
 
@@ -201,6 +206,40 @@ func InstallOperatorFromCatalog(apiClient *clients.Settings, logLevel glog.Level
 	result.AlmExamples = almExamples
 
 	return result, nil
+}
+
+// waitForInstalledCSV polls the named Subscription until its status reports an installed CSV
+// (Status.InstalledCSV) and returns that CSV's name. Listing every CSV in the namespace and
+// expecting exactly one is not reliable: the namespace may legitimately contain other CSVs
+// (e.g. left over from a previous install, or installed by something else), so the
+// Subscription's own status is the authoritative source for which CSV it actually installed.
+// A freshly created Subscription can take a short while for OLM to resolve an InstallPlan and
+// populate this field, hence the poll.
+func waitForInstalledCSV(apiClient *clients.Settings, subName, subNamespace string,
+	pollInterval, timeout time.Duration) (string, error) {
+	var installedCSV string
+
+	err := apiwait.PollUntilContextTimeout(
+		context.TODO(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			subBuilder, err := olm.PullSubscription(apiClient, subName, subNamespace)
+			if err != nil {
+				glog.V(100).Infof("Subscription %q pull from cluster error: %s", subName, err)
+
+				return false, nil
+			}
+
+			if subBuilder.Object.Status.InstalledCSV == "" {
+				glog.V(100).Infof("Subscription %q has not yet reported an installed CSV", subName)
+
+				return false, nil
+			}
+
+			installedCSV = subBuilder.Object.Status.InstalledCSV
+
+			return true, nil
+		})
+
+	return installedCSV, err
 }
 
 // durationOrDefault returns d if it is positive, or def otherwise.
