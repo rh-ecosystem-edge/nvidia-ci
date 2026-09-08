@@ -301,7 +301,7 @@ var _ = Describe("MPS", Ordered, Label(tsparams.LabelSuite), func() {
 
 			// Get NVIDIA driver pods from the GPU operator namespace
 			driverPods, err := inittools.APIClient.Pods(GPUOperatorNamespace).List(context.TODO(), metav1.ListOptions{
-				LabelSelector: "app.kubernetes.io/component=nvidia-driver",
+				LabelSelector: nvidiagpu.DriverComponentLabelSelector,
 			})
 			Expect(err).ToNot(HaveOccurred(), "error listing NVIDIA driver pods: %v", err)
 			Expect(driverPods.Items).ToNot(BeEmpty(), "No NVIDIA driver pods found in namespace %s", GPUOperatorNamespace)
