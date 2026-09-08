@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	nvidiagpuv1alpha1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1alpha1"
 	"github.com/golang/glog"
@@ -13,6 +14,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sjson "k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/apimachinery/pkg/util/wait"
 	goclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -120,6 +122,25 @@ func PullNVIDIADriver(apiClient *clients.Settings, name string) (*NVIDIADriverBu
 	return builder, nil
 }
 
+// ListNVIDIADriversByLabel returns every NVIDIADriver object in the cluster matching the given
+// label selector. NVIDIADriver has no enforced/well-known name (it comes from whatever name
+// the CSV's alm-example sample used), so cleanup code that doesn't have that name on hand (e.g.
+// a standalone cleanup run in a separate process) must discover instances this way instead of
+// Pull-ing a specific name. Callers must always pass a selector that scopes the query to
+// objects they actually own (e.g. an ownership label applied at creation time): an unfiltered,
+// cluster-wide list would also match - and risk deleting - a pre-existing NVIDIADriver
+// installation that this suite never created.
+func ListNVIDIADriversByLabel(apiClient *clients.Settings, labelSelector map[string]string) ([]nvidiagpuv1alpha1.NVIDIADriver, error) {
+	glog.V(100).Infof("Listing NVIDIADriver objects matching labels %v", labelSelector)
+
+	nvidiaDriverList := &nvidiagpuv1alpha1.NVIDIADriverList{}
+	if err := apiClient.List(context.TODO(), nvidiaDriverList, goclient.MatchingLabels(labelSelector)); err != nil {
+		return nil, fmt.Errorf("failed to list NVIDIADriver objects matching labels %v: %w", labelSelector, err)
+	}
+
+	return nvidiaDriverList.Items, nil
+}
+
 // Exists checks whether the given NVIDIADriver exists.
 func (builder *NVIDIADriverBuilder) Exists() bool {
 	if valid, _ := builder.validate(); !valid {
@@ -158,6 +179,41 @@ func (builder *NVIDIADriverBuilder) Delete() (*NVIDIADriverBuilder, error) {
 	builder.Object = nil
 
 	return builder, nil
+}
+
+// DeleteAndWait removes a NVIDIADriver and waits for it to be fully gone (i.e. for any
+// finalizer it carries to be cleared) before returning. This matters because NVIDIADriver's
+// finalizer is processed by the GPU Operator's own controller: callers that tear down the
+// operator's namespace/Subscription/CSV right after issuing the delete (without waiting) risk
+// killing that controller before it clears the finalizer, permanently orphaning the object.
+func (builder *NVIDIADriverBuilder) DeleteAndWait(timeout time.Duration) error {
+	if valid, err := builder.validate(); !valid {
+		return err
+	}
+
+	glog.V(100).Infof("Deleting NVIDIADriver %s and waiting for the removal to complete", builder.Definition.Name)
+
+	if _, err := builder.Delete(); err != nil {
+		return err
+	}
+
+	return wait.PollUntilContextTimeout(
+		context.TODO(), 2*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+			_, err := builder.Get()
+			if err == nil {
+				// Object still exists (e.g. a finalizer is still pending); keep polling.
+				return false, nil
+			}
+
+			if k8serrors.IsNotFound(err) {
+				return true, nil
+			}
+
+			// Any other error (transient API failure, RBAC, etc.) must not be mistaken for
+			// successful deletion; propagate it so the caller can see the real problem
+			// instead of proceeding as if the finalizer had already cleared.
+			return false, err
+		})
 }
 
 // Create makes a NVIDIADriver in the cluster and stores the created object in the struct.
