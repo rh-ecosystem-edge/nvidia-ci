@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,10 +39,11 @@ type dockerAuthEntry struct {
 }
 
 // DiscoverPrecompiledDriverVersion queries registry.redhat.io for precompiled
-// driver images matching the given kernel version. It returns the driver branch
-// version (e.g., "580") and serves as validation that precompiled images are
-// available for the given kernel.
-func DiscoverPrecompiledDriverVersion(apiClient *clients.Settings, kernelVersion string) (string, error) {
+// driver images matching the given kernel version. It returns all unique driver
+// branch versions deduplicated by major version prefix (e.g., "580.178.04" and
+// "580" are treated as the same branch, keeping the long form). The returned
+// list is sorted lexicographically.
+func DiscoverPrecompiledDriverVersion(apiClient *clients.Settings, kernelVersion string) ([]string, error) {
 	glog.V(100).Infof("Discovering precompiled driver version for kernel %s", kernelVersion)
 
 	secret := &corev1.Secret{}
@@ -50,22 +52,22 @@ func DiscoverPrecompiledDriverVersion(apiClient *clients.Settings, kernelVersion
 		Name:      "pull-secret",
 	}, secret)
 	if err != nil {
-		return "", fmt.Errorf("failed to read cluster pull-secret: %w", err)
+		return nil, fmt.Errorf("failed to read cluster pull-secret: %w", err)
 	}
 
 	var config dockerConfigJSON
 	if err := json.Unmarshal(secret.Data[".dockerconfigjson"], &config); err != nil {
-		return "", fmt.Errorf("failed to parse pull-secret: %w", err)
+		return nil, fmt.Errorf("failed to parse pull-secret: %w", err)
 	}
 
 	auth, ok := config.Auths[precompiledRegistry]
 	if !ok {
-		return "", fmt.Errorf("no credentials for %s found in cluster pull-secret", precompiledRegistry)
+		return nil, fmt.Errorf("no credentials for %s found in cluster pull-secret", precompiledRegistry)
 	}
 
 	tags, err := listRegistryTags(auth.Auth)
 	if err != nil {
-		return "", fmt.Errorf("failed to list tags from %s/%s: %w", precompiledRegistry, precompiledRepository, err)
+		return nil, fmt.Errorf("failed to list tags from %s/%s: %w", precompiledRegistry, precompiledRepository, err)
 	}
 
 	glog.V(100).Infof("Found %d total tags in %s/%s", len(tags), precompiledRegistry, precompiledRepository)
@@ -92,21 +94,46 @@ func DiscoverPrecompiledDriverVersion(apiClient *clients.Settings, kernelVersion
 	}
 
 	if len(driverVersions) == 0 {
-		return "", fmt.Errorf("no precompiled driver images found for kernel %s in %s/%s",
+		return nil, fmt.Errorf("no precompiled driver images found for kernel %s in %s/%s",
 			kernelVersion, precompiledRegistry, precompiledRepository)
 	}
 
 	glog.V(100).Infof("Found precompiled driver versions for kernel %s: %v", kernelVersion, driverVersions)
 
-	for _, v := range driverVersions {
-		if !strings.Contains(v, ".") {
-			glog.V(100).Infof("Selected precompiled driver branch version: %s", v)
-			return v, nil
+	deduplicated := deduplicateByMajorVersion(driverVersions)
+
+	glog.V(100).Infof("Deduplicated precompiled driver versions: %v", deduplicated)
+
+	return deduplicated, nil
+}
+
+// deduplicateByMajorVersion groups versions by their major prefix (the part
+// before the first dot) and keeps the longest (most specific) version for each
+// group. For example, given ["580.178.04", "580", "595", "595.91.07"], it
+// returns ["580.178.04", "595.91.07"].
+func deduplicateByMajorVersion(versions []string) []string {
+	best := make(map[string]string)
+
+	for _, v := range versions {
+		major := v
+		if idx := strings.Index(v, "."); idx > 0 {
+			major = v[:idx]
+		}
+
+		existing, ok := best[major]
+		if !ok || len(v) > len(existing) {
+			best[major] = v
 		}
 	}
 
-	glog.V(100).Infof("No short-form driver version found, using: %s", driverVersions[0])
-	return driverVersions[0], nil
+	result := make([]string, 0, len(best))
+	for _, v := range best {
+		result = append(result, v)
+	}
+
+	sort.Strings(result)
+
+	return result
 }
 
 func listRegistryTags(authBase64 string) ([]string, error) {
