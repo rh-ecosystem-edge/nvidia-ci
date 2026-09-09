@@ -966,7 +966,14 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				err = wait.ClusterPolicyReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
 					nvidiagpu.ClusterPolicyReadyCheckInterval, nvidiagpu.ClusterPolicyReadyTimeout)
 				Expect(err).ToNot(HaveOccurred(), "ClusterPolicy not ready after switching to branch %s", nextBranch)
-				glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy ready with driver branch %s", nextBranch)
+
+				By(fmt.Sprintf("Verify ClusterPolicy driver version is %s", nextBranch))
+				verifyCP, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
+				Expect(err).ToNot(HaveOccurred(), "Failed to pull ClusterPolicy for version verification")
+				Expect(verifyCP.Definition.Spec.Driver.Version).To(Equal(nextBranch),
+					"ClusterPolicy driver version mismatch: expected %s, got %s",
+					nextBranch, verifyCP.Definition.Spec.Driver.Version)
+				glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy ready with verified driver branch %s", nextBranch)
 
 				By(fmt.Sprintf("Delete previous gpu-burn pod before testing branch %s", nextBranch))
 				oldPod, _ := pod.Pull(inittools.APIClient, burn.PodName, burn.Namespace)
