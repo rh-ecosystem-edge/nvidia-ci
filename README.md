@@ -84,6 +84,7 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 - `NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH`: a JSON patch to apply to a default cluster policy from ALM examples, written according to
    [RFC 6902](http://tools.ietf.org/html/rfc6902) (also see [kubectl patch](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_patch/)) - _optional_
 - `NVIDIAGPU_USE_PRECOMPILED_DRIVER`: boolean flag to enable precompiled/signed driver testing. When set to `true`, the test discovers the latest precompiled driver version from `registry.redhat.io/nvidia/gpu-driver-rhel9` and patches the ClusterPolicy to use it - Default value is `false` - _optional_
+- `NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH`: controls which precompiled driver branch(es) to test (only applies when `NVIDIAGPU_USE_PRECOMPILED_DRIVER=true`). When empty (default), tests the first discovered branch. Set to `all` to test all discovered branches (deduplicated by major version). Set to a comma-separated list (e.g. `580.178.04,595.91.07`) to test specific branches. Each branch runs a full GPU burn validation - _optional_
 - `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
 
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
