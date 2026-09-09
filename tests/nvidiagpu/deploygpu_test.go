@@ -690,8 +690,12 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					precompiledBranches = discoveredVersions
 				default:
 					for _, b := range strings.Split(branchSetting, ",") {
-						precompiledBranches = append(precompiledBranches, strings.TrimSpace(b))
+						if trimmed := strings.TrimSpace(b); trimmed != "" {
+							precompiledBranches = append(precompiledBranches, trimmed)
+						}
 					}
+					Expect(precompiledBranches).ToNot(BeEmpty(),
+						"NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH=%q produced no valid branches", branchSetting)
 				}
 
 				glog.V(gpuparams.GpuLogLevel).Infof("Precompiled driver branches to test: %v", precompiledBranches)

@@ -109,8 +109,9 @@ func DiscoverPrecompiledDriverVersion(apiClient *clients.Settings, kernelVersion
 
 // deduplicateByMajorVersion groups versions by their major prefix (the part
 // before the first dot) and keeps the longest (most specific) version for each
-// group. For example, given ["580.178.04", "580", "595", "595.91.07"], it
-// returns ["580.178.04", "595.91.07"].
+// group. Results are sorted lexicographically ascending. For example, given
+// ["580.178.04", "580", "595", "595.91.07"], it returns ["580.178.04",
+// "595.91.07"].
 func deduplicateByMajorVersion(versions []string) []string {
 	best := make(map[string]string)
 
