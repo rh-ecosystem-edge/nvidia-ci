@@ -79,12 +79,16 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 - `NVIDIAGPU_BUNDLE_IMAGE`: GPU Operator bundle image to deploy with operator-sdk if NVIDIAGPU_DEPLOY_FROM_BUNDLE variable is set to true.  Default value for bundle image if not set: ghcr.io/nvidia/gpu-operator/gpu-operator-bundle:main-latest - _optional when deploying from bundlle_
 - `NVIDIAGPU_DEPLOY_FROM_BUNDLE`: boolean flag to deploy GPU operator from bundle image with operator-sdk - Default value is false - _required when deploying from bundle_
 - `NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL`: specific subscription channel to upgrade to from previous version.  _required when running operator-upgrade testcase_
-- `NVIDIAGPU_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_
+- `NVIDIAGPU_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_. See the known issue note in [Cleaning up leftover resources](#cleaning-up-leftover-resources) about automatic cleanup occasionally reporting a spurious NFD-related failure.
 - `NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - _required when deploying fallback custom GPU catalogsource_
 - `NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH`: a JSON patch to apply to a default cluster policy from ALM examples, written according to
    [RFC 6902](http://tools.ietf.org/html/rfc6902) (also see [kubectl patch](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_patch/)) - _optional_
 - `NVIDIAGPU_USE_PRECOMPILED_DRIVER`: boolean flag to enable precompiled/signed driver testing. When set to `true`, the test discovers the latest precompiled driver version from `registry.redhat.io/nvidia/gpu-driver-rhel9` and patches the ClusterPolicy to use it - Default value is `false` - _optional_
 - `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
+
+See the [Testing native DRA with GPU Operator](#testing-native-dra-with-gpu-operator) section
+below for the "native-dra" testcase, which is part of the `nvidiagpu` feature/suite and reuses
+the `NVIDIAGPU_*` variables above (no separate variables of its own).
 
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
 - `NVIDIANETWORK_CATALOGSOURCE`: custom catalogsource to be used.  If not specified, the default "certified-operators" catalog is used - _optional_
@@ -156,15 +160,16 @@ The test framework ensures that the GPU Operator deployment tests run before MPS
 
 #### Cleanup:
 
-After completing the MPS tests, you may want to clean up all resources by running:
-
+After completing the MPS tests, you may want to clean up all resources. Re-run the base
+`nvidiagpu` deploy testcase with `NVIDIAGPU_CLEANUP=true`:
 ```bash
 $ export TEST_FEATURES="nvidiagpu"
-$ export TEST_LABELS='nvidia-ci,cleanup'
+$ export TEST_LABELS='nvidia-ci,gpu'
 $ export NVIDIAGPU_CLEANUP=true
 $ make run-tests
 ```
-This will remove all resources created by both the GPU Operator deployment and MPS tests.
+This removes NFD, the GPU Operator (namespace, Subscription, OperatorGroup, CSV,
+ClusterPolicy), and any leftover gpu-burn resources.
 
 ### Testing MIG with GPU Operator
 
@@ -209,11 +214,8 @@ $ make run-mig-tests ARGS="-- --mixed.mig.instances='1,0,1,1' --mixed.mig.pod-de
 
 #### Cleanup:
 
-If the GPU operator and gpu burn pod needs to be cleaned up, just set the cleanup parameter to true
-in the last execution of either steps 1 or 2
-```bash
-$ export NVIDIAGPU_CLEANUP=true
-```
+If the GPU operator and gpu burn pod need to be cleaned up, just set `NVIDIAGPU_CLEANUP=true`
+in the last execution of either steps 1 or 2.
 
 ### Testing Time-Slicing with GPU Operator
 
@@ -231,6 +233,77 @@ $ export TEST_FEATURES="timeslicing"
 $ export TEST_LABELS='nvidia-ci,timeslicing'
 $ make run-tests
 ```
+
+### Testing native DRA with GPU Operator
+
+Starting with GPU Operator **26.7.0**, DRA (Dynamic Resource Allocation) enablement can be
+managed natively by the operator through two new custom resources, `NVIDIADriver` and
+`GPUCluster`, instead of `ClusterPolicy`. The `native-dra` testcase (in the `nvidiagpu`
+feature/suite, `tests/nvidiagpu`) deploys the GPU Operator and validates this stack.
+
+It is a self-contained alternative to the base `"Deploy NVIDIA GPU Operator with DTK"`
+testcase above — the two are mutually exclusive ways of installing/configuring the same GPU
+Operator (`ClusterPolicy` is never created by `native-dra`, and vice versa) — so run it with
+only the `native-dra` label selected, not together with the `gpu` label. Unlike the pre-release
+DRA suites (`tests/dra/gpuallocation`, `tests/dra/computedomain`), which assume a
+`ClusterPolicy` is already deployed and install the DRA driver separately via a Helm chart,
+`native-dra` lets the GPU Operator manage the DRA driver itself.
+
+#### What it does
+
+1. Installs NFD, the same way the base testcase does.
+2. Installs the GPU Operator via OLM (namespace, OperatorGroup, Subscription, waits for the
+   operator Deployment and its CSV to succeed) — reusing the same `NVIDIAGPU_CATALOGSOURCE`/
+   `NVIDIAGPU_SUBSCRIPTION_CHANNEL` variables as the base testcase.
+3. Checks whether the installed GPU Operator version serves the `GPUCluster` CRD. If it
+   doesn't (i.e. the installed version is < 26.7.0), the test is skipped.
+4. Creates a minimal `NVIDIADriver` and a minimal `GPUCluster` custom resource, built directly
+   from the CSV's `alm-examples` (the operator's own suggested minimal samples), and waits for
+   both to reach the `ready` state.
+5. Validates GPU functionality by executing `nvidia-smi` inside the driver pod(s) rendered by
+   `NVIDIADriver`.
+
+#### Steps to run the native DRA testcase:
+
+```bash
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DUMP_FAILED_TESTS=true
+$ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
+$ export TEST_FEATURES="nvidiagpu"
+$ export TEST_LABELS='native-dra'
+$ export TEST_TRACE=true
+$ export VERBOSE_LEVEL=100
+$ export NVIDIAGPU_CATALOGSOURCE="certified-operators"
+$ export NVIDIAGPU_SUBSCRIPTION_CHANNEL="v26.7"  # must resolve to GPU Operator >= 26.7.0
+$ export NVIDIAGPU_CLEANUP=false
+$ make run-tests
+```
+
+#### Cleanup:
+
+By default (`NVIDIAGPU_CLEANUP=true`), the GPUCluster, NVIDIADriver, CSV, Subscription,
+OperatorGroup, GPU Operator namespace and NFD are all removed at the end of the run. To leave
+them in place for inspection (e.g. to manually inspect the rendered DRA driver pods, or debug
+a failure), set `NVIDIAGPU_CLEANUP=false` (same variable used by the base testcase). See
+[Cleaning up leftover resources](#cleaning-up-leftover-resources) below.
+
+### Cleaning up leftover resources
+
+If you ran any `nvidiagpu` testcase with `NVIDIAGPU_CLEANUP=false` (e.g. to chain into MPS/MIG/
+time-slicing, or to leave resources in place for debugging) and now want to remove everything,
+re-run the same testcase with `NVIDIAGPU_CLEANUP=true`. If the GPU Operator/NFD are already
+installed and ready, this completes quickly (no full redeployment) and then runs the same
+`AfterAll` cleanup a normal run performs, removing NFD, the GPU Operator (namespace,
+Subscription, OperatorGroup, CSV, ClusterPolicy and/or NVIDIADriver/GPUCluster, whichever was
+deployed), and any leftover gpu-burn resources.
+
+**Known issue**: `AfterAll`'s automatic cleanup (triggered when `NVIDIAGPU_CLEANUP=true`, the
+default) can occasionally report a spurious failure like `Error cleaning up NFD resources:
+failed to delete NFD CR: NodeFeatureDiscovery object nfd-instance doesn't exist in namespace
+openshift-nfd` — this is a timing race in NFD's own delete-and-wait cleanup logic
+(`pkg/nfd/deploynfd.go`), not an actual test failure; the resource in question was in fact
+successfully deleted (tracked for a separate PR). If you see this, simply re-run the same
+command again to confirm cleanup completed.
 
 ### Examples of Testing GPU Operator end-to-end
 

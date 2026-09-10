@@ -19,6 +19,30 @@ const (
 	ClusterPolicyName                = "gpu-cluster-policy"
 	OperatorDefaultMasterBundleImage = "ghcr.io/nvidia/gpu-operator/gpu-operator-bundle:main-latest"
 
+	// GPUClusterName is the required metadata.name of the singleton GPUCluster CR (the
+	// GPU Operator's DRA-based software-enablement stack, introduced in GPU Operator
+	// 26.7.0). Upstream enforces this exact name via CRD validation.
+	GPUClusterName = "gpu-cluster"
+
+	// GPUClusterAPIGroup, GPUClusterAPIVersion and GPUClusterResource identify the
+	// GPUCluster CRD (nvidia.com/v1alpha1, resource "gpuclusters"). A generated Go type for
+	// GPUCluster is not yet available in the vendored github.com/NVIDIA/gpu-operator module,
+	// so GPUClusterBuilder interacts with it as an unstructured/dynamic resource using these.
+	GPUClusterAPIGroup   = "nvidia.com"
+	GPUClusterAPIVersion = "v1alpha1"
+	GPUClusterResource   = "gpuclusters"
+	GPUClusterKind       = "GPUCluster"
+
+	// NativeDRAOwnerLabelKey/NativeDRAOwnerLabelValue mark an NVIDIADriver object as created
+	// by this test suite's native-dra testcase. NVIDIADriver has no enforced/well-known name
+	// (unlike GPUCluster), so cleanup code that needs to discover an instance by listing
+	// (e.g. a standalone cleanup run in a separate process that doesn't have the exact name in
+	// memory) must scope that list to this label, never list unfiltered: an unfiltered list
+	// would also match - and risk deleting - a cluster's pre-existing native DRA installation
+	// that this suite never created.
+	NativeDRAOwnerLabelKey   = "nvidia-ci.rh-ecosystem-edge.io/created-by"
+	NativeDRAOwnerLabelValue = "native-dra-test"
+
 	CustomCatalogSourcePublisherName = "Red Hat"
 
 	CustomCatalogSourceDisplayName = "Certified Operators Custom"
