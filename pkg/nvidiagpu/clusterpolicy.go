@@ -99,6 +99,16 @@ func newBuilder(apiClient *clients.Settings, clusterPolicy *nvidiagpuv1.ClusterP
 	return &builder
 }
 
+// NewBuilderFromDefinition creates a Builder from an existing ClusterPolicy definition.
+func NewBuilderFromDefinition(apiClient *clients.Settings, cp *nvidiagpuv1.ClusterPolicy) *Builder {
+	glog.V(100).Infof("Initializing new Builder structure from ClusterPolicy definition: %s", cp.Name)
+
+	return &Builder{
+		apiClient:  apiClient,
+		Definition: cp,
+	}
+}
+
 // Get returns clusterPolicy object if found.
 func (builder *Builder) Get() (*nvidiagpuv1.ClusterPolicy, error) {
 	if valid, err := builder.validate(); !valid {

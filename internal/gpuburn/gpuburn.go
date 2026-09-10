@@ -26,7 +26,7 @@ var (
   			echo "ERROR No GPUs found"
 			exit 1
 		fi
-		./gpu_burn 300
+		./gpu_burn 60
 
 		if [ ! $? -eq 0 ]; then
 		  exit 1
