@@ -382,7 +382,8 @@ def process_single_build(
     driver_branch = ""
     driver_branch_file = build_file_set.get('driver_branch')
     if driver_branch_file:
-        driver_branch = fetch_gcs_file_content(driver_branch_file['name']).strip()
+        raw = fetch_gcs_file_content(driver_branch_file['name']).strip()
+        driver_branch = ", ".join(line for line in raw.splitlines() if line.strip())
         logger.info(f"Found driver branch for build {build_id}: {driver_branch}")
 
     if ocp_version_file and gpu_version_file:

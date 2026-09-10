@@ -17,6 +17,7 @@ type NvidiaGPUConfig struct {
 	GPUFallbackCatalogsourceIndexImage string `envconfig:"NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"`
 	ClusterPolicyPatch                 string `envconfig:"NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH"`
 	UsePrecompiledDriver               bool   `envconfig:"NVIDIAGPU_USE_PRECOMPILED_DRIVER" default:"false"`
+	PrecompiledDriverBranch            string `envconfig:"NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH"`
 }
 
 // NewNvidiaGPUConfig returns an instance of NvidiaGPUConfig.

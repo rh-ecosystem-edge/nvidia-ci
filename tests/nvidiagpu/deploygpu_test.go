@@ -663,6 +663,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			clusterPolicyPatch := nvidiaGPUConfig.ClusterPolicyPatch
 
+			var precompiledBranches []string
+
 			if nvidiaGPUConfig.UsePrecompiledDriver {
 				glog.V(gpuparams.GpuLogLevel).Infof("UsePrecompiledDriver is enabled, discovering driver version from registry")
 
@@ -676,12 +678,32 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				kernelVersion := workerNodes[0].Object.Status.NodeInfo.KernelVersion
 				glog.V(gpuparams.GpuLogLevel).Infof("Worker node kernel version: %s", kernelVersion)
 
-				driverVersion, err := nvidiagpu.DiscoverPrecompiledDriverVersion(inittools.APIClient, kernelVersion)
+				discoveredVersions, err := nvidiagpu.DiscoverPrecompiledDriverVersion(inittools.APIClient, kernelVersion)
 				Expect(err).ToNot(HaveOccurred(), "Failed to discover precompiled driver version: %v", err)
-				glog.V(gpuparams.GpuLogLevel).Infof("Discovered precompiled driver version: %s", driverVersion)
+				glog.V(gpuparams.GpuLogLevel).Infof("Discovered precompiled driver versions: %v", discoveredVersions)
+
+				branchSetting := nvidiaGPUConfig.PrecompiledDriverBranch
+				switch {
+				case branchSetting == "":
+					precompiledBranches = discoveredVersions[:1]
+				case strings.EqualFold(branchSetting, "all"):
+					precompiledBranches = discoveredVersions
+				default:
+					for _, b := range strings.Split(branchSetting, ",") {
+						if trimmed := strings.TrimSpace(b); trimmed != "" {
+							precompiledBranches = append(precompiledBranches, trimmed)
+						}
+					}
+					Expect(precompiledBranches).ToNot(BeEmpty(),
+						"NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH=%q produced no valid branches", branchSetting)
+				}
+
+				glog.V(gpuparams.GpuLogLevel).Infof("Precompiled driver branches to test: %v", precompiledBranches)
+
+				driverVersion := precompiledBranches[0]
 
 				if err := inittools.GeneralConfig.WriteReport(
-					DriverBranchVersionsFile, []byte(driverVersion+"\n")); err != nil {
+					DriverBranchVersionsFile, []byte(strings.Join(precompiledBranches, "\n")+"\n")); err != nil {
 					glog.Error("Error writing driver branch versions file: ", err)
 				}
 
@@ -925,6 +947,25 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			Expect(match1 && match2).ToNot(BeFalse(), "gpu-burn pod execution was FAILED")
 			glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn pod execution was successful")
+
+			var failedBranches []string
+
+			for i := 1; i < len(precompiledBranches); i++ {
+				nextBranch := precompiledBranches[i]
+				By(fmt.Sprintf("Testing additional precompiled driver branch: %s (%d/%d)",
+					nextBranch, i+1, len(precompiledBranches)))
+
+				branchErr := testPrecompiledBranch(nextBranch, i, burn, clusterArchitecture)
+				if branchErr != nil {
+					glog.V(gpuparams.GpuLogLevel).Infof("Branch %s FAILED: %v", nextBranch, branchErr)
+					failedBranches = append(failedBranches, fmt.Sprintf("%s: %v", nextBranch, branchErr))
+				} else {
+					glog.V(gpuparams.GpuLogLevel).Infof("Branch %s PASSED", nextBranch)
+				}
+			}
+
+			Expect(failedBranches).To(BeEmpty(),
+				"The following driver branches failed:\n%s", strings.Join(failedBranches, "\n"))
 
 		})
 
@@ -1295,6 +1336,228 @@ func cleanupGPUBurnConfigmap() {
 		Expect(err).ToNot(HaveOccurred(), "Error deleting gpu-burn configmap: %v", err)
 		glog.V(gpuparams.GpuLogLevel).Infof("Successfully deleted gpu-burn configmap '%s'", burn.ConfigMapName)
 	}
+}
+
+//nolint:funlen,cyclop
+func testPrecompiledBranch(nextBranch string, branchIndex int,
+	burn *nvidiagpu.GPUBurnConfig, clusterArchitecture string) error {
+
+	By("Delete ClusterPolicy to force full driver cleanup including host firmware state")
+
+	pulledCP, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
+	if err != nil {
+		return fmt.Errorf("failed to pull ClusterPolicy: %w", err)
+	}
+
+	cpDefinition := pulledCP.Definition.DeepCopy()
+
+	_, err = pulledCP.Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete ClusterPolicy: %w", err)
+	}
+
+	glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy deleted, waiting for nvidia pods to terminate")
+
+	By("Wait for all nvidia driver pods to terminate")
+
+	terminated := false
+
+	for elapsed := 0; elapsed < 300; elapsed += 10 {
+		driverPods, listErr := pod.ListByNamePattern(
+			inittools.APIClient, "nvidia-driver-daemonset", nvidiagpu.NvidiaGPUNamespace)
+		if listErr == nil && len(driverPods) == 0 {
+			terminated = true
+
+			break
+		}
+
+		time.Sleep(10 * time.Second)
+	}
+
+	if !terminated {
+		return fmt.Errorf("driver pods did not terminate after ClusterPolicy deletion")
+	}
+
+	glog.V(gpuparams.GpuLogLevel).Infof("All driver pods terminated")
+
+	By("Clean host driver state on GPU worker nodes")
+
+	gpuNodeSelector := fmt.Sprintf("%s=,%s=true",
+		inittools.GeneralConfig.WorkerLabel, nvidiagpu.NvidiaGPULabel)
+
+	gpuWorkerNodes, err := nodes.List(inittools.APIClient,
+		metav1.ListOptions{LabelSelector: gpuNodeSelector})
+	if err != nil {
+		return fmt.Errorf("failed to list GPU worker nodes: %w", err)
+	}
+
+	for j, gpuNode := range gpuWorkerNodes {
+		cleanupPodName := fmt.Sprintf("driver-cleanup-%d-%d", branchIndex, j)
+		cleanupPodSpec := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cleanupPodName,
+				Namespace: nvidiagpu.NvidiaGPUNamespace,
+			},
+			Spec: corev1.PodSpec{
+				HostPID:       true,
+				NodeName:      gpuNode.Object.Name,
+				RestartPolicy: corev1.RestartPolicyNever,
+				Containers: []corev1.Container{
+					{
+						Name:  "cleanup",
+						Image: "registry.access.redhat.com/ubi9/ubi:latest",
+						Command: []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "--", "sh", "-c",
+							"findmnt -r -o TARGET | grep nvidia/driver | sort -r | " +
+								"while read mnt; do umount \"$mnt\" 2>/dev/null || umount -l \"$mnt\" 2>/dev/null; done; " +
+								"echo '' > /sys/module/firmware_class/parameters/path; " +
+								"rm -rf /run/nvidia/driver; " +
+								"echo cleanup-done"},
+						SecurityContext: &corev1.SecurityContext{
+							Privileged: func() *bool { b := true; return &b }(),
+						},
+					},
+				},
+			},
+		}
+
+		glog.V(gpuparams.GpuLogLevel).Infof(
+			"Creating cleanup pod %s on node %s", cleanupPodName, gpuNode.Object.Name)
+
+		_, err = inittools.APIClient.Pods(nvidiagpu.NvidiaGPUNamespace).Create(
+			context.TODO(), cleanupPodSpec, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to create cleanup pod on node %s: %w", gpuNode.Object.Name, err)
+		}
+
+		cleanupPodPulled, err := pod.Pull(
+			inittools.APIClient, cleanupPodName, nvidiagpu.NvidiaGPUNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to pull cleanup pod: %w", err)
+		}
+
+		err = cleanupPodPulled.WaitUntilInStatus(corev1.PodSucceeded, 2*time.Minute)
+		if err != nil {
+			return fmt.Errorf("cleanup pod did not succeed on node %s: %w", gpuNode.Object.Name, err)
+		}
+
+		cleanupLogs, _ := cleanupPodPulled.GetLog(30*time.Second, "cleanup")
+		glog.V(gpuparams.GpuLogLevel).Infof(
+			"Cleanup logs for node %s: %s", gpuNode.Object.Name, cleanupLogs)
+
+		_, _ = cleanupPodPulled.Delete()
+	}
+
+	glog.V(gpuparams.GpuLogLevel).Infof("Host driver state cleaned on all GPU nodes")
+
+	By(fmt.Sprintf("Recreate ClusterPolicy with driver branch %s", nextBranch))
+
+	cpDefinition.Spec.Driver.Version = nextBranch
+	cpDefinition.ResourceVersion = ""
+	cpDefinition.UID = ""
+	cpDefinition.Generation = 0
+	cpDefinition.CreationTimestamp = metav1.Time{}
+
+	newCP := nvidiagpu.NewBuilderFromDefinition(inittools.APIClient, cpDefinition)
+
+	_, err = newCP.Create()
+	if err != nil {
+		return fmt.Errorf("failed to create ClusterPolicy with driver branch %s: %w", nextBranch, err)
+	}
+
+	glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy created with driver branch %s", nextBranch)
+
+	By(fmt.Sprintf("Wait for ClusterPolicy to be ready with driver branch %s", nextBranch))
+
+	err = wait.ClusterPolicyReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
+		nvidiagpu.ClusterPolicyReadyCheckInterval, nvidiagpu.ClusterPolicyReadyTimeout)
+	if err != nil {
+		return fmt.Errorf("ClusterPolicy not ready after switching to branch %s: %w", nextBranch, err)
+	}
+
+	By(fmt.Sprintf("Verify ClusterPolicy driver version is %s", nextBranch))
+
+	verifyCP, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
+	if err != nil {
+		return fmt.Errorf("failed to pull ClusterPolicy for version verification: %w", err)
+	}
+
+	if verifyCP.Definition.Spec.Driver.Version != nextBranch {
+		return fmt.Errorf("ClusterPolicy driver version mismatch: expected %s, got %s",
+			nextBranch, verifyCP.Definition.Spec.Driver.Version)
+	}
+
+	glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy ready with verified driver branch %s", nextBranch)
+
+	By(fmt.Sprintf("Delete previous gpu-burn pod before testing branch %s", nextBranch))
+
+	oldPod, _ := pod.Pull(inittools.APIClient, burn.PodName, burn.Namespace)
+	if oldPod != nil {
+		_, err = oldPod.Delete()
+		if err != nil {
+			return fmt.Errorf("failed to delete old gpu-burn pod: %w", err)
+		}
+
+		err = oldPod.WaitUntilDeleted(2 * time.Minute)
+		if err != nil {
+			return fmt.Errorf("gpu-burn pod not deleted in time: %w", err)
+		}
+	}
+
+	By(fmt.Sprintf("Deploy gpu-burn pod for branch %s", nextBranch))
+
+	newGpuBurnPod, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.PodName, burn.Namespace,
+		BurnImageName[clusterArchitecture], nvidiagpu.BurnPodCreationTimeout)
+	if err != nil {
+		return fmt.Errorf("error creating gpu burn pod for branch %s: %w", nextBranch, err)
+	}
+
+	_, err = inittools.APIClient.Pods(newGpuBurnPod.Namespace).Create(context.TODO(), newGpuBurnPod,
+		metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("error creating gpu-burn pod for branch %s: %w", nextBranch, err)
+	}
+
+	By(fmt.Sprintf("Wait for gpu-burn pod to complete for branch %s", nextBranch))
+
+	newPodPulled, err := pod.Pull(inittools.APIClient, burn.PodName, burn.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to pull gpu-burn pod: %w", err)
+	}
+
+	err = newPodPulled.WaitUntilScheduled(nvidiagpu.BurnPodScheduledTimeout)
+	if err != nil {
+		return fmt.Errorf("gpu-burn pod not scheduled for branch %s: %w", nextBranch, err)
+	}
+
+	err = newPodPulled.WaitUntilRunningOrSucceeded(nvidiagpu.BurnPodRunningTimeout)
+	if err != nil {
+		return fmt.Errorf("gpu-burn pod not running for branch %s: %w", nextBranch, err)
+	}
+
+	err = newPodPulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.BurnPodSuccessTimeout)
+	if err != nil {
+		return fmt.Errorf("gpu-burn pod not succeeded for branch %s: %w", nextBranch, err)
+	}
+
+	By(fmt.Sprintf("Verify gpu-burn logs for branch %s", nextBranch))
+
+	branchLogs, err := newPodPulled.GetLog(nvidiagpu.BurnLogCollectionPeriod, "gpu-burn-ctr")
+	if err != nil {
+		return fmt.Errorf("failed to get gpu-burn logs for branch %s: %w", nextBranch, err)
+	}
+
+	glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn pod logs for branch %s:\n%s", nextBranch, branchLogs)
+
+	branchOK1 := strings.Contains(branchLogs, "GPU 0: OK")
+	branchOK2 := strings.Contains(branchLogs, "100.0%  proc'd:")
+
+	if !branchOK1 || !branchOK2 {
+		return fmt.Errorf("gpu-burn execution FAILED for driver branch %s", nextBranch)
+	}
+
+	glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn successful for driver branch %s", nextBranch)
+
+	return nil
 }
 
 // cleanupGPUBurnNamespace deletes the GPU Burn namespace
