@@ -101,15 +101,6 @@ var _ = Describe("DRA Driver Installation", Ordered, Label("dra", "dra-imex"), f
 		err = driver.Install(actionConfig, shared.DriverInstallationTimeout)
 		Expect(err).ToNot(HaveOccurred(), "Failed to install DRA driver")
 
-		By("Verifying compute domain DeviceClass resources")
-		deviceClasses := []string{
-			"compute-domain-daemon.nvidia.com",
-			"compute-domain-default-channel.nvidia.com",
-		}
-		err = shared.VerifyDeviceClasses(inittools.APIClient, deviceClasses)
-		Expect(err).ToNot(HaveOccurred(), "Failed to verify compute domain DeviceClasses")
-		glog.V(gpuparams.GpuLogLevel).Infof("Compute domain DeviceClasses verified successfully")
-
 		By("Verifying device plugin is enabled in ClusterPolicy")
 		isEnabled, err := shared.IsDevicePluginEnabled(inittools.APIClient)
 		Expect(err).ToNot(HaveOccurred(), "Failed to check device plugin state")
@@ -120,6 +111,21 @@ var _ = Describe("DRA Driver Installation", Ordered, Label("dra", "dra-imex"), f
 		hasClique, err = hasMultiNodeClique(inittools.APIClient)
 		Expect(err).ToNot(HaveOccurred(), "Failed to check for multi-node GPU clique")
 		glog.V(gpuparams.GpuLogLevel).Infof("Multi-node GPU clique available: %v", hasClique)
+	})
+
+	// Topology-independent: must be a direct sibling of the two Contexts below, not
+	// nested inside either. Both "Multi-node..." and "Single-node..." Contexts Skip()
+	// themselves based on hasClique, and an explicit Skip() is honored before Ordered
+	// failure-propagation, so a check nested in either one would silently never run
+	// on whichever topology doesn't match - defeating the point of it being its own
+	// independently reportable result.
+	It("Should publish the compute domain DeviceClasses", func() {
+		deviceClasses := []string{
+			"compute-domain-daemon.nvidia.com",
+			"compute-domain-default-channel.nvidia.com",
+		}
+		err := shared.VerifyDeviceClasses(inittools.APIClient, deviceClasses)
+		Expect(err).ToNot(HaveOccurred(), "Failed to verify compute domain DeviceClasses")
 	})
 
 	Context("Multi-node compute domain with GPU clique", func() {

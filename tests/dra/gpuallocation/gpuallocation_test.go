@@ -14,8 +14,10 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/testworkloads"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nodes"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/tests/dra/shared"
+	"golang.org/x/sync/errgroup"
 	"helm.sh/helm/v3/pkg/action"
 	corev1 "k8s.io/api/core/v1"
 	resourcev1 "k8s.io/api/resource/v1"
@@ -36,7 +38,7 @@ func createGPUResourceClaimTemplate(namespace, name string) error {
 						{
 							Name: "gpu",
 							Exactly: &resourcev1.ExactDeviceRequest{
-								DeviceClassName: "gpu.nvidia.com",
+								DeviceClassName: dra.GPUDriverName,
 							},
 						},
 					},
@@ -108,6 +110,32 @@ var _ = Describe("DRA Driver Installation", Ordered, Label("dra", "dra-gpu"), fu
 	})
 
 	Context("When DRA driver is installed", func() {
+		It("Should publish the gpu.nvidia.com and vfio.gpu.nvidia.com DeviceClasses", func() {
+			err := shared.VerifyDeviceClasses(inittools.APIClient,
+				[]string{dra.GPUDriverName, dra.VFIODeviceClassName})
+			Expect(err).ToNot(HaveOccurred(), "expected DeviceClasses not found")
+		})
+
+		It("Should report the correct GPU device inventory in ResourceSlice", func() {
+			gpuNodes, err := nodes.List(inittools.APIClient,
+				metav1.ListOptions{LabelSelector: labels.Set{nvidiagpu.GPUPresentLabel: "true"}.String()})
+			Expect(err).ToNot(HaveOccurred(), "Failed to list GPU-present nodes")
+			Expect(gpuNodes).ToNot(BeEmpty(), "No GPU-present nodes found")
+
+			// Each node's check has its own multi-minute poll budget (ResourceSlice
+			// publication lag); run them concurrently so suite time doesn't scale
+			// linearly with node count.
+			var eg errgroup.Group
+			for _, node := range gpuNodes {
+				nodeName := node.Object.Name
+				eg.Go(func() error {
+					glog.V(gpuparams.GpuLogLevel).Infof("Verifying ResourceSlice inventory on node %s", nodeName)
+					return shared.VerifyGPUResourceSliceInventory(inittools.APIClient, nodeName)
+				})
+			}
+			Expect(eg.Wait()).ToNot(HaveOccurred(), "ResourceSlice device inventory mismatch on at least one node")
+		})
+
 		It("Should allocate a single GPU using ResourceClaimTemplate", func() {
 			names := shared.NewTestNames("gpu-test")
 
