@@ -1106,7 +1106,7 @@ func MIGProfiles(apiClient *clients.Settings, nodeSelector map[string]string) (b
 
 	// Find a driver pod on this node to query hardware
 	driverPods, err := apiClient.Pods("nvidia-gpu-operator").List(context.TODO(), metav1.ListOptions{
-		LabelSelector: "app.kubernetes.io/component=nvidia-driver",
+		LabelSelector: nvidiagpu.DriverComponentLabelSelector,
 		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
 	})
 	Expect(err).ToNot(HaveOccurred(), "Error listing driver pods: %v", err)
