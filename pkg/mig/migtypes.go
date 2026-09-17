@@ -85,6 +85,8 @@ var (
 	TsInstancesCSV    string
 	TsInstances       []int // first TsPodCount entries after validation; slices per pod
 	TsMonAfterPod     int   // minimum number of pods running before monitoring starts
+	MaxTsSlices       int   // max time-slice replicas per GPU (device plugin)
+	LimitForTsSlices  int   // limit for total number of time-slices to be launched by the testcase
 )
 
 const (
@@ -93,12 +95,12 @@ const (
 )
 
 const (
-	MIGStrategySingle     = "single"
-	MIGStrategyMixed      = "mixed"
-	MaxTsSlices       int = 8 // max time-slice replicas per GPU (device plugin)
-	// MaxTsInstance is the maximum sum of per-pod time-slice counts for one GPU.
-	MaxTsInstance int = 100
-	// defaultTsInstancesCSV may have up to MaxTsSlices entries, however their sum may not exceed MaxTsInstance (100)
+	MIGStrategySingle      = "single"
+	MIGStrategyMixed       = "mixed"
+	DefaultMaxTsSlices int = 8 // max time-slice replicas per GPU (device plugin)
+	// DefaultLimitForTsSlices is the maximum sum of per-pod time-slice counts for one GPU.
+	DefaultLimitForTsSlices int = 100
+	// defaultTsInstancesCSV may have entries with up to MaxTsSlices values, however their sum may not exceed LimitForTsSlices (100)
 	defaultTsInstancesCSV = "8" // e.g. "8,1,3,2,6,5,8,8"
 	//defaultTsMonAfterPod   int = 1 // start monitoring pods after 1 pod is running
 )
@@ -108,8 +110,10 @@ func init() {
 	flag.IntVar(&PodDelay, "mixed.mig.pod-delay", 0, "delay in seconds between pod creation on mixed-mig testcase")
 	flag.IntVar(&SingleMigProfile, "single.mig.profile", -2, "index of the MIG profile to be used for single-mig testcase")
 	flag.StringVar(&MigInstances, "mixed.mig.instances", "-1", "comma-separated number of instances for mixed-mig testcase, defaults are for A100 GPU [2,0,1,1,0,0]")
-	flag.StringVar(&TsInstancesCSV, "time.slicing.instances", defaultTsInstancesCSV, "comma-separated time-slice counts per pod; sum must not exceed MaxTsInstance (100)")
+	flag.StringVar(&TsInstancesCSV, "time.slicing.instances", defaultTsInstancesCSV, "comma-separated time-slice counts per pod; sum must not exceed time.slicing.limit")
 	flag.IntVar(&TsMonAfterPod, "time.slicing.mon-after-pod", 0, "minimum number of pods running before monitoring starts")
+	flag.IntVar(&MaxTsSlices, "time.slicing.max-running-slices", DefaultMaxTsSlices, "max time-slice replicas per GPU (device plugin)")
+	flag.IntVar(&LimitForTsSlices, "time.slicing.limit", DefaultLimitForTsSlices, "max total time-slice count launched by the testcase")
 	flag.BoolVar(&NoColor, "no-color", false, "disable color output")
 }
 
