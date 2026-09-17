@@ -145,8 +145,10 @@ NVIDIA MIG parameters for the script are controlled by the following ginkgo para
 - `--single.mig.profile=n`, where n is typically a value of int type between 0-5. The parameter is used to choose the MIG profile from list of available MIG profiles (e.g. 1g.5gb is usually referenced with index 0).  If not specified, a valid random number is used. Typically values 0-5. - *optional*
 - `--mixed.mig.instances=xxx`, where xxx is a comma-separated string inside quotation marks (e.g. "2,0,1,1,0,0") The list of numbers represent how many instances are to be used for each profile when creating a pod. The first number indicates how many instances are to be used for the first profile etc. The instances of different profiles consume GPU slices in a different way. The name of the profile (e.g. 2g.10gb) describes the consumption of each instance (each instance would consume 2 slices and 10gb of memory). *optional*
 - `--mixed.mig.pod-delay=n`, where n is a number in range 0 - 315 (seconds). In mixed MIG testcase there are usually more than 1 pod launched (depends on available GPU and mixed.mig.instances parameter). Since GPU workload is 300 seconds, this parameter can be used to control the delay between the pod launches so that the pods are running completely simultaneously, mostly overlapping (e.g. 15-80), slightly overlapping (e.g. 200-280 seconds), or non-overlapping (over 300 seconds). Values outside valid range are reset to closest limit (either 0 or 315). *optional*
-- `--time.slicing.instances=xxx`, where xxx is a comma-separated string inside quotation marks (e.g. "1,2,3,4,5,6,7,8"). Default is "8". The list of numbers represent how many timeslices for each pod is to be created. In the previous example the first pod would get 1 time-slice, second one would get 2, etc. They may run simultaneously as long as they don't exceed the maximum value (8) that can run simultaneously. Any pods that is not getting the resources will stay in pending state until the requested resources become available. Any pod with requested 8 time-slices will run alone. The sum of the values is currently restricted to 100.
+- `--time.slicing.instances=xxx`, where xxx is a comma-separated string inside quotation marks (e.g. "1,2,3,4,5,6,7,8"). Default is "8". Any single value in the list must be at least 1 and up to max-running-slices. The list of numbers represent how many timeslices for each pod is to be reserved. In the previous example the first pod would get 1 time-slice, second one would get 2, etc. They may run simultaneously as long as they don't exceed the maximum value (e.g. 8) that can run simultaneously. Any pods that is not getting the resources will stay in pending state until the requested resources become available. Any pod with requested max-running-slices time-slices will run alone. Parameter time.slicing.limit restricts the sum of the values (to e.g. default 100).
 - `--time.slicing.mon-after-pod=n`. Default is 0, meaning that process monitoring will start immediately. If there are 5 instances and mon-after-pod=4, the process monitoring would only start after 4th pod. There may be previous pods still running depending on how many time-slices they have been allocated. Any number exceeding the number of instances will prevent the process monitoring
+- `--time.slicing.max-running-slices=n`. Minimum value is 2. Default is 8, meaning that there can be total of 8 slices running at any same time.
+- `--time.slicing.limit=n`. Minimum value is 2. Default is 100, meaning that there can be up to e.g. 100 slices launched in total by the testcase.
 
 
 
@@ -211,7 +213,7 @@ It is recommended to execute the runner script through the `make run-tests` make
 
 #### Steps to run MIG tests:
 
-1. Run mig testcases (single-mig, mixed-mig and time-slicing) after nvidia-ci on any cluster, while selecting single.mig.profile=1 and 2 time-slicing pods, which do not run at the same time because their sum would exceed the maximum number of simultaneous time-slices (8). Without any mixed-mig arguments, it will run as default.
+1. Run mig testcases (single-mig, mixed-mig and time-slicing) after nvidia-ci on any cluster, while selecting single.mig.profile=1 and 2 time-slicing pods, which do not run at the same time because their sum would exceed the maximum number of simultaneous time-slices (8). Without any mixed-mig arguments, it will run as default. As an example, limit and max-running-slices are set to non default values. In this case 2 pods are launched, first one with 3 timeslices run and consume 3 out of 9 timeslices, blocking the second pod from running because it requires all 9 timeslices. The second pod gets into running state only after the first pod has been completed.
 
 ```bash
 $ export KUBECONFIG=/path/to/kubeconfig
@@ -222,7 +224,7 @@ $ export TEST_LABELS='nvidia-ci,gpu,single-mig,mixed-mig,time-slicing'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
-$ make run-tests ARGS="-- --single.mig.profile=1 --time.slicing.instances=3,8"
+$ make run-tests ARGS="-- --single.mig.profile=1 --time.slicing.limit=15 --time.slicing.max-running-slices=9 --time.slicing.instances=3,9"
 ```
 
 1. Running only MIG testcases (make run-mig-tests) on an existing cluster which has GPU operator installed,
@@ -234,7 +236,7 @@ With these MIG parameters single-mig testcase would choose a random MIG profile 
 included) , mixed-mig testcase would use 1 instance amount for A100 GPU (1x 1g.5gb, 1x 2g.10gb and 1x 3g.20gb,
 leaving the second profile 1g.10gb unused).
 mixed-mig testcase would wait 35 seconds between the pods launching with mixed.mig.pod-delay parameter
-time-slicing testcase would launch 8 pods, with 1 time-slice each, allowing them to be executed at the same time
+time-slicing testcase would launch 16 pods, with 1 time-slice each, allowing them to be executed at the same time, as the max-running-slices is set to 16.
 You can deliver the ginkgo cli parameter using ARGS after the "make run-mig-tests"
 
 ```bash
@@ -246,7 +248,7 @@ $ export TEST_LABELS='single-mig,mixed-mig,time-slicing'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
-$ make run-mig-tests ARGS="-- --mixed.mig.instances='1,0,1,1' --mixed.mig.pod-delay=35 --time.slicing.instances=1,1,1,1,1,1,1,1"
+$ make run-mig-tests ARGS="-- --mixed.mig.instances='1,0,1,1' --mixed.mig.pod-delay=35 --time.slicing.max-running-slices=16 --time.slicing.instances=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"
 ```
 
 

@@ -886,11 +886,15 @@ func ReadDelayBetweenPods() int {
 	return podDelay
 }
 
-// ReadTimeSlicingParameters parses and validates and validates --time.slicing.instances
-// and --time.slicing.mon-after-pod parameters.
-// It sets global TsInstances to the first TsPodCount slice counts (time slices requested per pod).
+// ReadTimeSlicingParameters parses and validates time-slicing CLI parameters.
+// It sets global TsInstances to the per-pod slice counts (time slices requested per pod).
 func ReadTimeSlicingParameters() []int {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Validate time-slicing CLI parameters"))
+
+	Expect(MaxTsSlices).To(BeNumerically(">", 1),
+		"time.slicing.max-running-slices must be > 1 (got %d)", MaxTsSlices)
+	Expect(LimitForTsSlices).To(BeNumerically(">", 1),
+		"time.slicing.limit must be > 1 (got %d)", LimitForTsSlices)
 
 	parsed := parseMigInstances(TsInstancesCSV, defaultTsInstancesCSV)
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s %d", colorLog(colorCyan+colorBold, "parsed length"), len(parsed))
@@ -903,14 +907,16 @@ func ReadTimeSlicingParameters() []int {
 	for i, v := range out {
 		Expect(v).To(BeNumerically(">=", 0),
 			"time.slicing.instances value at index %d must be non-negative (got %d)", i, v)
+		Expect(v).To(BeNumerically("<=", MaxTsSlices),
+			"time.slicing.instances value at index %d is %d; must not exceed time.slicing.max-running-slices (%d)", i, v, MaxTsSlices)
 		sum += v
 	}
-	Expect(sum).To(BeNumerically("<=", MaxTsInstance),
-		"sum of time-slicing instance counts %v is %d; must not exceed %d", out, sum, MaxTsInstance)
+	Expect(sum).To(BeNumerically("<=", LimitForTsSlices),
+		"sum of time-slicing instance counts %v is %d; must not exceed time.slicing.limit (%d)", out, sum, LimitForTsSlices)
 
 	TsInstances = out
-	glog.V(gpuparams.Gpu10LogLevel).Infof("Time-slicing: pod-count=%d per-pod instances=%v sum=%d (max=%d), mon-after-pod=%d",
-		TsPodCount, out, sum, MaxTsInstance, TsMonAfterPod)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Time-slicing: pod-count=%d per-pod instances=%v sum=%d (limit=%d), max-running-slices=%d, mon-after-pod=%d",
+		TsPodCount, out, sum, LimitForTsSlices, MaxTsSlices, TsMonAfterPod)
 	return out
 }
 
@@ -2117,6 +2123,20 @@ func LogCLIParameterValues() {
 		GinkgoWriter.Printf("Flag --time.slicing.mon-after-pod not provided, using default: %d\n", TsMonAfterPod)
 	} else {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("%s %d", colorLog(colorCyan+colorBold, "Value of --time.slicing.mon-after-pod parameter: "), TsMonAfterPod)
+	}
+
+	wasProvided = isFlagProvided("time.slicing.max-running-slices")
+	if !wasProvided {
+		GinkgoWriter.Printf("Flag --time.slicing.max-running-slices not provided, using default: %d\n", DefaultMaxTsSlices)
+	} else {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("%s %d", colorLog(colorCyan+colorBold, "Value of --time.slicing.max-running-slices parameter: "), MaxTsSlices)
+	}
+
+	wasProvided = isFlagProvided("time.slicing.limit")
+	if !wasProvided {
+		GinkgoWriter.Printf("Flag --time.slicing.limit not provided, using default: %d\n", DefaultLimitForTsSlices)
+	} else {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("%s %d", colorLog(colorCyan+colorBold, "Value of --time.slicing.limit parameter: "), LimitForTsSlices)
 	}
 
 }
