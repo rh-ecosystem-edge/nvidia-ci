@@ -72,6 +72,10 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 
 		AfterAll(func() {
 			glog.V(gpuparams.Gpu10LogLevel).Infof("cleanup in AfterAll")
+			err := mig.DeletePods(inittools.APIClient, burn.Namespace).
+				WithLabelSelector(burn.PodLabel).
+				Delete()
+			Expect(err).ToNot(HaveOccurred(), "Error deleting gpu-burn pods in AfterAll: %v", err)
 			if nfdInstance.CleanupAfterInstall && cleanupAfterTest {
 				err := nfd.Cleanup(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "Error cleaning up NFD resources: %v", err)
@@ -96,6 +100,15 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 				Skip("Test skipped: 'mixed-mig' label not present in ginkgo label filter")
 			}
 			mig.TestMixedMIGGPUWorkload(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
+		})
+
+		It("Test GPU workload with timeslicing", Label("time-slicing"), func() {
+			// Skip if time-slicing label is not in the ginkgo label filter
+			if !mig.IsLabelInFilter("time-slicing") {
+				glog.V(gpuparams.GpuLogLevel).Infof("Skipping test: 'time-slicing' label not present in ginkgo label filter")
+				Skip("Test skipped: 'time-slicing' label not present in ginkgo label filter")
+			}
+			mig.TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig, burn, BurnImageName, WorkerNodeSelector, cleanupAfterTest)
 		})
 
 	})
