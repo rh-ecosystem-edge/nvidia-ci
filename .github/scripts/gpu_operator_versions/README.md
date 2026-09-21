@@ -89,6 +89,8 @@ The same `update_versions.py` script runs twice: once for regular tests (using `
 
 The `signed_settings.json` also uses a stricter `ignored_versions_regex` to limit OCP versions to 4.20+ (only versions with signed CI jobs in the release repo).
 
+Signed/precompiled test commands are only commented on PRs Monday through Thursday. On Fridays and Sundays (the workflow does not run on Saturdays), only regular tests are triggered. Version tracking still runs on all scheduled days so no updates are missed.
+
 ## Data Sources
 
 - **OpenShift versions**: Retrieved from OpenShift CI release streams API

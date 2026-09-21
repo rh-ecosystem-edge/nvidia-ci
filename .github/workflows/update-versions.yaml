@@ -94,7 +94,13 @@ jobs:
           TEST_TRIGGERS: ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
           TEST_TRIGGERS_SIGNED: ${{ steps.read_signed_tests.outputs.TEST_TRIGGERS_SIGNED }}
         run: |
-          ALL_TRIGGERS="${TEST_TRIGGERS}"$'\n'"${TEST_TRIGGERS_SIGNED}"
+          DAY_OF_WEEK=$(date +%u)
+          if [ "${DAY_OF_WEEK}" -ge 1 ] && [ "${DAY_OF_WEEK}" -le 4 ]; then
+            ALL_TRIGGERS="${TEST_TRIGGERS}"$'\n'"${TEST_TRIGGERS_SIGNED}"
+          else
+            echo "Skipping signed/precompiled tests (only triggered Mon-Thu)."
+            ALL_TRIGGERS="${TEST_TRIGGERS}"
+          fi
           if [ -z "${ALL_TRIGGERS//[[:space:]]/}" ]; then
             echo "No test triggers to comment; skipping."
             exit 0
