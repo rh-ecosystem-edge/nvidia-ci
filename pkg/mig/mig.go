@@ -1877,28 +1877,6 @@ func DeployGPUWorkload(
 	return gpuMigPodPulled
 }
 
-// DeployTimeslicingGPUBurnPods creates TsPodCount GPU burn pods for time-slicing.
-// Pod k (1-based) is named gpu-burn-pod-{k}-slice-{n} where n is TsInstances[k-1],
-// each requesting n units of nvidia.com/gpu (device-plugin time-slicing replicas).
-// ReadTimeSlicingParameters must have run so TsPodCount and TsInstances are populated.
-func DeployTimeslicingGPUBurnPods(imageName, namespace, podLabel string) []*pod.Builder {
-	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "DeployTimeslicingGPUBurnPods"))
-	Expect(TsPodCount).To(BeNumerically(">", 0), "TsPodCount must be set for time-slicing pods")
-	Expect(len(TsInstances)).To(BeNumerically(">=", TsPodCount),
-		"TsInstances must have at least TsPodCount entries (got %d, need %d)", len(TsInstances), TsPodCount)
-
-	pods := make([]*pod.Builder, 0, TsPodCount)
-	for i := 0; i < TsPodCount; i++ {
-		slices := TsInstances[i]
-		podName := fmt.Sprintf("gpu-burn-pod-%d-slice-%d", i+1, slices)
-		glog.V(gpuparams.Gpu10LogLevel).Infof("Creating time-slicing gpu-burn pod %s requesting nvidia.com/gpu=%d",
-			podName, slices)
-		pb := DeployGPUWorkload(imageName, podName, namespace, "time-slicing", slices, podLabel)
-		pods = append(pods, pb)
-	}
-	return pods
-}
-
 // waitForGPUBurnPodToComplete waits for the GPU burn pod to reach Running phase,
 // then waits for it to complete and reach Succeeded phase.
 // It uses a two-phase timeout: Phase 1 checks scheduling (fast fail if no GPU node),

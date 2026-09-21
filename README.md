@@ -65,8 +65,6 @@ In order to enable k8reporter the following needs to be done:
 
 > export REPORTS_DUMP_DIR=/tmp/logs_directory
 
-
-
 ## How to run
 
 The test-runner [script](scripts/test-runner.sh) is the recommended way for executing tests.
@@ -243,8 +241,6 @@ $ export NVIDIAGPU_CLEANUP=false
 $ make run-mig-tests ARGS="-- --mixed.mig.instances='1,0,1,1' --mixed.mig.pod-delay=35 --time.slicing.max-running-slices=16 --time.slicing.instances=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"
 ```
 
-
-
 #### Cleanup:
 
 If the GPU operator and gpu burn pod need to be cleaned up, just set `NVIDIAGPU_CLEANUP=true`
@@ -359,8 +355,6 @@ scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,single-mig,mixed-mig,time-slicing" ./tests/nvidiagpu
 ```
 
-
-
 ### Examples of Testing GPU Operator upgrade
 
 Example running the GPU Operator upgrade testcase (from v23.6 to v24.3) after the end-end testcase.
@@ -387,8 +381,6 @@ scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,operator-upgrade" ./tests/nvidiagpu
 ```
 
-
-
 ### Example of running nvidia-ci with custom parameters for NFD and GPU operators
 
 Example running the end-to-end test case and creating custom catalogsources for NFD and GPU Operator packagmanifests
@@ -407,8 +399,6 @@ $ export NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/re
 $ export NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
 $ make run-tests
 ```
-
-
 
 ### Example for end-to-end Network Operator testcase with Legacy SRIOV RDMA testcase
 
