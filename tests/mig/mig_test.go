@@ -72,9 +72,7 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 
 		AfterAll(func() {
 			glog.V(gpuparams.Gpu10LogLevel).Infof("cleanup in AfterAll")
-			err := mig.DeletePods(inittools.APIClient, burn.Namespace).
-				WithLabelSelector(burn.PodLabel).
-				Delete()
+			err := mig.DeletePods(inittools.APIClient, burn.Namespace, burn.PodLabel)
 			Expect(err).ToNot(HaveOccurred(), "Error deleting gpu-burn pods in AfterAll: %v", err)
 			if nfdInstance.CleanupAfterInstall && cleanupAfterTest {
 				err := nfd.Cleanup(inittools.APIClient)

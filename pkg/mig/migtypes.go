@@ -45,15 +45,6 @@ type TsPodInfo struct {
 	Checked   bool         // whether the pod has been checked
 }
 
-// PMonRow is one data row from "nvidia-smi pmon -c 1" output.
-// Pid is 0 when the GPU slot has no process (pid column is "-").
-type PMonRow struct {
-	GpuIdx  int    // GPU index (0-based)
-	Pid     int    // Process ID; 0 if no process
-	Type    string // C/G or -
-	Command string // Process name, e.g. gpu_burn
-}
-
 // ANSI color constants for console output highlighting
 // colors are \033[31m - red through \033[37m - white
 const (
@@ -102,7 +93,6 @@ const (
 	DefaultLimitForTsSlices int = 100
 	// defaultTsInstancesCSV may have entries with up to MaxTsSlices values, however their sum may not exceed LimitForTsSlices (100)
 	defaultTsInstancesCSV = "8" // e.g. "8,1,3,2,6,5,8,8"
-	//defaultTsMonAfterPod   int = 1 // start monitoring pods after 1 pod is running
 )
 
 func init() {

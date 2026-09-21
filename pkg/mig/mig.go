@@ -470,9 +470,7 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 		waitForReady := !alreadyFailed
 
 		glog.V(gpuparams.Gpu100LogLevel).Infof("defer (remove time-slicing config)")
-		if err := DeletePods(inittools.APIClient, burn.Namespace).
-			WithLabelSelector(burn.PodLabel).
-			Delete(); err != nil {
+		if err := DeletePods(inittools.APIClient, burn.Namespace, burn.PodLabel); err != nil {
 			glog.Errorf("time-slicing teardown: delete gpu-burn pods: %v", err)
 			if !alreadyFailed {
 				Expect(err).NotTo(HaveOccurred())
@@ -557,7 +555,7 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 	// 909855, ./gpu_burn, 3756 MiB, 2026/03/02 10:48:43.256, NVIDIA A100-PCIE-40GB, 00000000:B1:00.0, 1323720014180, GPU-ea8148c0-9fd4-3e84-18a0-19cffe1cecce
 
 	output = GetCmdOutput(inittools.APIClient, workerNodeSelector, cmd)
-	Expect(output).NotTo(BeEmpty(), "Error checking time-slicing status: %v", err)
+	Expect(output).NotTo(BeEmpty(), "Error checking time-slicing status")
 	// Get the PID (1st column) from the CSV output
 	status, pids = GetPidFromCSV(output, 1)
 
@@ -567,7 +565,6 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 
 	By("Deploy gpu-burn pod with time-slicing in test-gpu-burn namespace")
 	var tsPodInfo []TsPodInfo
-	// pods := make([]*pod.Builder, 0, TsPodCount)
 	for i := 0; i < TsPodCount; i++ {
 		slices := TsInstances[i]
 		podName := fmt.Sprintf("gpu-burn-pod-%d-slice-%d", i+1, slices)
@@ -581,8 +578,6 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 			Checked:   false,
 		})
 	}
-	// allow pods to get into Running state to avoid unnecessary logging
-	time.Sleep(10 * time.Second)
 
 	// Ensure all pods get into Running state, looping through the previously created & collected pods.
 	// Competed status is accepted as well in the isRunning function (because of mixed.mig.pod-delay parameter,
@@ -624,9 +619,6 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 				if ret1 >= 1 { // monitor once, and wait until pod is completed
 					// skip if the pod was already succeeded
 					MonitorTimeslicingGPULoad(burn, podInfo, workerNodeSelector)
-					// pmonOut := GetCmdOutput(inittools.APIClient, workerNodeSelector, []string{"nvidia-smi", "pmon", "-d", "1", "-c", "1"})
-					// status, pids := GetPidsFromPmon(pmonOut, 2)
-					// glog.V(gpuparams.GpuLogLevel).Infof("Time-slicing pod pids: %v with status: %v", pids, status)
 					isCompleted(podInfo.Pod, burn.Namespace)
 				}
 			}
@@ -663,7 +655,6 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 					podInfo.Pod.Definition.Name, err)
 				gpuBurnMigLogs = fullLogs
 			}
-			// CheckGPUBurnPodLogs(gpuBurnMigLogs, 1) // only 1 GPU used for time-slicing
 			CheckTimeSlicingGPUBurnPodLogs(gpuBurnMigLogs)
 		}
 		i++
@@ -695,6 +686,7 @@ func CleanupGPUOperatorResources(cleanupAfterTest bool, burnNamespace string) {
 
 // cleanupClusterPolicy deletes the ClusterPolicy resource if it exists
 func cleanupClusterPolicy() {
+	By("Deleting ClusterPolicy")
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Delete ClusterPolicy"))
 	clusterPolicyBuilder, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
 	if err == nil && clusterPolicyBuilder.Exists() {
@@ -708,6 +700,7 @@ func cleanupClusterPolicy() {
 
 // cleanupCSV deletes the ClusterServiceVersion resources if they exist
 func cleanupCSV() {
+	By("Deleting CSV")
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Delete CSV"))
 	csvList, err := olm.ListClusterServiceVersion(inittools.APIClient, nvidiagpu.SubscriptionNamespace)
 	if err == nil && len(csvList) > 0 {
@@ -723,6 +716,7 @@ func cleanupCSV() {
 
 // cleanupSubscription deletes the Subscription resource if it exists
 func cleanupSubscription() {
+	By("Deleting Subscription")
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Delete Subscription"))
 	subBuilder, err := olm.PullSubscription(inittools.APIClient, nvidiagpu.SubscriptionName, nvidiagpu.SubscriptionNamespace)
 	if err == nil && subBuilder.Exists() {
@@ -734,6 +728,7 @@ func cleanupSubscription() {
 
 // cleanupOperatorGroup deletes the OperatorGroup resource if it exists
 func cleanupOperatorGroup() {
+	By("Deleting OperatorGroup")
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Delete OperatorGroup"))
 	ogBuilder, err := olm.PullOperatorGroup(inittools.APIClient, nvidiagpu.OperatorGroupName, nvidiagpu.SubscriptionNamespace)
 	if err == nil && ogBuilder.Exists() {
@@ -745,6 +740,7 @@ func cleanupOperatorGroup() {
 
 // cleanupGPUOperatorNamespace deletes the GPU Operator namespace if it exists
 func cleanupGPUOperatorNamespace() {
+	By("Deleting GPU Operator Namespace")
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Delete GPU Operator Namespace"))
 	nsBuilder := namespace.NewBuilder(inittools.APIClient, nvidiagpu.SubscriptionNamespace)
 	if nsBuilder.Exists() {
@@ -756,6 +752,7 @@ func cleanupGPUOperatorNamespace() {
 
 // cleanupGPUBurnNamespace deletes the GPU Burn namespace if it exists
 func cleanupGPUBurnNamespace(burnNamespace string) {
+	By("Deleting GPU Burn Namespace")
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Delete GPU Burn Namespace"))
 	burnNsBuilder := namespace.NewBuilder(inittools.APIClient, burnNamespace)
 	if burnNsBuilder.Exists() {
@@ -923,7 +920,7 @@ func ReadTimeSlicingParameters() []int {
 // CleanupWorkloadResources cleans up existing GPU burn pods and configmaps, then waits for cleanup to complete.
 func CleanupWorkloadResources(burn *nvidiagpu.GPUBurnConfig) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Cleaning up namespace and workload resources"))
-	if err := DeletePods(inittools.APIClient, burn.Namespace).WithLabelSelector(burn.PodLabel).Delete(); err != nil {
+	if err := DeletePods(inittools.APIClient, burn.Namespace, burn.PodLabel); err != nil {
 		Expect(err).ToNot(HaveOccurred(), "Error deleting gpu-burn pods: %v", err)
 	}
 
@@ -940,76 +937,41 @@ func CleanupWorkloadResources(burn *nvidiagpu.GPUBurnConfig) {
 
 const defaultPodDeleteWait = 30 * time.Second
 
-// PodCleanup deletes pods in a namespace that match a label selector.
-type PodCleanup struct {
-	apiClient     *clients.Settings
-	namespace     string
-	labelSelector string
-	waitTimeout   time.Duration
-}
-
-// DeletePods starts a pod cleanup for the given namespace.
-func DeletePods(apiClient *clients.Settings, namespace string) *PodCleanup {
+// DeletePods lists pods in namespace matching labelSelector, deletes them, then waits until they are gone.
+func DeletePods(apiClient *clients.Settings, namespace, labelSelector string) error {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "DeletePods"))
-	return &PodCleanup{
-		apiClient:   apiClient,
-		namespace:   namespace,
-		waitTimeout: defaultPodDeleteWait,
-	}
-}
-
-// WithLabel adds a label requirement (key=value) to the pod label selector.
-func (p *PodCleanup) WithLabel(labelKey, labelValue string) *PodCleanup {
-	add := labelKey + "=" + labelValue
-	if p.labelSelector == "" {
-		p.labelSelector = add
-	} else {
-		p.labelSelector = p.labelSelector + "," + add
-	}
-	return p
-}
-
-// WithLabelSelector sets the pod label selector directly (e.g. "app=gpu-burn-app").
-func (p *PodCleanup) WithLabelSelector(labelSelector string) *PodCleanup {
-	p.labelSelector = labelSelector
-	return p
-}
-
-// Delete lists matching pods, deletes them, and waits until they are gone.
-func (p *PodCleanup) Delete() error {
-	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, " Deleting all previously selected pods"))
-	if p.apiClient == nil {
+	if apiClient == nil {
 		return fmt.Errorf("pod cleanup apiClient is nil")
 	}
-	if p.namespace == "" {
+	if namespace == "" {
 		return fmt.Errorf("pod cleanup namespace is empty")
 	}
-	if p.labelSelector == "" {
+	if labelSelector == "" {
 		return fmt.Errorf("pod cleanup label selector is empty")
 	}
 
-	podList, err := pod.List(p.apiClient, p.namespace, metav1.ListOptions{LabelSelector: p.labelSelector})
+	podList, err := pod.List(apiClient, namespace, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		return fmt.Errorf("list pods in namespace %s with label selector %q: %w", p.namespace, p.labelSelector, err)
+		return fmt.Errorf("list pods in namespace %s with label selector %q: %w", namespace, labelSelector, err)
 	}
 	if len(podList) == 0 {
-		glog.V(gpuparams.Gpu10LogLevel).Infof("No pods found in namespace %s with label selector %q", p.namespace, p.labelSelector)
+		glog.V(gpuparams.Gpu10LogLevel).Infof("No pods found in namespace %s with label selector %q", namespace, labelSelector)
 		return nil
 	}
 
-	glog.V(gpuparams.GpuLogLevel).Infof("Found %d pod(s) in namespace %s with label selector %q", len(podList), p.namespace, p.labelSelector)
+	glog.V(gpuparams.GpuLogLevel).Infof("Found %d pod(s) in namespace %s with label selector %q", len(podList), namespace, labelSelector)
 	for _, podBuilder := range podList {
 		glog.V(gpuparams.GpuLogLevel).Infof("Deleting pod %q", podBuilder.Definition.Name)
 		if _, err := podBuilder.Delete(); err != nil {
-			return fmt.Errorf("delete pod %s/%s: %w", p.namespace, podBuilder.Definition.Name, err)
+			return fmt.Errorf("delete pod %s/%s: %w", namespace, podBuilder.Definition.Name, err)
 		}
 	}
 	for _, podBuilder := range podList {
-		if err := podBuilder.WaitUntilDeleted(p.waitTimeout); err != nil {
-			return fmt.Errorf("wait for pod %s/%s deletion: %w", p.namespace, podBuilder.Definition.Name, err)
+		if err := podBuilder.WaitUntilDeleted(defaultPodDeleteWait); err != nil {
+			return fmt.Errorf("wait for pod %s/%s deletion: %w", namespace, podBuilder.Definition.Name, err)
 		}
 	}
-	glog.V(gpuparams.GpuLogLevel).Infof("All pods in namespace %s with label selector %q have been deleted", p.namespace, p.labelSelector)
+	glog.V(gpuparams.GpuLogLevel).Infof("All pods in namespace %s with label selector %q have been deleted", namespace, labelSelector)
 	return nil
 }
 
@@ -1677,28 +1639,6 @@ func DeployGPUWorkload(
 	return gpuMigPodPulled
 }
 
-// DeployTimeslicingGPUBurnPods creates TsPodCount GPU burn pods for time-slicing.
-// Pod k (1-based) is named gpu-burn-pod-{k}-slice-{n} where n is TsInstances[k-1],
-// each requesting n units of nvidia.com/gpu (device-plugin time-slicing replicas).
-// ReadTimeSlicingParameters must have run so TsPodCount and TsInstances are populated.
-func DeployTimeslicingGPUBurnPods(imageName, namespace, podLabel string) []*pod.Builder {
-	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "DeployTimeslicingGPUBurnPods"))
-	Expect(TsPodCount).To(BeNumerically(">", 0), "TsPodCount must be set for time-slicing pods")
-	Expect(len(TsInstances)).To(BeNumerically(">=", TsPodCount),
-		"TsInstances must have at least TsPodCount entries (got %d, need %d)", len(TsInstances), TsPodCount)
-
-	pods := make([]*pod.Builder, 0, TsPodCount)
-	for i := 0; i < TsPodCount; i++ {
-		slices := TsInstances[i]
-		podName := fmt.Sprintf("gpu-burn-pod-%d-slice-%d", i+1, slices)
-		glog.V(gpuparams.Gpu10LogLevel).Infof("Creating time-slicing gpu-burn pod %s requesting nvidia.com/gpu=%d",
-			podName, slices)
-		pb := DeployGPUWorkload(imageName, podName, namespace, "time-slicing", slices, podLabel)
-		pods = append(pods, pb)
-	}
-	return pods
-}
-
 // waitForGPUBurnPodToComplete waits for the GPU burn pod to reach Running phase,
 // then waits for it to complete and reach Succeeded phase.
 // It uses a two-phase timeout: Phase 1 checks scheduling (fast fail if no GPU node),
@@ -1849,7 +1789,7 @@ func isRunningStatus(gpuPod *pod.Builder, namespace string) int {
 		logPodEvents(pod2.Definition.Name, namespace)
 		return 2
 	}
-	return 3
+	return 1
 }
 
 // isFailed checks whether the GPU burn pod is in Failed phase.
@@ -1865,8 +1805,6 @@ func isFailed(gpuPod *pod.Builder, namespace string) bool {
 
 	logPodEvents(pulled.Definition.Name, namespace)
 	return true
-	// Expect(pulled.Object.Status.Phase).To(Equal(corev1.PodSucceeded),
-	// 	"gpu-burn pod %s/%s is Failed; status=%+v", namespace, pulled.Definition.Name, pulled.Object.Status)
 }
 
 // isCompleted checks if the GPU burn pod reaches the Completed phase.
@@ -2102,13 +2040,6 @@ func LogCLIParameterValues() {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("%s %v", colorLog(colorCyan+colorBold, "Value of --no-color parameter: "), NoColor)
 	}
 
-	// wasProvided = isFlagProvided("time.slicing.pod-count")
-	// if !wasProvided {
-	// 	GinkgoWriter.Printf("Flag --time.slicing.pod-count not provided, using default: %d\n", TsPodCount)
-	// } else {
-	// 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s %d", colorLog(colorCyan+colorBold, "Value of --time.slicing.pod-count parameter: "), TsPodCount)
-	// }
-
 	wasProvided = isFlagProvided("time.slicing.instances")
 	if !wasProvided {
 		GinkgoWriter.Printf("Flag --time.slicing.instances not provided, using default: %q\n", defaultTsInstancesCSV)
@@ -2290,12 +2221,10 @@ func GetCmdOutput(apiClient *clients.Settings, nodeSelector map[string]string, c
 	podName, namespace := findDriverPodOnNode(apiClient, nodeSelector)
 
 	// send command to driver pod (usually nvidia-smi)
-	// e.g. cmd := []string{"nvidia-smi", "pmon", "-c", "1"}
-	var cmd1 string
-	for _, cmd := range cmd {
-		cmd1 = cmd1 + cmd + " "
-	}
-	glog.V(gpuparams.Gpu10LogLevel).Infof("oc rsh -n %s pod/%s %v", namespace, podName, cmd1)
+
+	cliCmd := strings.Join(cmd, " ")
+
+	glog.V(gpuparams.Gpu10LogLevel).Infof("oc rsh -n %s pod/%s %s", namespace, podName, cliCmd)
 	output, err := ExecCmdInPod(apiClient, podName, namespace, cmd, 30*time.Second)
 	Expect(err).ToNot(HaveOccurred(), "Error getting command output: %v", err)
 	glog.V(gpuparams.Gpu100LogLevel).Infof("Command output: \n%s", output)
@@ -2322,6 +2251,7 @@ type PidParseConfig struct {
 }
 
 // GetPidsWithRegex parses output line-by-line, matches each line with re, and collects integer values from the configured column.
+// The bool is true when at least one PID was found.
 func GetPidsWithRegex(output string, cfg PidParseConfig) (bool, []int) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "GetPidsWithRegex"))
 	pids := []int{}
@@ -2353,7 +2283,7 @@ func GetPidsWithRegex(output string, cfg PidParseConfig) (bool, []int) {
 	}
 
 	pids = uniqueInts(pids)
-	return true, pids
+	return len(pids) > 0, pids
 }
 
 func uniqueInts(s []int) []int {

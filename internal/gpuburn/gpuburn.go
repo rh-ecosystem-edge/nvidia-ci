@@ -78,7 +78,6 @@ func CreateGPUBurnPodWithMIG(apiClient *clients.Settings, podName, podNamespace 
 		migResourceName = fmt.Sprintf("nvidia.com/%s", migProfile)
 	case "time-slicing":
 		migResourceName = "nvidia.com/gpu" // time-slicing uses gpu resource; pod Args forwarded by entrypoint.sh ("$@")
-		// burnContainerArgs = []string{"-m", "110%"}
 		burnContainerArgs = []string{"-m", "12%"}
 	default:
 		migResourceName = fmt.Sprintf("nvidia.com/mig-%s", migProfile)

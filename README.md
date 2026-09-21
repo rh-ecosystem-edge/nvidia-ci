@@ -67,11 +67,9 @@ In order to enable k8reporter the following needs to be done:
 
 > export DUMP_FAILED_TESTS=true
 
-1. Specify absolute path for logs directory like it appears below.  By default /tmp/reports directory is used.
+2. Specify absolute path for logs directory like it appears below.  By default /tmp/reports directory is used.
 
 > export REPORTS_DUMP_DIR=/tmp/logs_directory
-
-
 
 ## How to run
 
@@ -136,8 +134,6 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - *required*
 - `NVIDIANETWORK_RDMA_GPUDIRECT`: Boolean flag to run RDMA workload with 1 nvidia.com/gpu resource - *optional*
 
-
-
 ### CLI parameters:
 
 NVIDIA MIG parameters for the script are controlled by the following ginkgo parameters which are delivered as `ARGS="-- [{parameter}...]"` for the `make run-tests` (check the examples):
@@ -149,9 +145,6 @@ NVIDIA MIG parameters for the script are controlled by the following ginkgo para
 - `--time.slicing.mon-after-pod=n`. Default is 0, meaning that process monitoring will start immediately. If there are 5 instances and mon-after-pod=4, the process monitoring would only start after 4th pod. There may be previous pods still running depending on how many time-slices they have been allocated. Any number exceeding the number of instances will prevent the process monitoring
 - `--time.slicing.max-running-slices=n`. Minimum value is 2. Default is 8, meaning that there can be total of 8 slices running at any same time.
 - `--time.slicing.limit=n`. Minimum value is 2. Default is 100, meaning that there can be up to e.g. 100 slices launched in total by the testcase.
-
-
-
 
 ### Testing MPS with GPU Operator
 
@@ -250,8 +243,6 @@ $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
 $ make run-mig-tests ARGS="-- --mixed.mig.instances='1,0,1,1' --mixed.mig.pod-delay=35 --time.slicing.max-running-slices=16 --time.slicing.instances=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"
 ```
-
-
 
 #### Cleanup:
 
@@ -367,8 +358,6 @@ scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,single-mig,mixed-mig,time-slicing" ./tests/nvidiagpu
 ```
 
-
-
 ### Examples of Testing GPU Operator upgrade
 
 Example running the GPU Operator upgrade testcase (from v23.6 to v24.3) after the end-end testcase.
@@ -395,8 +384,6 @@ scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,operator-upgrade" ./tests/nvidiagpu
 ```
 
-
-
 ### Example of running nvidia-ci with custom parameters for NFD and GPU operators
 
 Example running the end-to-end test case and creating custom catalogsources for NFD and GPU Operator packagmanifests
@@ -415,8 +402,6 @@ $ export NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/re
 $ export NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
 $ make run-tests
 ```
-
-
 
 ### Example for end-to-end Network Operator testcase with Legacy SRIOV RDMA testcase
 
@@ -461,4 +446,3 @@ Executing nvidiagpu test-runner script
 scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="deploy || rdma-legacy-sriov" ./tests/nvidianetwork
 ```
-
