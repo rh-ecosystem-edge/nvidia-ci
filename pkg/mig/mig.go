@@ -446,6 +446,11 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 	By("Read and validate time.slicing.instances")
 	_ = ReadTimeSlicingParameters()
 
+	By("Check GPU count on GPU nodes")
+	gpuCount, err := GPUCountFromNode(inittools.APIClient, workerNodeSelector)
+	Expect(err).ToNot(HaveOccurred(), "error getting GPU count from GPU nodes: %v", err)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("GPU count from node description: %d", gpuCount)
+
 	// ***** Cleaning up previous GPU Burn resources
 	By("Cleanup if necessary")
 	CleanupWorkloadResources(burn)
@@ -655,7 +660,7 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 					podInfo.Pod.Definition.Name, err)
 				gpuBurnMigLogs = fullLogs
 			}
-			CheckTimeSlicingGPUBurnPodLogs(gpuBurnMigLogs)
+			CheckTimeSlicingGPUBurnPodLogs(gpuBurnMigLogs, gpuCount)
 		}
 		i++
 	}
@@ -1001,6 +1006,66 @@ sharing:
         replicas: %d
 `, replicas)
 	return map[string]string{gpuProduct: yaml}
+}
+
+// GPUCountFromNode returns the number of GPUs on the first node matching nodeSelector.
+// It reads the GFD label nvidia.com/gpu.count from the node description, then falls
+// back to status.capacity nvidia.com/gpu.
+func GPUCountFromNode(apiClient *clients.Settings, nodeSelector map[string]string) (int, error) {
+	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "GPUCountFromNode"))
+	if apiClient == nil {
+		return 0, fmt.Errorf("apiClient is nil")
+	}
+	if len(nodeSelector) == 0 {
+		return 0, fmt.Errorf("nodeSelector is empty")
+	}
+
+	nodeBuilders, err := nodes.List(apiClient, metav1.ListOptions{LabelSelector: labels.Set(nodeSelector).String()})
+	if err != nil {
+		return 0, fmt.Errorf("list nodes matching %v: %w", nodeSelector, err)
+	}
+	if len(nodeBuilders) == 0 {
+		return 0, fmt.Errorf("no nodes found matching selector %v", nodeSelector)
+	}
+
+	for _, nb := range nodeBuilders {
+		count, source, err := gpuCountFromNodeObject(nb.Object)
+		if err != nil {
+			glog.V(gpuparams.GpuLogLevel).Infof("Node %s: %v", nb.Object.Name, err)
+			continue
+		}
+		glog.V(gpuparams.GpuLogLevel).Infof("Node %s GPU count=%d (%s)", nb.Object.Name, count, source)
+		return count, nil
+	}
+	return 0, fmt.Errorf("no GPU count found on nodes matching %v (looked at %s and capacity %s)",
+		nodeSelector, gpuCountLabelKey, nvidiagpu.GPUCapacityKey)
+}
+
+func gpuCountFromNodeObject(node *corev1.Node) (int, string, error) {
+	if node == nil {
+		return 0, "", fmt.Errorf("node is nil")
+	}
+	if node.Labels != nil {
+		if s := node.Labels[gpuCountLabelKey]; s != "" {
+			n, err := strconv.Atoi(s)
+			if err != nil {
+				return 0, "", fmt.Errorf("label %s=%q is not an integer: %w", gpuCountLabelKey, s, err)
+			}
+			if n <= 0 {
+				return 0, "", fmt.Errorf("label %s=%d, expected > 0", gpuCountLabelKey, n)
+			}
+			return n, gpuCountLabelKey, nil
+		}
+	}
+	qty, ok := node.Status.Capacity[corev1.ResourceName(nvidiagpu.GPUCapacityKey)]
+	if !ok {
+		return 0, "", fmt.Errorf("missing %s label and %s capacity", gpuCountLabelKey, nvidiagpu.GPUCapacityKey)
+	}
+	n := int(qty.Value())
+	if n <= 0 {
+		return 0, "", fmt.Errorf("capacity %s=%d, expected > 0", nvidiagpu.GPUCapacityKey, n)
+	}
+	return n, "status.capacity " + nvidiagpu.GPUCapacityKey, nil
 }
 
 func firstGPUProductFromNodes(apiClient *clients.Settings, nodeSelector map[string]string) string {
@@ -1856,12 +1921,14 @@ func CheckGPUBurnPodLogs(gpuBurnMigLogs string, migInstanceCount int) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Gpu-burn pod execution with MIG configuration was successful")
 }
 
-// CheckTimeSlicingGPUBurnPodLogs validates gpu-burn output for a completed time-slicing pod (one visible GPU per pod).
-func CheckTimeSlicingGPUBurnPodLogs(logs string) {
+// CheckTimeSlicingGPUBurnPodLogs validates gpu-burn output for a completed time-slicing pod.
+// gpuCount is the number of GPUs from the node description (nvidia.com/gpu.count or capacity).
+func CheckTimeSlicingGPUBurnPodLogs(logs string, gpuCount int) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "CheckTimeSlicingGPUBurnPodLogs"))
-	Expect(strings.Contains(logs, "Tested 1 GPUs")).To(BeTrue(),
-		"gpu-burn logs should contain 'Tested 1 GPUs'; logs excerpt: %.500s", logs)
-	CheckGPUBurnPodLogs(logs, 1)
+	tested := fmt.Sprintf("Tested %d GPUs", gpuCount)
+	Expect(strings.Contains(logs, tested)).To(BeTrue(),
+		"gpu-burn logs should contain %q; logs excerpt: %.500s", tested, logs)
+	CheckGPUBurnPodLogs(logs, gpuCount)
 }
 
 // MonitorTimeslicingGPULoad polls one time-slicing gpu-burn pod has succeeded

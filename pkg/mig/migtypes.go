@@ -118,6 +118,7 @@ const timeSlicingDevicePluginConfigMapName = "device-plugin-config"
 const gpuProductSharedSuffix = "-SHARED"
 
 const gpuProductLabelKey = "nvidia.com/gpu.product"
+const gpuCountLabelKey = "nvidia.com/gpu.count"
 
 type timeSlicingConfigSnapshot struct {
 	hadDevicePluginConfig bool
