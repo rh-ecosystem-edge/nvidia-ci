@@ -464,6 +464,11 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 	By("Read and validate time.slicing.instances")
 	_ = ReadTimeSlicingParameters(gpuCount)
 
+	By("Check GPU count on GPU nodes")
+	gpuCount, err := GPUCountFromNode(inittools.APIClient, workerNodeSelector)
+	Expect(err).ToNot(HaveOccurred(), "error getting GPU count from GPU nodes: %v", err)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("GPU count from node description: %d", gpuCount)
+
 	// ***** Cleaning up previous GPU Burn resources
 	By("Cleanup if necessary")
 	CleanupWorkloadResources(burn)
