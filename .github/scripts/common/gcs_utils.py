@@ -50,8 +50,16 @@ def _matches_gcs_glob(path: str, pattern: str) -> bool:
     parts: list[str] = []
     while i < len(pattern):
         if i + 1 < len(pattern) and pattern[i] == "*" and pattern[i + 1] == "*":
-            parts.append(".*")
-            i += 2
+            if (
+                i + 2 < len(pattern)
+                and pattern[i + 2] == "/"
+                and (i == 0 or pattern[i - 1] == "/")
+            ):
+                parts.append("(?:.*/)?")
+                i += 3
+            else:
+                parts.append(".*")
+                i += 2
         elif pattern[i] == "*":
             parts.append("[^/]*")
             i += 1
