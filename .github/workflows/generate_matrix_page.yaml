@@ -77,6 +77,7 @@ jobs:
       - name: Fetch CI Data
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROW_TOKEN: ${{ secrets.PROW_TOKEN }}
         run: |
           echo "Processing PR: ${{ steps.determine_pr.outputs.PR_NUMBER }}"
           PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.fetch_ci_data \
