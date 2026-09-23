@@ -44,7 +44,7 @@ COPY --from=oc-cli /usr/bin/oc /usr/bin/oc
 COPY --from=operator-sdk /usr/local/bin/operator-sdk /usr/local/bin/operator-sdk
 
 # Install dependencies combined into single layer to reduce image size
-RUN dnf install -y jq && \
+RUN dnf install -y jq gettext && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum
 
@@ -77,6 +77,7 @@ COPY --chown=1001:0 internal/ ./internal/
 COPY --chown=1001:0 scripts/ ./scripts/
 COPY --chown=1001:0 pkg/ ./pkg/
 COPY --chown=1001:0 --chmod=775 tests/ ./tests/
+COPY --chown=1001:0 manifests/ ./manifests/
 
 RUN make get-gpu-operator-must-gather && \
     make get-nfd-must-gather
