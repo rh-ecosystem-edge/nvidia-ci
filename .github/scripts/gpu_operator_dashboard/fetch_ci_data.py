@@ -134,6 +134,10 @@ class TestResult:
 
 def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, Any]]:
     """Fetch files matching a specific glob pattern for a PR."""
+    if os.environ.get("PROW_TOKEN"):
+        from common.gcs_utils import fetch_filtered_files as common_fetch
+        return common_fetch(pr_number, glob_pattern)
+
     logger.info(f"Fetching files matching pattern: {glob_pattern}")
 
     params = {
