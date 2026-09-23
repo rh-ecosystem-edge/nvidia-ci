@@ -10,6 +10,7 @@ Supports two backends:
 import os
 import re
 import urllib.parse
+from fnmatch import fnmatchcase
 from collections import deque
 from typing import Dict, Any, List, Tuple
 
@@ -29,6 +30,11 @@ _GCSWEB_API_URL = os.environ.get(
     "PROW_GCSWEB_API_URL",
     "https://gcsweb-test-platform-results-ci.apps.ci.l2s4.p1.openshiftapps.com"
 ).rstrip("/")
+if _PROW_TOKEN and not _GCSWEB_API_URL.startswith("https://"):
+    raise ValueError(
+        f"PROW_GCSWEB_API_URL must use HTTPS when PROW_TOKEN is set "
+        f"(got {_GCSWEB_API_URL!r})"
+    )
 _GCS_BUCKET = "test-platform-results"
 _CURATED_PREFIX = os.environ.get("PROW_CURATED_PREFIX", "curated/")
 
@@ -100,6 +106,7 @@ def _gcsweb_list_all_files(prefix: str) -> List[str]:
 
     all_files: List[str] = []
     dirs_to_visit: deque = deque([prefix])
+    had_errors = False
 
     while dirs_to_visit:
         current = dirs_to_visit.popleft()
@@ -110,6 +117,7 @@ def _gcsweb_list_all_files(prefix: str) -> List[str]:
             response.raise_for_status()
         except Exception as e:
             logger.warning(f"Failed to list {current}: {e}")
+            had_errors = True
             continue
 
         directories, files = _parse_gcsweb_listing(response.text, current)
@@ -120,8 +128,11 @@ def _gcsweb_list_all_files(prefix: str) -> List[str]:
         for d in directories:
             dirs_to_visit.append(f"{current}{d}/")
 
-    _files_cache[prefix] = all_files
-    logger.info(f"Cached {len(all_files)} files under {prefix}")
+    if not had_errors:
+        _files_cache[prefix] = all_files
+        logger.info(f"Cached {len(all_files)} files under {prefix}")
+    else:
+        logger.warning(f"Skipping cache for {prefix} due to errors during traversal")
     return all_files
 
 
@@ -253,9 +264,6 @@ def _gcsweb_fetch_filtered_files(pr_number: str, glob_pattern: str) -> list[Dict
     """
     all_items: list[Dict[str, Any]] = []
 
-    # Extract the target suffix from the glob (strip leading **/)
-    target = glob_pattern.lstrip("*").lstrip("/")
-
     for base_prefix in [
         f"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/{pr_number}/",
         f"pr-logs/pull/openshift_release/{pr_number}/",
@@ -264,7 +272,7 @@ def _gcsweb_fetch_filtered_files(pr_number: str, glob_pattern: str) -> list[Dict
         all_files = _gcsweb_list_all_files(gcsweb_prefix)
 
         for file_path in all_files:
-            if file_path.endswith(f"/{target}"):
+            if fnmatchcase(file_path, glob_pattern):
                 # Strip curated/ prefix so callers see the same paths as before
                 original_path = file_path.removeprefix(_CURATED_PREFIX)
                 all_items.append({"name": original_path})
