@@ -10,7 +10,6 @@ Supports two backends:
 import os
 import re
 import urllib.parse
-from fnmatch import fnmatchcase
 from collections import deque
 from typing import Dict, Any, List, Tuple
 
@@ -40,6 +39,29 @@ _CURATED_PREFIX = os.environ.get("PROW_CURATED_PREFIX", "curated/")
 
 # Cache for recursive directory traversals (avoids re-crawling the same prefix)
 _files_cache: Dict[str, List[str]] = {}
+
+
+def _matches_gcs_glob(path: str, pattern: str) -> bool:
+    """Match a path against a GCS matchGlob pattern.
+
+    ** matches across directory boundaries, * matches within a single segment.
+    """
+    i = 0
+    parts: list[str] = []
+    while i < len(pattern):
+        if i + 1 < len(pattern) and pattern[i] == "*" and pattern[i + 1] == "*":
+            parts.append(".*")
+            i += 2
+        elif pattern[i] == "*":
+            parts.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            parts.append("[^/]")
+            i += 1
+        else:
+            parts.append(re.escape(pattern[i]))
+            i += 1
+    return bool(re.fullmatch("".join(parts), path))
 
 
 def _use_gcsweb() -> bool:
@@ -272,7 +294,7 @@ def _gcsweb_fetch_filtered_files(pr_number: str, glob_pattern: str) -> list[Dict
         all_files = _gcsweb_list_all_files(gcsweb_prefix)
 
         for file_path in all_files:
-            if fnmatchcase(file_path, glob_pattern):
+            if _matches_gcs_glob(file_path, glob_pattern):
                 # Strip curated/ prefix so callers see the same paths as before
                 original_path = file_path.removeprefix(_CURATED_PREFIX)
                 all_items.append({"name": original_path})
