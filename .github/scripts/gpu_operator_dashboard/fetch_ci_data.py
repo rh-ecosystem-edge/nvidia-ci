@@ -134,6 +134,14 @@ class TestResult:
 
 def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, Any]]:
     """Fetch files matching a specific glob pattern for a PR."""
+    if os.environ.get("PROW_TOKEN"):
+        from common.gcs_utils import fetch_filtered_files as common_fetch
+        nvidia_ci_prefix = f"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/{pr_number}/"
+        return [
+            item for item in common_fetch(pr_number, glob_pattern)
+            if item.get("name", "").startswith(nvidia_ci_prefix)
+        ]
+
     logger.info(f"Fetching files matching pattern: {glob_pattern}")
 
     params = {
