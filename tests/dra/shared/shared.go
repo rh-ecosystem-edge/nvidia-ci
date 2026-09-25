@@ -3,6 +3,7 @@ package shared
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -11,8 +12,11 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/pod"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8swait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 )
 
@@ -223,4 +227,109 @@ func VerifyDeviceClasses(apiClient *clients.Settings, deviceClassNames []string)
 		}
 	}
 	return nil
+}
+
+// VerifyGPUResourceSliceInventory verifies that the gpu.nvidia.com ResourceSlice for
+// the given node reports exactly the same set of GPU UUIDs that nvidia-smi reports on
+// the classic GPU-Operator driver pod for that node. This proves the DRA driver
+// actually discovered the physical hardware correctly, not just that its process is
+// running - a driver that's alive but silently under/over-reporting GPUs (or
+// duplicating one GPU's UUID while missing another) would otherwise pass every
+// allocation-based test as long as at least one claim happens to get satisfied.
+func VerifyGPUResourceSliceInventory(apiClient *clients.Settings, nodeName string) error {
+	groundTruth, err := gpuGroundTruthUUIDs(apiClient, nodeName)
+	if err != nil {
+		return fmt.Errorf("failed to get ground-truth GPU UUIDs from node '%s': %w", nodeName, err)
+	}
+
+	return wait.GPUResourceSliceUUIDsMatch(apiClient, nodeName, groundTruth, 5*time.Second, DriverInstallationTimeout)
+}
+
+// gpuGroundTruthUUIDs finds the classic GPU-Operator driver pod on the given node and
+// execs nvidia-smi in it to get the set of GPU UUIDs it reports, independent of the DRA
+// driver's own device enumeration. Both the pod lookup and the exec are polled: a
+// rolling update of the classic driver DaemonSet can transiently leave no Running pod
+// on the node, or leave a matched pod not yet exec-capable, and that's unrelated to
+// whatever the DRA driver is doing.
+func gpuGroundTruthUUIDs(apiClient *clients.Settings, nodeName string) (map[string]bool, error) {
+	var (
+		groundTruth map[string]bool
+		lastErr     error
+	)
+
+	pollErr := k8swait.PollUntilContextTimeout(context.TODO(), 5*time.Second, time.Minute, true,
+		func(ctx context.Context) (bool, error) {
+			driverPod, err := findRunningPodOnNode(apiClient, nvidiagpu.NvidiaGPUNamespace, nvidiagpu.DriverComponentLabelSelector, nodeName)
+			if err != nil {
+				lastErr = err
+
+				return false, nil
+			}
+
+			uuids, err := nvidiaSMIGPUUUIDs(driverPod)
+			if err != nil {
+				lastErr = err
+
+				return false, nil
+			}
+
+			groundTruth = uuids
+
+			return true, nil
+		})
+	if pollErr != nil {
+		return nil, fmt.Errorf("could not get ground-truth GPU UUIDs on node '%s': %w", nodeName, lastErr)
+	}
+
+	return groundTruth, nil
+}
+
+// findRunningPodOnNode finds the first Running pod matching labelSelector on the given
+// node, in the given namespace, reusing the shared pod.List primitive rather than
+// calling the Kubernetes API directly. Filtering to Running matters because more than
+// one pod can match the same label+node selector during a DaemonSet rolling update (an
+// old Terminating pod alongside a new Pending one) - picking an arbitrary match risks
+// exec'ing into a pod that isn't ready or is about to be torn down.
+func findRunningPodOnNode(apiClient *clients.Settings, namespace, labelSelector, nodeName string) (*pod.Builder, error) {
+	podBuilders, err := pod.List(apiClient, namespace, metav1.ListOptions{
+		LabelSelector: labelSelector,
+		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods with selector '%s' on node '%s': %w", labelSelector, nodeName, err)
+	}
+
+	for _, podBuilder := range podBuilders {
+		if podBuilder.Object.Status.Phase == corev1.PodRunning {
+			return podBuilder, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no Running pod found with selector '%s' on node '%s' (%d candidates)",
+		labelSelector, nodeName, len(podBuilders))
+}
+
+// nvidiaSMIGPUUUIDs execs nvidia-smi in the given pod and returns the set of GPU
+// UUIDs it reports, independent of the DRA driver's own device enumeration.
+func nvidiaSMIGPUUUIDs(podBuilder *pod.Builder) (map[string]bool, error) {
+	output, err := podBuilder.ExecCommand([]string{"nvidia-smi", "--query-gpu=uuid", "--format=csv,noheader"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to exec nvidia-smi in pod '%s/%s': %w",
+			podBuilder.Object.Namespace, podBuilder.Object.Name, err)
+	}
+
+	uuids := make(map[string]bool)
+
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			uuids[line] = true
+		}
+	}
+
+	if len(uuids) == 0 {
+		return nil, fmt.Errorf("nvidia-smi in pod '%s/%s' reported no GPU UUIDs",
+			podBuilder.Object.Namespace, podBuilder.Object.Name)
+	}
+
+	return uuids, nil
 }

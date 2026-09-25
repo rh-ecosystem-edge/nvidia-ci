@@ -3,9 +3,12 @@ package wait
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/dra"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
@@ -13,6 +16,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 	corev1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -317,4 +321,75 @@ func DaemonSetReady(apiClient *clients.Settings, daemonSetName, namespace string
 
 			return false, nil
 		})
+}
+
+// GPUResourceSliceUUIDsMatch waits until the gpu.nvidia.com ResourceSlice for the given
+// node reports exactly the given set of GPU UUIDs. ResourceSlice publication lags
+// DaemonSet readiness (NVML discovery + building attributes + the Create call all take
+// non-zero time after the kubelet-plugin pod flips Ready), so this polls rather than
+// doing a one-shot comparison.
+func GPUResourceSliceUUIDsMatch(apiClient *clients.Settings, nodeName string, expectedUUIDs map[string]bool,
+	pollInterval, timeout time.Duration) error {
+	var lastErr error
+
+	pollErr := wait.PollUntilContextTimeout(context.TODO(), pollInterval, timeout, true,
+		func(ctx context.Context) (bool, error) {
+			reported, err := gpuResourceSliceUUIDs(apiClient, nodeName)
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("ResourceSlice not ready yet on node '%s': %v", nodeName, err)
+				lastErr = err
+
+				return false, nil
+			}
+
+			if !maps.Equal(reported, expectedUUIDs) {
+				lastErr = fmt.Errorf("ResourceSlice UUIDs %v do not match expected UUIDs %v on node '%s'",
+					slices.Sorted(maps.Keys(reported)), slices.Sorted(maps.Keys(expectedUUIDs)), nodeName)
+
+				return false, nil
+			}
+
+			return true, nil
+		})
+	if pollErr != nil {
+		return fmt.Errorf("ResourceSlice inventory for node '%s' never matched expected UUIDs: %w", nodeName, lastErr)
+	}
+
+	return nil
+}
+
+// gpuResourceSliceUUIDs lists ResourceSlices published by the gpu.nvidia.com driver for
+// the given node and returns the set of UUIDs published in each Device's "uuid"
+// attribute.
+func gpuResourceSliceUUIDs(apiClient *clients.Settings, nodeName string) (map[string]bool, error) {
+	fieldSelector := fmt.Sprintf("%s=%s,%s=%s",
+		resourcev1.ResourceSliceSelectorNodeName, nodeName,
+		resourcev1.ResourceSliceSelectorDriver, dra.GPUDriverName)
+
+	slicesList, err := apiClient.K8sClient.ResourceV1().ResourceSlices().List(context.TODO(), metav1.ListOptions{
+		FieldSelector: fieldSelector,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ResourceSlices for node '%s': %w", nodeName, err)
+	}
+
+	if len(slicesList.Items) == 0 {
+		return nil, fmt.Errorf("no ResourceSlice found for driver '%s' on node '%s'", dra.GPUDriverName, nodeName)
+	}
+
+	uuids := make(map[string]bool)
+
+	for _, slice := range slicesList.Items {
+		for _, device := range slice.Spec.Devices {
+			attr, ok := device.Attributes[resourcev1.QualifiedName(dra.UUIDAttributeName)]
+			if !ok || attr.StringValue == nil {
+				return nil, fmt.Errorf("device '%s' in ResourceSlice '%s' has no '%s' string attribute",
+					device.Name, slice.Name, dra.UUIDAttributeName)
+			}
+
+			uuids[*attr.StringValue] = true
+		}
+	}
+
+	return uuids, nil
 }
