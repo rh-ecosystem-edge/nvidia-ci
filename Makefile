@@ -81,3 +81,14 @@ test-bm-arm-deployment: ## Test bare-metal ARM deployment
 	/bin/bash tests/gpu-operator-arm-bm/uninstall-gpu-operator.sh
 	/bin/bash tests/gpu-operator-arm-bm/install-gpu-operator.sh
 	/bin/bash tests/gpu-operator-arm-bm/areweok.sh
+
+MANIFEST_DIR ?= manifests
+WAIT_FOR_WORKER_MCP ?= true
+
+.PHONY: apply-manifests
+apply-manifests: ## Apply YAML manifests under MANIFEST_DIR to the cluster, waiting for the worker MachineConfigPool to roll out after each file (requires KUBECONFIG)
+	MANIFEST_DIR=$(MANIFEST_DIR) WAIT_FOR_WORKER_MCP=$(WAIT_FOR_WORKER_MCP) scripts/apply-manifests.sh apply
+
+.PHONY: delete-manifests
+delete-manifests: ## Delete YAML manifests under MANIFEST_DIR from the cluster (requires KUBECONFIG)
+	MANIFEST_DIR=$(MANIFEST_DIR) scripts/apply-manifests.sh delete

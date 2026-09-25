@@ -411,3 +411,83 @@ Executing nvidiagpu test-runner script
 scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="deploy || rdma-legacy-sriov" ./tests/nvidianetwork
 ```
+
+## Applying day-2 manifests to an existing cluster
+
+Separate from the Ginkgo test suites above, [`scripts/apply-manifests.sh`](scripts/apply-manifests.sh)
+applies (or deletes) a directory of plain YAML manifests against an already-installed OpenShift
+cluster, via the `make apply-manifests` / `make delete-manifests` targets. This is intended for
+one-off, day-2 cluster configuration (e.g. worker `MachineConfig`s, `ServiceAccount`s) that isn't
+part of a Ginkgo test flow.
+
+### Environment variables
+
+- `KUBECONFIG` - Path to kubeconfig file - _required_ (same variable used everywhere else in this repo)
+- `MANIFEST_DIR` - Directory containing the `*.yaml`/`*.yml` files to apply/delete - Defaults to `manifests` - _optional_
+- `MANIFEST_VARS` - Space-separated list of `$VAR` tokens (`envsubst`'s own filter syntax) restricting variable substitution to only those variables. If unset, every variable present in the environment is eligible for substitution in every manifest - _optional_
+- `WAIT_FOR_WORKER_MCP` - `{true|false}` - When `true` and the action is `apply`, waits for the worker `MachineConfigPool` to finish rolling out after each manifest is applied, before moving on to the next one. `make apply-manifests` defaults this to `true` (since the default `MANIFEST_DIR=manifests` contains `MachineConfig`s that reboot workers); the underlying script itself defaults to `false` - _optional_
+- `WORKER_MCP_NAME` - Name of the `MachineConfigPool` to wait on when `WAIT_FOR_WORKER_MCP=true` - Defaults to `worker` - _optional_
+- `WORKER_MCP_ROLLOUT_START_TIMEOUT` - How long to wait for the pool to *start* updating before giving up and moving on (tolerant: a manifest that doesn't touch worker `MachineConfig`s, like a `ServiceAccount`, never makes the pool start updating, so this timeout is expected to elapse harmlessly for those files) - Defaults to `2m` - _optional_
+- `WORKER_MCP_ROLLOUT_TIMEOUT` - How long to wait for the pool to *finish* updating once it starts (fatal: the whole run aborts if this elapses) - Defaults to `40m` - _optional_
+
+### Manifest file conventions
+
+- **Ordering**: files are applied in lexical filename order (reverse order on delete), so prefix
+  files with numbers (`00-`, `10-`, `20-`, ...) to control ordering when one manifest depends on
+  another (e.g. a namespace before objects created in it).
+- **Templating**: manifests may contain `${VAR}` / `$VAR` placeholders, substituted from the
+  current environment via `envsubst` before being applied.
+- **Required variables** (`<name>.env-required`): if a sibling file with the same base name and
+  a `.env-required` extension exists next to a manifest (e.g. `10-foo.yaml` ->
+  `10-foo.env-required`, one variable name per line, blank lines and `#`-comments ignored), the
+  script verifies every listed variable is set and non-empty before rendering that manifest,
+  failing fast instead of letting `envsubst` silently substitute an empty string for a variable
+  nobody remembered to export.
+- **Post-apply hooks** (`<name>.sh`): if a sibling file with the same base name and a `.sh`
+  extension exists next to a manifest (e.g. `20-foo.yaml` -> `20-foo.sh`), it is executed
+  immediately after that manifest is applied (and after any `WAIT_FOR_WORKER_MCP` wait
+  completes). This is how manifest-specific follow-up commands are attached without hardcoding
+  them into the generic script.
+
+### Manifests in `manifests/`
+
+- `00-doca1-99-machine-config-blacklist-irdma.yaml` - `MachineConfig` (role `worker`) that
+  blacklists the `irdma` kernel module.
+- `10-doca1-99-machine-config-udev-network.yaml` - `MachineConfig` (role `worker`) that installs
+  a udev rules file mapping specific NIC MAC addresses to interface names (`ib_rdma0`/
+  `eth_rdma0`). The rules content is parameterized as base64 in `contents.source`, so
+  `DOCA1_UDEV_NETWORK_RULES_BASE64` **must be exported** before running `make apply-manifests`
+  (enforced by the sibling `10-doca1-99-machine-config-udev-network.env-required` file) - _required_
+- `20-doca1-rdma-service-account-default-namespace.yaml` - `ServiceAccount` named `rdma` in the
+  `default` namespace. Its sibling hook script,
+  `20-doca1-rdma-service-account-default-namespace.sh`, grants that ServiceAccount the
+  `privileged` SCC (`oc -n default adm policy add-scc-to-user privileged -z rdma`) right after
+  it's created.
+
+### Example: apply all DOCA manifests
+
+```bash
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DOCA1_UDEV_NETWORK_RULES_BASE64="$(base64 <<'EOF' | tr -d '\n'
+SUBSYSTEM=="net",ACTION=="add",ATTR{address}=="<mac>",ATTR{type}=="1",NAME="ib_rdma0"
+SUBSYSTEM=="net",ACTION=="add",ATTR{address}=="<mac>",ATTR{type}=="1",NAME="eth_rdma0"
+EOF
+)"
+$ make apply-manifests
+```
+
+The two `MachineConfig` files each trigger a worker `MachineConfigPool` rollout (cordon/drain/
+reboot/uncordon per node); with the default `WAIT_FOR_WORKER_MCP=true`, `make apply-manifests`
+waits for that to finish after each one before moving on. After the last file
+(`20-doca1-rdma-service-account-default-namespace.yaml`) is applied, the SCC grant hook runs
+automatically.
+
+To remove everything again:
+
+```bash
+$ export KUBECONFIG=/path/to/kubeconfig
+$ make delete-manifests
+```
+
+`delete-manifests` does not wait on the `MachineConfigPool` or run any hooks — it only removes
+the manifests themselves, in reverse order.
