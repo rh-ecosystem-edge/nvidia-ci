@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/pod"
 )
 
@@ -37,6 +38,13 @@ type MigPodInfo struct {
 	MigProfileInfo MIGProfileInfo // MIG profile information
 }
 
+type TsPodInfo struct {
+	PodName   string       // name of the pod
+	Namespace string       // namespace of the pod
+	Pod       *pod.Builder // pod object
+	Checked   bool         // whether the pod has been checked
+}
+
 // ANSI color constants for console output highlighting
 // colors are \033[31m - red through \033[37m - white
 const (
@@ -64,6 +72,12 @@ var (
 	MigInstances      string
 	NoColor           bool
 	MixedMigInstances []int
+	TsPodCount        int
+	TsInstancesCSV    string
+	TsInstances       []int // first TsPodCount entries after validation; slices per pod
+	TsMonAfterPod     int   // minimum number of pods running before monitoring starts
+	MaxTsSlices       int   // max time-slice replicas per GPU (device plugin)
+	LimitForTsSlices  int   // limit for total number of time-slices to be launched by the testcase
 )
 
 const (
@@ -72,8 +86,13 @@ const (
 )
 
 const (
-	MIGStrategySingle = "single"
-	MIGStrategyMixed  = "mixed"
+	MIGStrategySingle      = "single"
+	MIGStrategyMixed       = "mixed"
+	DefaultMaxTsSlices int = 8 // max time-slice replicas per GPU (device plugin)
+	// DefaultLimitForTsSlices is the maximum sum of per-pod time-slice counts for one GPU.
+	DefaultLimitForTsSlices int = 100
+	// defaultTsInstancesCSV may have entries with up to MaxTsSlices values, however their sum may not exceed LimitForTsSlices (100)
+	defaultTsInstancesCSV = "8" // e.g. "8,1,3,2,6,5,8,8"
 )
 
 func init() {
@@ -81,5 +100,41 @@ func init() {
 	flag.IntVar(&PodDelay, "mixed.mig.pod-delay", 0, "delay in seconds between pod creation on mixed-mig testcase")
 	flag.IntVar(&SingleMigProfile, "single.mig.profile", -2, "index of the MIG profile to be used for single-mig testcase")
 	flag.StringVar(&MigInstances, "mixed.mig.instances", "-1", "comma-separated number of instances for mixed-mig testcase, defaults are for A100 GPU [2,0,1,1,0,0]")
+	flag.StringVar(&TsInstancesCSV, "time.slicing.instances", defaultTsInstancesCSV, "comma-separated time-slice counts per pod; sum must not exceed time.slicing.limit")
+	flag.IntVar(&TsMonAfterPod, "time.slicing.mon-after-pod", 0, "minimum number of pods running before monitoring starts")
+	flag.IntVar(&MaxTsSlices, "time.slicing.max-running-slices", DefaultMaxTsSlices, "max time-slice replicas per GPU (device plugin)")
+	flag.IntVar(&LimitForTsSlices, "time.slicing.limit", DefaultLimitForTsSlices, "max total time-slice count launched by the testcase")
 	flag.BoolVar(&NoColor, "no-color", false, "disable color output")
+}
+
+const (
+	migConfigLabel      = "nvidia.com/mig.config"
+	migConfigStateLabel = "nvidia.com/mig.config.state"
+	migConfigDisabled   = "all-disabled"
+)
+
+const timeSlicingDevicePluginConfigMapName = "device-plugin-config"
+
+const gpuProductSharedSuffix = "-SHARED"
+
+const gpuProductLabelKey = "nvidia.com/gpu.product"
+const gpuCountLabelKey = "nvidia.com/gpu.count"
+
+type timeSlicingConfigSnapshot struct {
+	hadDevicePluginConfig bool
+	devicePluginConfig    *nvidiagpuv1.DevicePluginConfig
+	gfdEnabled            *bool
+	configMapExisted      bool
+	configMapData         map[string]string
+}
+
+func copyStringMap(m map[string]string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
