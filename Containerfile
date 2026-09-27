@@ -25,8 +25,11 @@ COPY --chown=1001:0 vendor/ ./vendor/
 COPY --chown=1001:0 go.mod go.sum ./
 COPY --chown=1001:0 Makefile ./
 COPY --chown=1001:0 scripts/install-ginkgo.sh ./scripts/install-ginkgo.sh
+COPY --chown=1001:0 internal/nnopairreport/ ./internal/nnopairreport/
+COPY --chown=1001:0 cmd/nno-pair-report/ ./cmd/nno-pair-report/
 
 RUN make install-ginkgo
+RUN go build -o "${GOPATH}/bin/nno-pair-report" ./cmd/nno-pair-report
 
 FROM registry.access.redhat.com/ubi9/go-toolset:${GO_TOOLSET_VERSION}
 
@@ -44,7 +47,7 @@ COPY --from=oc-cli /usr/bin/oc /usr/bin/oc
 COPY --from=operator-sdk /usr/local/bin/operator-sdk /usr/local/bin/operator-sdk
 
 # Install dependencies combined into single layer to reduce image size
-RUN dnf install -y jq gettext python3 && \
+RUN dnf install -y jq gettext && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum
 
@@ -68,6 +71,7 @@ RUN mkdir -p "${ARTIFACT_DIR}" && \
     chmod -R g=u "${ARTIFACT_DIR}"
 
 COPY --from=ginkgo-builder --chmod=755 --chown=1001:0 "${GOPATH}/bin/ginkgo" "${GOPATH}/bin/ginkgo"
+COPY --from=ginkgo-builder --chmod=755 --chown=1001:0 "${GOPATH}/bin/nno-pair-report" "${GOPATH}/bin/nno-pair-report"
 
 # Cherry-pick artifacts to reduce image size
 COPY --chown=1001:0 vendor/ ./vendor/

@@ -5,7 +5,6 @@ import json
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -79,75 +78,6 @@ class SampleArtifacts(unittest.TestCase):
         super().tearDownClass()
 
 
-class ProducerTests(unittest.TestCase):
-    def test_planned_pairs_survive_failure_and_publish_as_one_build(self):
-        script = Path(__file__).resolve().parents[3] / "scripts/nno-pair-report.py"
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            state = root / "shared/nno-pairs.json"
-            plan = root / "plan.json"
-            pairs = [
-                {"id": "standard-a", "mode": "standard", "nno_requested": "25.10.1",
-                 "driver_requested": {"version": "doca3.5.0-26.07-0.7.7.0-0", "doca_version": "3.5.0"},
-                 "checks": {"nno_csv": "planned", "gpudirect_rdma_write": "planned"}},
-                {"id": "signed-b", "mode": "signed", "nno_requested": "26.1.0",
-                 "driver_requested": {"version": "26.04-0.7.1.0-0"},
-                 "checks": {"signature_verification": "planned"}},
-            ]
-            plan.write_text(json.dumps(pairs))
-            def run(*arguments):
-                return subprocess.run([sys.executable, str(script), *arguments], capture_output=True, text=True)
-            started = run("init", "--state-file", str(state), "--plan-file", str(plan),
-                          "--kind", "presubmit", "--job-name", "pull-ci-example",
-                          "--build-id", "123", "--ocp-version", "4.22.14")
-            self.assertEqual(started.returncode, 0, started.stderr)
-            updated_run = run("set-run", "--state-file", str(state),
-                              "--gpu-operator-version", "25.10.1", "--environment", "DOCA2 · 2 workers")
-            self.assertEqual(updated_run.returncode, 0, updated_run.stderr)
-            failed = {**pairs[0], "status": "failed", "nno_observed": "25.10.1",
-                      "driver_observed": {"version": "doca3.5.0-26.07-0.7.7.0-0", "ofed_version": "OFED 26.07"},
-                      "checks": {"nno_csv": "passed", "gpudirect_rdma_write": "failed"},
-                      "metrics": {"bandwidth_gbps": 8.4}}
-            result = root / "pair-result.json"
-            result.write_text(json.dumps(failed))
-            updated = run("update", "--state-file", str(state), "--pair-file", str(result))
-            self.assertEqual(updated.returncode, 0, updated.stderr)
-            artifact_dir = root / "artifacts"
-            published = run("publish", "--state-file", str(state), "--artifact-dir", str(artifact_dir))
-            self.assertEqual(published.returncode, 0, published.stderr)
-            manifest = json.loads((artifact_dir / "nno-pairs.json").read_text())
-            self.assertEqual([pair["status"] for pair in manifest["pairs"]], ["failed", "planned"])
-            self.assertEqual(manifest["run"]["planned_modes"], ["signed", "standard"])
-            self.assertEqual(manifest["run"]["gpu_operator_version"], "25.10.1")
-            normalized = collect.normalize_manifest(manifest, "local/artifacts/nno-pairs.json")
-            self.assertEqual(normalized["pairs"][0]["driver_requested"]["doca_version"], "3.5.0")
-
-    def test_rejects_unplanned_and_false_passes(self):
-        script = Path(__file__).resolve().parents[3] / "scripts/nno-pair-report.py"
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            state = root / "nno-pairs.json"
-            plan = root / "plan.json"
-            pair = {"id": "a", "mode": "signed", "nno_requested": "26.1.0",
-                    "driver_requested": {"version": "26.04-0.7.1.0-0"}}
-            plan.write_text(json.dumps([pair]))
-            def run(*arguments):
-                return subprocess.run([sys.executable, str(script), *arguments], capture_output=True, text=True)
-            self.assertEqual(run("init", "--state-file", str(state), "--plan-file", str(plan),
-                                 "--kind", "periodic", "--job-name", "periodic-ci-example",
-                                 "--build-id", "123").returncode, 0)
-            result = root / "result.json"
-            result.write_text(json.dumps({**pair, "id": "other", "status": "failed"}))
-            self.assertIn("not in the build plan", run("update", "--state-file", str(state),
-                          "--pair-file", str(result)).stderr)
-            result.write_text(json.dumps({**pair, "status": "passed", "nno_observed": "26.1.0",
-                                          "driver_observed": {"version": "26.04-0.7.1.0-0"},
-                                          "checks": {"nno_csv": "passed"}}))
-            self.assertIn("signature verification", run("update", "--state-file", str(state),
-                          "--pair-file", str(result)).stderr)
-            self.assertEqual(json.loads(state.read_text())["pairs"][0]["status"], "planned")
-
-
 class CollectTests(SampleArtifacts):
     def test_pr_and_periodic_paths(self):
         pr = collect.source_identity("pr-logs/pull/openshift_release/85277/rehearse-85277-pull-ci-example/123/artifacts/nno-pairs.json")
@@ -165,6 +95,13 @@ class CollectTests(SampleArtifacts):
         self.assertIn("doca3.5.0-26.07-0.7.7.0-0", {pair["driver_requested"]["version"] for build in builds for pair in build["pairs"]})
         observed = [pair["driver_observed"]["ofed_version"] for build in builds for pair in build["pairs"] if pair["driver_observed"].get("ofed_version")]
         self.assertIn("OFED-internal-26.01-0.7.0", observed)
+
+    def test_explicit_doca_version_is_preserved(self):
+        source = next(self.fixtures.glob("pr-logs/**/nno-pairs.json"))
+        data = json.loads(source.read_text())
+        data["pairs"][0]["driver_requested"]["doca_version"] = "3.5.0"
+        normalized = collect.normalize_manifest(data, source.relative_to(self.fixtures).as_posix())
+        self.assertEqual(normalized["pairs"][0]["driver_requested"]["doca_version"], "3.5.0")
 
     def test_merge_is_idempotent_and_keeps_build_history(self):
         builds = collect.load_local(self.fixtures)
