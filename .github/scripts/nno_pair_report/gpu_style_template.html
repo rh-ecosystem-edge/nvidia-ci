@@ -126,11 +126,12 @@
       const runs=entries.filter(item=>["passed","failed"].includes(item.pair.status));
       runs.sort((a,b)=>resultTime(b).localeCompare(resultTime(a))||b.build.run.build_id.localeCompare(a.build.run.build_id));
       if(!byPatch.has(ocp)) byPatch.set(ocp,[]);
-      byPatch.get(ocp).push({nno,driver,runs,chosen:runs.length?displayRun(runs):null});
+      byPatch.get(ocp).push({nno,driver,docaVersion:entries[0].pair.driver_requested.doca_version||"",runs,chosen:runs.length?displayRun(runs):null});
     }
     function pairLabel(pair) {
       const parts=driverParts(pair.driver);
-      return `NNO ${pair.nno} · ${parts?`DOCA ${parts.doca} · driver ${parts.driver}`:`driver image ${pair.driver}`}`;
+      const doca=pair.docaVersion||parts?.doca;
+      return `NNO ${pair.nno} · ${doca?`DOCA ${doca} · driver ${parts?.driver||pair.driver}`:`driver image ${pair.driver}`}`;
     }
     function pairDetails(parent,pair) {
       const item=add(parent,"li","","detail-item");

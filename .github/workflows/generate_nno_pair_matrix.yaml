@@ -1,0 +1,107 @@
+name: Generate NNO and DOCA2 pair matrices
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  pull_request_target:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Optional nvidia-ci or openshift/release PR number to collect (including rehearsals)'
+        required: false
+        type: string
+      periodic_job:
+        description: 'Periodic Prow job to poll once its NNO pair artifact is available'
+        required: false
+        default: 'periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-deploy-cluster'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.repository == 'rh-ecosystem-edge/nvidia-ci' && (github.event_name != 'pull_request_target' || github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    env:
+      PR_JOB: pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-deploy-cluster
+      PERIODIC_JOB: ${{ inputs.periodic_job || 'periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-deploy-cluster' }}
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number || '' }}
+      REPORT_HISTORY: ${{ runner.temp }}/nno-pair-report/history.json
+      REPORT_OUTPUT: nno-pair-report-output
+    steps:
+      - name: Check out report code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref || github.ref_name }}
+
+      - name: Check out published report history
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: nno-pages-baseline
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Collect NNO pair manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--output "$REPORT_HISTORY" --presubmit-job "$PR_JOB" --periodic-job "$PERIODIC_JOB")
+          if [[ -f nno-pages-baseline/nno_doca2_history.json ]]; then
+            args+=(--baseline nno-pages-baseline/nno_doca2_history.json)
+          fi
+          if [[ -n "$PR_NUMBER" ]]; then
+            args+=(--pr "$PR_NUMBER")
+          fi
+          python3 .github/scripts/nno_pair_report/collect.py "${args[@]}"
+
+      - name: Check whether report data exists
+        id: report_data
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          from pathlib import Path
+          history = json.loads(Path(os.environ["REPORT_HISTORY"]).read_text())
+          has_data = bool(history["builds"])
+          print("has_data=" + ("true" if has_data else "false"))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              if has_data:
+                  summary.write(f"NNO report contains {len(history['builds'])} Prow builds.\n")
+              else:
+                  summary.write("No NNO pair manifest found; Pages publication skipped.\n")
+          PY
+
+      - name: Render and stage report pages
+        if: steps.report_data.outputs.has_data == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/nno_pair_report/render.py \
+            --data "$REPORT_HISTORY" \
+            --output-dir "$RUNNER_TEMP/nno-pair-report/rendered" \
+            --label 'Prow job history'
+          mkdir -p "$REPORT_OUTPUT"
+          cp "$REPORT_HISTORY" "$REPORT_OUTPUT/nno_doca2_history.json"
+          cp "$RUNNER_TEMP/nno-pair-report/rendered/nno_doca2_matrix.json" "$REPORT_OUTPUT/"
+          cp "$RUNNER_TEMP/nno-pair-report/rendered/nno_doca2_matrix.html" "$REPORT_OUTPUT/"
+          cp "$RUNNER_TEMP/nno-pair-report/rendered/nno_doca2_explorer.html" "$REPORT_OUTPUT/"
+          cp "$RUNNER_TEMP/nno-pair-report/rendered/nno_doca2_signed_matrix.json" "$REPORT_OUTPUT/"
+          cp "$RUNNER_TEMP/nno-pair-report/rendered/nno_doca2_signed_matrix.html" "$REPORT_OUTPUT/"
+          cp "$RUNNER_TEMP/nno-pair-report/rendered/nno_doca2_signed_explorer.html" "$REPORT_OUTPUT/"
+
+      - name: Publish NNO reports to GitHub Pages
+        if: steps.report_data.outputs.has_data == 'true'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: ${{ env.REPORT_OUTPUT }}
+          clean: false
+          force: false

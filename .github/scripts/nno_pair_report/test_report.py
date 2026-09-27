@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -78,6 +79,75 @@ class SampleArtifacts(unittest.TestCase):
         super().tearDownClass()
 
 
+class ProducerTests(unittest.TestCase):
+    def test_planned_pairs_survive_failure_and_publish_as_one_build(self):
+        script = Path(__file__).resolve().parents[3] / "scripts/nno-pair-report.py"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = root / "shared/nno-pairs.json"
+            plan = root / "plan.json"
+            pairs = [
+                {"id": "standard-a", "mode": "standard", "nno_requested": "25.10.1",
+                 "driver_requested": {"version": "doca3.5.0-26.07-0.7.7.0-0", "doca_version": "3.5.0"},
+                 "checks": {"nno_csv": "planned", "gpudirect_rdma_write": "planned"}},
+                {"id": "signed-b", "mode": "signed", "nno_requested": "26.1.0",
+                 "driver_requested": {"version": "26.04-0.7.1.0-0"},
+                 "checks": {"signature_verification": "planned"}},
+            ]
+            plan.write_text(json.dumps(pairs))
+            def run(*arguments):
+                return subprocess.run([sys.executable, str(script), *arguments], capture_output=True, text=True)
+            started = run("init", "--state-file", str(state), "--plan-file", str(plan),
+                          "--kind", "presubmit", "--job-name", "pull-ci-example",
+                          "--build-id", "123", "--ocp-version", "4.22.14")
+            self.assertEqual(started.returncode, 0, started.stderr)
+            updated_run = run("set-run", "--state-file", str(state),
+                              "--gpu-operator-version", "25.10.1", "--environment", "DOCA2 · 2 workers")
+            self.assertEqual(updated_run.returncode, 0, updated_run.stderr)
+            failed = {**pairs[0], "status": "failed", "nno_observed": "25.10.1",
+                      "driver_observed": {"version": "doca3.5.0-26.07-0.7.7.0-0", "ofed_version": "OFED 26.07"},
+                      "checks": {"nno_csv": "passed", "gpudirect_rdma_write": "failed"},
+                      "metrics": {"bandwidth_gbps": 8.4}}
+            result = root / "pair-result.json"
+            result.write_text(json.dumps(failed))
+            updated = run("update", "--state-file", str(state), "--pair-file", str(result))
+            self.assertEqual(updated.returncode, 0, updated.stderr)
+            artifact_dir = root / "artifacts"
+            published = run("publish", "--state-file", str(state), "--artifact-dir", str(artifact_dir))
+            self.assertEqual(published.returncode, 0, published.stderr)
+            manifest = json.loads((artifact_dir / "nno-pairs.json").read_text())
+            self.assertEqual([pair["status"] for pair in manifest["pairs"]], ["failed", "planned"])
+            self.assertEqual(manifest["run"]["planned_modes"], ["signed", "standard"])
+            self.assertEqual(manifest["run"]["gpu_operator_version"], "25.10.1")
+            normalized = collect.normalize_manifest(manifest, "local/artifacts/nno-pairs.json")
+            self.assertEqual(normalized["pairs"][0]["driver_requested"]["doca_version"], "3.5.0")
+
+    def test_rejects_unplanned_and_false_passes(self):
+        script = Path(__file__).resolve().parents[3] / "scripts/nno-pair-report.py"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = root / "nno-pairs.json"
+            plan = root / "plan.json"
+            pair = {"id": "a", "mode": "signed", "nno_requested": "26.1.0",
+                    "driver_requested": {"version": "26.04-0.7.1.0-0"}}
+            plan.write_text(json.dumps([pair]))
+            def run(*arguments):
+                return subprocess.run([sys.executable, str(script), *arguments], capture_output=True, text=True)
+            self.assertEqual(run("init", "--state-file", str(state), "--plan-file", str(plan),
+                                 "--kind", "periodic", "--job-name", "periodic-ci-example",
+                                 "--build-id", "123").returncode, 0)
+            result = root / "result.json"
+            result.write_text(json.dumps({**pair, "id": "other", "status": "failed"}))
+            self.assertIn("not in the build plan", run("update", "--state-file", str(state),
+                          "--pair-file", str(result)).stderr)
+            result.write_text(json.dumps({**pair, "status": "passed", "nno_observed": "26.1.0",
+                                          "driver_observed": {"version": "26.04-0.7.1.0-0"},
+                                          "checks": {"nno_csv": "passed"}}))
+            self.assertIn("signature verification", run("update", "--state-file", str(state),
+                          "--pair-file", str(result)).stderr)
+            self.assertEqual(json.loads(state.read_text())["pairs"][0]["status"], "planned")
+
+
 class CollectTests(SampleArtifacts):
     def test_pr_and_periodic_paths(self):
         pr = collect.source_identity("pr-logs/pull/openshift_release/85277/rehearse-85277-pull-ci-example/123/artifacts/nno-pairs.json")
@@ -141,6 +211,43 @@ class CollectTests(SampleArtifacts):
                 fetch.side_effect = lambda path: pr_data if path == pr_path else periodic_data
                 builds = collect.load_gcs(["700"], ["periodic-ci-example"])
         self.assertEqual({build["run"]["kind"] for build in builds}, {"presubmit", "periodic"})
+
+    def test_gcs_filters_other_pr_jobs_but_keeps_rehearsals(self):
+        job = "pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-deploy-cluster"
+        paths = [
+            f"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/700/{job}/10001/artifacts/nno-pairs.json",
+            f"pr-logs/pull/openshift_release/700/rehearse-700-{job}/10002/artifacts/nno-pairs.json",
+            "pr-logs/pull/rh-ecosystem-edge_nvidia-ci/700/pull-ci-unrelated/10003/artifacts/nno-pairs.json",
+        ]
+        def page(params):
+            return {"items": [{"name": path} for path in paths if path.startswith(params["prefix"])]}
+        def manifest(path):
+            identity = collect.source_identity(path)
+            return {"schema_version": 1,
+                    "run": {"kind": "presubmit", "job_name": identity["job_name"],
+                            "build_id": identity["build_id"], "started_at": "2026-09-24T00:00:00Z"},
+                    "pairs": []}
+        with patch.object(collect, "_gcs_json", side_effect=page):
+            with patch.object(collect, "_gcs_manifest", side_effect=manifest):
+                builds = collect.load_gcs(["700"], [], presubmit_job=job)
+        self.assertEqual({build["run"]["build_id"] for build in builds}, {"10001", "10002"})
+
+    def test_prow_finished_result_overrides_manifest_build_status(self):
+        path = "logs/periodic-ci-example/10002/artifacts/nno-pairs.json"
+        def listing(params):
+            return {"items": [{"name": path}]} if params["prefix"] == "logs/periodic-ci-example/" else {}
+        def fetch(item):
+            if item.endswith("/finished.json"):
+                return {"result": "FAILURE"}
+            return {"schema_version": 1,
+                    "run": {"kind": "periodic", "job_name": "periodic-ci-example",
+                            "build_id": "10002", "started_at": "2026-09-25T00:00:00Z",
+                            "status": "unknown", "planned_modes": ["standard"]},
+                    "pairs": []}
+        with patch.object(collect, "_gcs_json", side_effect=listing):
+            with patch.object(collect, "_gcs_manifest", side_effect=fetch):
+                builds = collect.load_gcs([], ["periodic-ci-example"])
+        self.assertEqual(builds[0]["run"]["status"], "failure")
 
 
 class RenderTests(SampleArtifacts):

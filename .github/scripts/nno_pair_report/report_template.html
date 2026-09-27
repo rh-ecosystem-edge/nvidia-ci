@@ -260,7 +260,8 @@
       row.after(detail);
       detail.hidden=false;
       const tag=driverTagParts(pair.driver_requested.version);
-      $("detail-heading").textContent=tag ? `NNO ${pair.nno_requested} · DOCA ${tag.doca} · ${mode === "signed" ? "signed " : ""}driver ${tag.driver}` : `NNO ${pair.nno_requested} · ${mode === "signed" ? "signed " : ""}driver image ${pair.driver_requested.version}`;
+      const doca=pair.driver_requested.doca_version||tag?.doca;
+      $("detail-heading").textContent=doca ? `NNO ${pair.nno_requested} · DOCA ${doca} · ${mode === "signed" ? "signed " : ""}driver ${tag?.driver||pair.driver_requested.version}` : `NNO ${pair.nno_requested} · ${mode === "signed" ? "signed " : ""}driver image ${pair.driver_requested.version}`;
       $("detail-driver").textContent=`Installed OFED: ${pair.driver_observed.ofed_version||"not recorded"}`;
       const source=$("detail-source"); source.replaceChildren();
       addText(source,"span","Result from ");
@@ -356,19 +357,20 @@
           for(const title of ["NNO","DOCA","Driver image version","Result"]) addText(columns,"span",title);
           for(const key of keys) {
             const [,nno,driver]=JSON.parse(key), runs=cells.get(key), tag=driverTagParts(driver), chosen=runs && displayRun(runs);
+            const doca=configured.get(key)[0].pair.driver_requested.doca_version||tag?.doca||"";
             const recentFailure=!!runs && chosen!==runs[0] && runs[0].pair.status==="failed";
             const row=addText(list,runs?"button":"div","",`pair-row${runs?"":" no-result"}`);
             row.dataset.status=chosen?.pair.status||"none";
             row.dataset.recentFailure=String(recentFailure);
-            row.dataset.search=[`openshift ${ocp}`,`nno ${nno}`,`doca ${tag?.doca||"not recorded"}`,`driver ${driver}`,tag?.driver||"",row.dataset.status].join(" ").toLowerCase();
+            row.dataset.search=[`openshift ${ocp}`,`nno ${nno}`,`doca ${doca||"not recorded"}`,`driver ${driver}`,tag?.driver||"",row.dataset.status].join(" ").toLowerCase();
             if(runs) {
               row.type="button"; row.dataset.key=key; row.setAttribute("aria-expanded","false"); row.setAttribute("aria-controls","selection-detail");
               const reason=failedCheckSummary(chosen.pair.status==="failed"?chosen.pair:runs[0].pair);
-              row.setAttribute("aria-label",`OpenShift ${ocp}, NNO ${nno}, DOCA ${tag?.doca||"not recorded"}, driver image ${driver}, result ${chosen.pair.status}${recentFailure?", newest attempt failed":""}${reason?`, failed check: ${reason}`:""}, ${runs.length} executions. Show details`);
+              row.setAttribute("aria-label",`OpenShift ${ocp}, NNO ${nno}, DOCA ${doca||"not recorded"}, driver image ${driver}, result ${chosen.pair.status}${recentFailure?", newest attempt failed":""}${reason?`, failed check: ${reason}`:""}, ${runs.length} executions. Show details`);
               row.addEventListener("click",()=>selectedKey===key && !$("selection-detail").hidden ? hideDetails() : showDetails(key,cells,true));
             }
             const nnoValue=addText(row,"span",nno); nnoValue.dataset.label="NNO";
-            const docaValue=addText(row,"span",tag?.doca||"Not recorded",tag?"":"doca-missing"); docaValue.dataset.label="DOCA";
+            const docaValue=addText(row,"span",doca||"Not recorded",doca?"":"doca-missing"); docaValue.dataset.label="DOCA";
             const driverValue=addText(row,"span",tag?.driver||driver,"driver-tag"); driverValue.dataset.label="Driver image version"; driverValue.title=driver;
             const status=chosen?.pair.status;
             const result=addText(row,"span","",`pair-result ${status==="passed"?"good":status==="failed"?"bad":"pending"}`);

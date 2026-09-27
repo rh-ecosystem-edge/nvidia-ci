@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -64,6 +65,7 @@ def _image(value: Any, field: str, *, required: bool) -> dict[str, str]:
         "version": version,
         "image": str(value.get("image", "")),
         "digest": str(value.get("digest", "")),
+        "doca_version": str(value.get("doca_version", "")),
     }
     if not required:
         image["ofed_version"] = str(value.get("ofed_version", ""))
@@ -204,21 +206,47 @@ def list_gcs_manifests(prefix: str) -> list[str]:
             return sorted(set(paths))
 
 
-def load_gcs(pr_numbers: list[str], periodic_jobs: list[str], *, max_periodic_builds: int = 50) -> list[dict[str, Any]]:
+def _matches_presubmit_job(path: str, job_name: str) -> bool:
+    identity = source_identity(path)
+    if identity is None or identity["kind"] != "presubmit":
+        return False
+    observed = identity["job_name"]
+    return observed == job_name or bool(re.fullmatch(r"rehearse-\d+-" + re.escape(job_name), observed))
+
+
+def load_gcs(
+    pr_numbers: list[str], periodic_jobs: list[str], *,
+    presubmit_job: str | None = None, max_periodic_builds: int = 50,
+) -> list[dict[str, Any]]:
     """Read public artifacts from PR rehearsals/presubmits and scheduled jobs."""
     paths: set[str] = set()
     for pr in pr_numbers:
         if not pr.isdigit():
             raise ValueError(f"invalid PR number: {pr}")
         for repo in ("rh-ecosystem-edge_nvidia-ci", "openshift_release"):
-            paths.update(list_gcs_manifests(f"pr-logs/pull/{repo}/{pr}/"))
+            pr_paths = list_gcs_manifests(f"pr-logs/pull/{repo}/{pr}/")
+            paths.update(path for path in pr_paths if not presubmit_job or _matches_presubmit_job(path, presubmit_job))
     for job in periodic_jobs:
         if "/" in job or not job.startswith("periodic-"):
             raise ValueError(f"invalid periodic job name: {job}")
         job_paths = list_gcs_manifests(f"logs/{job}/")
         # Prow build IDs are increasing decimal strings. Only inspect recent runs.
         paths.update(sorted(job_paths, key=lambda path: int(source_identity(path)["build_id"]), reverse=True)[:max_periodic_builds])
-    return [normalize_manifest(_gcs_manifest(path), path) for path in sorted(paths)]
+    builds = []
+    for path in sorted(paths):
+        build = normalize_manifest(_gcs_manifest(path), path)
+        finished_path = f"{build['build_path']}/finished.json"
+        try:
+            finished = _gcs_manifest(finished_path)
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+        else:
+            result = str(finished.get("result", "")).lower()
+            if result in {"success", "failure", "aborted"}:
+                build["run"]["status"] = result
+        builds.append(build)
+    return builds
 
 
 def merge_builds(existing: dict[str, Any], incoming: list[dict[str, Any]]) -> dict[str, Any]:
@@ -237,6 +265,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Collect NNO pair results")
     parser.add_argument("--input-dir", type=Path, help="Local tree containing nno-pairs.json artifacts")
     parser.add_argument("--pr", action="append", default=[], help="PR number to fetch from public Prow GCS")
+    parser.add_argument("--presubmit-job", help="Limit PR artifacts to this Prow job (including rehearsals)")
     parser.add_argument("--periodic-job", action="append", default=[], help="Periodic Prow job to fetch")
     parser.add_argument("--baseline", type=Path, help="Existing report JSON to merge")
     parser.add_argument("--output", required=True, type=Path, help="Report JSON output path")
@@ -248,7 +277,7 @@ def main() -> None:
     if args.input_dir:
         incoming.extend(load_local(args.input_dir))
     if args.pr or args.periodic_job:
-        incoming.extend(load_gcs(args.pr, args.periodic_job))
+        incoming.extend(load_gcs(args.pr, args.periodic_job, presubmit_job=args.presubmit_job))
     result = merge_builds(existing, incoming)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
