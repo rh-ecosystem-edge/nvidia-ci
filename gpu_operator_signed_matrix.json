@@ -13,6 +13,21 @@
             {
                 "ocp_full_version": "4.22.15",
                 "gpu_operator_version": "26.7.0(bundle)",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://gcsweb-test-platform-results-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/curated/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/687/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-master-signed/2102066746029510656/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1790010446,
+                "driver_branch": "580.173.02"
+            },
+            {
+                "ocp_full_version": "4.22.15",
+                "gpu_operator_version": "26.7.0(bundle)",
+                "test_status": "FAILURE",
+                "prow_job_url": "https://gcsweb-test-platform-results-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/curated/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/687/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-master-signed/2101835190929199104/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1789955860
+            },
+            {
+                "ocp_full_version": "4.22.15",
+                "gpu_operator_version": "26.7.0(bundle)",
                 "test_status": "FAILURE",
                 "prow_job_url": "https://gcsweb-test-platform-results-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/curated/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/685/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-master-signed/2101472967023136768/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
                 "job_timestamp": 1789868568
@@ -184,6 +199,14 @@
     "4.20": {
         "notes": [],
         "bundle_tests": [
+            {
+                "ocp_full_version": "4.20.38",
+                "gpu_operator_version": "26.7.0(bundle)",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://gcsweb-test-platform-results-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/curated/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/687/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.20-stable-nvidia-gpu-operator-e2e-master-signed/2101835183454949376/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1789957523,
+                "driver_branch": "580.178.04"
+            },
             {
                 "ocp_full_version": "4.20.38",
                 "gpu_operator_version": "26.7.0(bundle)",
