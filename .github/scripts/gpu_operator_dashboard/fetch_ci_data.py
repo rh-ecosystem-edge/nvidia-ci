@@ -204,6 +204,9 @@ def _fetch_pr_files_gcsweb(pr_number: str) -> Tuple[List[Dict[str, Any]], List[D
     job_dirs, _ = list_gcsweb_directory(base)
 
     for job in job_dirs:
+        if not TEST_RESULT_PATH_REGEX.match(f"{base}{job}/_"):
+            continue
+
         build_dirs, _ = list_gcsweb_directory(f"{base}{job}/")
 
         for build in build_dirs:
