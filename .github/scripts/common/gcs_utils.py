@@ -72,6 +72,32 @@ def _matches_gcs_glob(path: str, pattern: str) -> bool:
     return bool(re.fullmatch("".join(parts), path))
 
 
+def list_gcsweb_directory(dir_path: str) -> Tuple[List[str], List[str]]:
+    """List a single directory via gcsweb proxy.
+
+    Args:
+        dir_path: Path within the bucket (without curated/ prefix).
+
+    Returns:
+        Tuple of (subdirectory_names, file_names). Empty lists if the
+        directory doesn't exist or can't be listed.
+    """
+    gcsweb_path = f"{_CURATED_PREFIX}{dir_path}"
+    if not gcsweb_path.endswith("/"):
+        gcsweb_path += "/"
+
+    try:
+        response = requests.get(
+            _gcsweb_url(gcsweb_path), headers=_get_auth_headers(), timeout=30
+        )
+        response.raise_for_status()
+    except Exception as e:
+        logger.warning(f"Failed to list directory {dir_path}: {e}")
+        return [], []
+
+    return _parse_gcsweb_listing(response.text, gcsweb_path)
+
+
 def _use_gcsweb() -> bool:
     return bool(_PROW_TOKEN)
 
