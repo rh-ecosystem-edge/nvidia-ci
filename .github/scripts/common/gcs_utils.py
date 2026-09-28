@@ -79,21 +79,19 @@ def list_gcsweb_directory(dir_path: str) -> Tuple[List[str], List[str]]:
         dir_path: Path within the bucket (without curated/ prefix).
 
     Returns:
-        Tuple of (subdirectory_names, file_names). Empty lists if the
-        directory doesn't exist or can't be listed.
+        Tuple of (subdirectory_names, file_names). Returns empty lists
+        when the directory does not exist (gcsweb returns 200 with an
+        empty listing). Raises on network/server errors so callers can
+        distinguish "empty" from "failed".
     """
     gcsweb_path = f"{_CURATED_PREFIX}{dir_path}"
     if not gcsweb_path.endswith("/"):
         gcsweb_path += "/"
 
-    try:
-        response = requests.get(
-            _gcsweb_url(gcsweb_path), headers=_get_auth_headers(), timeout=30
-        )
-        response.raise_for_status()
-    except Exception as e:
-        logger.warning(f"Failed to list directory {dir_path}: {e}")
-        return [], []
+    response = requests.get(
+        _gcsweb_url(gcsweb_path), headers=_get_auth_headers(), timeout=30
+    )
+    response.raise_for_status()
 
     return _parse_gcsweb_listing(response.text, gcsweb_path)
 
