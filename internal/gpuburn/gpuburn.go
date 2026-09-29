@@ -15,32 +15,52 @@ import (
 
 // github.com/rh-ecosystem-edge/nvidia-ci/tests
 
+const entrypointScript = "entrypoint.sh"
+
 var (
 	isFalse bool = false
 	isTrue  bool = true
+)
 
-	// Optional container args (e.g. time-slicing -m 12%) are appended after the fixed duration via "$@".
-	gpuBurnConfigMapData = map[string]string{
-		"entrypoint.sh": `#!/bin/bash
+// gpuBurnConfigMapDataWithDuration returns the ConfigMap data for the gpu-burn entrypoint
+// with the specified burn duration in seconds.
+// Optional container args (e.g. time-slicing -m 12%) are appended before the duration via "$@".
+func gpuBurnConfigMapDataWithDuration(burnTimeSec int) map[string]string {
+	return map[string]string{
+		entrypointScript: fmt.Sprintf(`#!/bin/bash
 		NUM_GPUS=$(nvidia-smi -L | wc -l)
 		if [ $NUM_GPUS -eq 0 ]; then
   			echo "ERROR No GPUs found"
 			exit 1
 		fi
-		./gpu_burn "$@" 60
+		./gpu_burn "$@" %d
 
 		if [ ! $? -eq 0 ]; then
 		  exit 1
-		fi`,
+		fi`, burnTimeSec),
 	}
-)
+}
 
 // CreateGPUBurnConfigMap returns a configmap with data field populated.
+// burnTimeSec controls the gpu_burn workload duration in the entrypoint script.
+// If a ConfigMap with the same name already exists, it is deleted first so the
+// pod always receives the current burn-time setting.
 func CreateGPUBurnConfigMap(apiClient *clients.Settings,
-	configMapName, configMapNamespace string) (*corev1.ConfigMap, error) {
+	configMapName, configMapNamespace string, burnTimeSec int) (*corev1.ConfigMap, error) {
+	existing, pullErr := configmap.Pull(apiClient, configMapName, configMapNamespace)
+	if pullErr == nil && existing.Exists() {
+		glog.V(gpuparams.GpuLogLevel).Infof(
+			"Deleting existing gpu-burn ConfigMap %q in namespace %q to apply current burn-time %ds",
+			configMapName, configMapNamespace, burnTimeSec)
+
+		if err := existing.Delete(); err != nil {
+			return nil, fmt.Errorf("failed to delete existing ConfigMap %q: %w", configMapName, err)
+		}
+	}
+
 	configMapBuilder := configmap.NewBuilder(apiClient, configMapName, configMapNamespace)
 
-	configMapBuilderWithData := configMapBuilder.WithData(gpuBurnConfigMapData)
+	configMapBuilderWithData := configMapBuilder.WithData(gpuBurnConfigMapDataWithDuration(burnTimeSec))
 
 	createdConfigMapBuilderWithData, err := configMapBuilderWithData.Create()
 
@@ -137,7 +157,7 @@ func CreateGPUBurnPodWithMIG(apiClient *clients.Settings, podName, podNamespace 
 							Name:      "entrypoint",
 							MountPath: "/bin/entrypoint.sh",
 							ReadOnly:  true,
-							SubPath:   "entrypoint.sh",
+							SubPath:   entrypointScript,
 						},
 					},
 				},
@@ -219,7 +239,7 @@ func CreateGPUBurnPod(apiClient *clients.Settings, podName, podNamespace string,
 							Name:      "entrypoint",
 							MountPath: "/bin/entrypoint.sh",
 							ReadOnly:  true,
-							SubPath:   "entrypoint.sh",
+							SubPath:   entrypointScript,
 						},
 					},
 				},
