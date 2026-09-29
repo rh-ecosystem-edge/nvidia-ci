@@ -459,10 +459,12 @@ part of a Ginkgo test flow.
   `DOCA1_UDEV_NETWORK_RULES_BASE64` **must be exported** before running `make apply-manifests`
   (enforced by the sibling `10-doca1-99-machine-config-udev-network.env-required` file) - _required_
 - `20-doca1-rdma-service-account-default-namespace.yaml` - `ServiceAccount` named `rdma` in the
-  `default` namespace. Its sibling hook script,
-  `20-doca1-rdma-service-account-default-namespace.sh`, grants that ServiceAccount the
-  `privileged` SCC (`oc -n default adm policy add-scc-to-user privileged -z rdma`) right after
-  it's created.
+  `default` namespace.
+- `21-doca1-rdma-privileged-scc.yaml` - `RoleBinding` in the `default` namespace that lets that
+  ServiceAccount `use` the `privileged` SCC. It references ClusterRole
+  `system:openshift:scc:privileged` and is applied after the ServiceAccount. It is a separate
+  binding from the shared `system:openshift:scc:privileged` RoleBinding, so deleting it removes
+  only this grant.
 
 ### Example: apply all DOCA manifests
 
@@ -478,9 +480,8 @@ $ make apply-manifests
 
 The two `MachineConfig` files each trigger a worker `MachineConfigPool` rollout (cordon/drain/
 reboot/uncordon per node); with the default `WAIT_FOR_WORKER_MCP=true`, `make apply-manifests`
-waits for that to finish after each one before moving on. After the last file
-(`20-doca1-rdma-service-account-default-namespace.yaml`) is applied, the SCC grant hook runs
-automatically.
+waits for that to finish after each one before moving on. The `rdma` ServiceAccount is applied
+next, then `21-doca1-rdma-privileged-scc.yaml` grants it the `privileged` SCC.
 
 To remove everything again:
 
@@ -489,5 +490,6 @@ $ export KUBECONFIG=/path/to/kubeconfig
 $ make delete-manifests
 ```
 
-`delete-manifests` does not wait on the `MachineConfigPool` or run any hooks — it only removes
-the manifests/nno files themselves, in reverse order.
+`delete-manifests` does not wait on the `MachineConfigPool` or run any hooks. It removes the
+manifests/nno files themselves, in reverse order, so the privileged SCC `RoleBinding` is deleted
+before the `rdma` ServiceAccount.
