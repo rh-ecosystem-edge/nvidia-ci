@@ -271,7 +271,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			nfd.EnsureNFDIsInstalled(inittools.APIClient, nfdInstance, ocpVersion, gpuparams.GpuLogLevel)
 
-			if mig.IsLabelInFilter("single-mig") || mig.IsLabelInFilter("mixed-mig") {
+			// Parsing and logging the parameters for MIG testcases and nvidia-ci parameters
+			if mig.IsLabelInFilter("single-mig") || mig.IsLabelInFilter("mixed-mig") || mig.IsFlagProvided("nvidia-ci.burntime") {
 				mig.ParseCLIParameters()
 				mig.LogCLIParameterValues()
 			}
@@ -871,7 +872,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Deploy GPU Burn configmap in test-gpu-burn namespace")
 			gpuBurnConfigMap, err := gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName,
-				burn.Namespace)
+				burn.Namespace, mig.ReadBurnTime())
 			Expect(err).ToNot(HaveOccurred(), "Error Creating gpu burn configmap: %v", err)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("The created gpuBurnConfigMap has name: %s",
