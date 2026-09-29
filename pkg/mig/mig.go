@@ -146,10 +146,11 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 
 	// Create GPU Burn configmap in test-gpu-burn namespace
 	By("Deploy GPU Burn configmap in test-gpu-burn namespace")
+	burnTimeSec := ReadBurnTime()
 	configmapBuilder := configmap.NewBuilder(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
 	if !configmapBuilder.Exists() {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Creating the gpu burn configmap '%s' in namespace '%s'", burn.ConfigMapName, burn.Namespace)
-		_, err = gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
+		_, err = gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName, burn.Namespace, burnTimeSec)
 		Expect(err).ToNot(HaveOccurred(), "Error Creating gpu burn configmap: %v", err)
 	}
 
@@ -339,10 +340,11 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 
 	// Create GPU Burn configmap in test-gpu-burn namespace
 	By("Deploy GPU Burn configmap in test-gpu-burn namespace")
+	burnTimeSec := ReadBurnTime()
 	configmapBuilder := configmap.NewBuilder(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
 	if !configmapBuilder.Exists() {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Creating the gpu burn configmap '%s' in namespace '%s'", burn.ConfigMapName, burn.Namespace)
-		_, err = gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
+		_, err = gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName, burn.Namespace, burnTimeSec)
 		Expect(err).ToNot(HaveOccurred(), "Error Creating gpu burn configmap: %v", err)
 	}
 
@@ -612,20 +614,38 @@ func ReadMIGParameter() []int {
 	return defaults
 }
 
+// ReadBurnTime returns the effective gpu_burn duration in seconds from --nvidia-ci.burntime.
+// Values outside [minBurnTime, maxBurnTime] are clamped to the closest limit.
+func ReadBurnTime() int {
+	bt := BurnTimeParam
+	if bt < minBurnTime {
+		glog.V(gpuparams.GpuLogLevel).Infof("--nvidia-ci.burntime=%d below minimum, clamping to %d", bt, minBurnTime)
+		bt = minBurnTime
+	}
+	if bt > maxBurnTime {
+		glog.V(gpuparams.GpuLogLevel).Infof("--nvidia-ci.burntime=%d above maximum, clamping to %d", bt, maxBurnTime)
+		bt = maxBurnTime
+	}
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Effective gpu_burn duration: %d seconds (param=%d)", bt, BurnTimeParam)
+	return bt
+}
+
 // ReadDelayBetweenPods returns the value of mixed.mig.pod-delay.
 // ReadDelayBetweenPods checks the Ginkgo CLI parameter mixed.mig.pod-delay and returns the value.
+// The maximum delay is burntime + 15 seconds (to allow slight overlap or non-overlapping runs).
 func ReadDelayBetweenPods() int {
+	maxDelay := ReadBurnTime() + 15
 	var podDelay int
 	switch {
 	case PodDelay < 0:
 		podDelay = 0
-	case PodDelay > 315:
-		podDelay = 315
+	case PodDelay > maxDelay:
+		podDelay = maxDelay
 	default:
 		podDelay = PodDelay
 	}
 
-	glog.V(gpuparams.Gpu10LogLevel).Infof("--mixed.mig.pod-delay parameter value: %d", podDelay)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("--mixed.mig.pod-delay parameter value: %d (max: %d)", podDelay, maxDelay)
 	return podDelay
 }
 

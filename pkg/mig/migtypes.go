@@ -64,11 +64,15 @@ var (
 	MigInstances      string
 	NoColor           bool
 	MixedMigInstances []int
+	BurnTimeParam     int
 )
 
 const (
-	defaultMigInstances     int = -1 // parameter not provided
-	defaultSingleMigProfile int = -2 // parameter not provided
+	defaultMigInstances     int = -1  // parameter not provided
+	defaultSingleMigProfile int = -2  // parameter not provided
+	defaultBurnTime         int = 60  // seconds
+	minBurnTime             int = 30  // seconds
+	maxBurnTime             int = 300 // seconds
 )
 
 const (
@@ -82,4 +86,6 @@ func init() {
 	flag.IntVar(&SingleMigProfile, "single.mig.profile", -2, "index of the MIG profile to be used for single-mig testcase")
 	flag.StringVar(&MigInstances, "mixed.mig.instances", "-1", "comma-separated number of instances for mixed-mig testcase, defaults are for A100 GPU [2,0,1,1,0,0]")
 	flag.BoolVar(&NoColor, "no-color", false, "disable color output")
+	flag.IntVar(&BurnTimeParam, "nvidia-ci.burntime", defaultBurnTime,
+		fmt.Sprintf("gpu_burn workload duration in seconds (%d-%d, default %d)", minBurnTime, maxBurnTime, defaultBurnTime))
 }
