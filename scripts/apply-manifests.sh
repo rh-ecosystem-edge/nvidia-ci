@@ -23,9 +23,8 @@
 #
 # After a manifest is applied (and any MCP wait completes), if a sibling script with
 # the same base name and a .sh extension exists next to it (e.g. 20-foo.yaml ->
-# 20-foo.sh), it is executed. This is how manifest-specific follow-up commands (like
-# granting an SCC to a freshly created ServiceAccount) are attached without hardcoding
-# them into this generic script.
+# 20-foo.sh), it is executed. This is how manifest-specific follow-up commands are
+# attached without hardcoding them into this generic script.
 #
 # Before a manifest is rendered, if a sibling file with the same base name and a
 # .env-required extension exists (e.g. 10-foo.yaml -> 10-foo.env-required, one
@@ -55,6 +54,13 @@ fi
 
 if [[ ! -d "${MANIFEST_DIR}" ]]; then
     echo "Manifest directory '${MANIFEST_DIR}' does not exist"
+    exit 1
+fi
+
+# oc falls back to ~/.kube/config when KUBECONFIG is unset. Refuse that so an
+# apply or delete cannot target the wrong cluster.
+if [[ -z "${KUBECONFIG:-}" ]]; then
+    echo "KUBECONFIG is unset or empty"
     exit 1
 fi
 
