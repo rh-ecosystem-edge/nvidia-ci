@@ -3,6 +3,21 @@
         "notes": [],
         "bundle_tests": [
             {
+                "ocp_full_version": "4.22.16",
+                "gpu_operator_version": "26.7.1(bundle)",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/716/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-master-signed/2104866421434486784/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1790678105,
+                "driver_branch": "580.173.02"
+            },
+            {
+                "ocp_full_version": "4.22.16",
+                "gpu_operator_version": "26.7.1(bundle)",
+                "test_status": "FAILURE",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/716/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-master-signed/2104734140011122688/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1790646198
+            },
+            {
                 "ocp_full_version": "4.22.15",
                 "gpu_operator_version": "26.7.1(bundle)",
                 "test_status": "SUCCESS",
@@ -216,6 +231,14 @@
     "4.20": {
         "notes": [],
         "bundle_tests": [
+            {
+                "ocp_full_version": "4.20.40",
+                "gpu_operator_version": "26.7.1(bundle)",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/716/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.20-stable-nvidia-gpu-operator-e2e-master-signed/2104734139952402432/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1790646973,
+                "driver_branch": "580.173.02"
+            },
             {
                 "ocp_full_version": "4.20.39",
                 "gpu_operator_version": "26.7.1(bundle)",
