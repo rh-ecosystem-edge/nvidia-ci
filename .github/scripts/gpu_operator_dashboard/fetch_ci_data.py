@@ -520,7 +520,7 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
         results_by_ocp.setdefault(ocp_version, {"bundle_tests": [], "release_tests": [], "job_history_links": set()})
 
         # Add job history link for this job name
-        job_history_url = f"https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/{job_name}"
+        job_history_url = f"https://prow.ci.openshift.org/job-history/gs/test-platform-results-public/pr-logs/directory/{job_name}"
         results_by_ocp[ocp_version]["job_history_links"].add(job_history_url)
 
         # Determine if this is a bundle test (job ends with '-master') or release test

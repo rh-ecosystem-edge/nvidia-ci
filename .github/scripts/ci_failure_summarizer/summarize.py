@@ -22,7 +22,7 @@ from common.utils import get_logger
 logger = get_logger(__name__)
 
 # Configuration
-GCS_BUCKET = "test-platform-results"
+GCS_BUCKET = "test-platform-results-public"
 DEFAULT_ORG_REPO = "rh-ecosystem-edge_nvidia-ci"
 OLLAMA_MODEL = "llama3.2:1b"  # ~1GB, fast CPU inference
 OLLAMA_URL = "http://localhost:11434"
@@ -517,8 +517,8 @@ def parse_prow_url(url: str) -> dict | None:
     Parse a Prow URL to extract job info.
     
     Expected formats:
-    - https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/org_repo/PR/job-name/build-id
-    - gs://test-platform-results/pr-logs/pull/org_repo/PR/job-name/build-id
+    - https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/org_repo/PR/job-name/build-id
+    - gs://test-platform-results-public/pr-logs/pull/org_repo/PR/job-name/build-id
     """
     # Match: /pr-logs/pull/org_repo/PR/job-name/build-id
     match = re.search(r'pr-logs/pull/([^/]+)/(\d+)/([^/]+)/(\d+)', url)

@@ -17,8 +17,8 @@ import requests
 
 from common.utils import logger
 
-# GCS API base URL for test-platform-results bucket
-GCS_API_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o"
+# GCS API base URL for test-platform-results-public bucket
+GCS_API_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results-public/o"
 
 # Maximum number of results per GCS API request for pagination
 GCS_MAX_RESULTS_PER_REQUEST = 1000
@@ -34,7 +34,7 @@ if _PROW_TOKEN and not _GCSWEB_API_URL.startswith("https://"):
         f"PROW_GCSWEB_API_URL must use HTTPS when PROW_TOKEN is set "
         f"(got {_GCSWEB_API_URL!r})"
     )
-_GCS_BUCKET = "test-platform-results"
+_GCS_BUCKET = "test-platform-results-public"
 _CURATED_PREFIX = os.environ.get("PROW_CURATED_PREFIX", "curated/")
 
 # Cache for recursive directory traversals (avoids re-crawling the same prefix)
@@ -262,7 +262,7 @@ def build_prow_job_url(finished_json_path: str) -> str:
     directory_path = finished_json_path[:-len('/finished.json')]
     if _use_gcsweb():
         return f"{_GCSWEB_API_URL}/gcs/{_GCS_BUCKET}/{_CURATED_PREFIX}{directory_path}"
-    return f"https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/{directory_path}"
+    return f"https://prow.ci.openshift.org/view/gs/test-platform-results-public/{directory_path}"
 
 
 def fetch_filtered_files(pr_number: str, glob_pattern: str) -> list[Dict[str, Any]]:
@@ -345,4 +345,4 @@ def build_job_history_url(job_name: str) -> str:
     Returns:
         Full URL to the job history page
     """
-    return f"https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/{job_name}"
+    return f"https://prow.ci.openshift.org/job-history/gs/test-platform-results-public/pr-logs/directory/{job_name}"

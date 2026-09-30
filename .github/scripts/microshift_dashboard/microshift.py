@@ -29,7 +29,7 @@ VERSION_JOB_NAME = {
     "4.18": "periodics-e2e-aws-nvidia-device-plugin-nightly",
 }
 
-GCP_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o/"
+GCP_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results-public/o/"
 
 GITHUB_PR_QUERY = """
 query get_prs($branch: String!, $limit: Int!) {
@@ -144,7 +144,7 @@ def get_job_result(job_run: Dict[str, Any]) -> Dict[str, Any]:
         "num": job_run['num'],
         "timestamp": finished['timestamp'],
         "status": finished['result'],
-        "url": f"https://prow.ci.openshift.org/view/gs/test-platform-results/{job_run['path']}",
+        "url": f"https://prow.ci.openshift.org/view/gs/test-platform-results-public/{job_run['path']}",
         "microshift_version": version,
     }
 
@@ -205,11 +205,17 @@ def get_results_from_presubmits(version: str, cutoff: datetime.datetime, limit: 
             continue
 
         prow_url = nvidia_presubmit['targetUrl']
-        if 'https://prow.ci.openshift.org/view/gs/test-platform-results/' not in prow_url:
+        prow_gcs_prefix = None
+        for bucket in ("test-platform-results-public", "test-platform-results"):
+            prefix = f"https://prow.ci.openshift.org/view/gs/{bucket}/"
+            if prefix in prow_url:
+                prow_gcs_prefix = prefix
+                break
+        if prow_gcs_prefix is None:
             logger.warning(f"[{version}] Unexpected targetUrl for a presubmit: {nvidia_presubmit['targetUrl']}. Commit status: {json.dumps(last_commit)}")
             continue
 
-        gcp_path = prow_url.replace("https://prow.ci.openshift.org/view/gs/test-platform-results/", "") + "/"
+        gcp_path = prow_url.replace(prow_gcs_prefix, "") + "/"
         num = gcp_path.split("/")[-2]
         result = get_job_result( {"path": gcp_path, "num": int(num)} )
         if result:
