@@ -465,10 +465,11 @@ def build_log_path(org_repo: str, pr_number: str, job_name: str, build_id: str) 
     return f"pr-logs/pull/{org_repo}/{pr_number}/{job_name}/{build_id}/build-log.txt"
 
 
-def build_prow_url(org_repo: str, pr_number: str, job_name: str, build_id: str) -> str:
+def build_prow_url(org_repo: str, pr_number: str, job_name: str, build_id: str,
+                   bucket: str = GCS_BUCKET) -> str:
     """Construct the Prow UI URL for a build."""
     return (
-        f"https://prow.ci.openshift.org/view/gs/{GCS_BUCKET}/"
+        f"https://prow.ci.openshift.org/view/gs/{bucket}/"
         f"pr-logs/pull/{org_repo}/{pr_number}/{job_name}/{build_id}"
     )
 
@@ -622,7 +623,7 @@ def main():
         sys.exit(1)
     
     # Format the comment with root cause + AI summary
-    prow_url = build_prow_url(org_repo, pr_number, job_name, build_id)
+    prow_url = build_prow_url(org_repo, pr_number, job_name, build_id, bucket)
     comment = format_comment(job_name, build_id, summary, prow_url, key_errors)
     
     # Output for GitHub Actions
