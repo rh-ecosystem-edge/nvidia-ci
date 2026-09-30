@@ -547,7 +547,7 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 	//     0    1020869     C      7      0      -      -      -      -    gpu_burn
 
 	output := GetCmdOutput(inittools.APIClient, workerNodeSelector, cmd)
-	Expect(output).NotTo(BeEmpty(), "Error checking time-slicing status: %v", err)
+	Expect(output).NotTo(BeEmpty(), "Error checking time-slicing status, output is empty")
 	// Get the PID (1st column) from the CSV output
 	status, pids := GetPidsFromPmon(output, 2)
 
@@ -604,6 +604,8 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 	By("Monitor time-slicing status until all gpu-burn pods complete; validate each pod log on success")
 	if TsMonAfterPod <= len(tsPodInfo) {
 		j := 0
+		// Monitoring the load caused by pods regardless of their status. Going through all of them
+		// until they are completed or failed to catch all the load printouts before continuing.l
 		for _, podInfo := range tsPodInfo {
 			j++
 			if j < TsMonAfterPod {
@@ -1392,10 +1394,10 @@ func restartGPUOperatorDevicePluginDaemonsets(apiClient *clients.Settings) error
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "restartGPUOperatorDevicePluginDaemonsets"))
 	ns := nvidiagpu.NvidiaGPUNamespace
 	names := []string{"nvidia-device-plugin-daemonset", "gpu-feature-discovery"}
-	patch := []byte(fmt.Sprintf(
+	patch := fmt.Appendf(nil,
 		`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`,
 		time.Now().Format(time.RFC3339),
-	))
+	)
 	for _, name := range names {
 		_, err := apiClient.DaemonSets(ns).Patch(
 			context.TODO(), name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})

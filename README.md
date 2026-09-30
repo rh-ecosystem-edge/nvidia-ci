@@ -23,17 +23,11 @@ The framework in this repository is designed to test NVIDIA's operators on a pre
 - Public Clouds Cluster (AWS, GCP and Azure) - For GPU Operator Only
 - On Premise Cluster
 
-
-
 ### General environment variables
-
-
 
 #### Mandatory:
 
 - `KUBECONFIG` - Path to kubeconfig file.
-
-
 
 #### Optional:
 
@@ -45,11 +39,9 @@ We use glog library for logging. In order to enable verbose logging the followin
 
 import ( . "github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools" )
 
-1. Need to export the following SHELL variable:
+2. Need to export the following SHELL variable:
 
 > export VERBOSE_LEVEL=100
-
-
 
 ##### Notes:
 
@@ -171,7 +163,7 @@ $ export NVIDIAGPU_CLEANUP=false  # Important: don't clean up after deployment
 $ make run-tests
 ```
 
-1. After the GPU Operator deployment completes successfully, run the MPS tests:
+2. After the GPU Operator deployment completes successfully, run the MPS tests:
 
 ```bash
 $ export TEST_FEATURES="mps"
@@ -220,7 +212,7 @@ $ export NVIDIAGPU_CLEANUP=false
 $ make run-tests ARGS="-- --single.mig.profile=1 --time.slicing.limit=15 --time.slicing.max-running-slices=9 --time.slicing.instances=3,9"
 ```
 
-1. Running only MIG testcases (make run-mig-tests) on an existing cluster which has GPU operator installed,
+2. Running only MIG testcases (make run-mig-tests) on an existing cluster which has GPU operator installed,
 
 e.g. after executing step 1. MIG testcase(s) can be used from either nvidiagpu or
 mig package. MIG is used in this example. In the other case, use `TEST_FEATURES="nvidiagpu"`
