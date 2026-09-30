@@ -181,6 +181,22 @@
         ],
         "release_tests": [
             {
+                "ocp_full_version": "4.22.16",
+                "gpu_operator_version": "26.7.1",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/631/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-7-x-signed/2105297671643205632/artifacts/nvidia-gpu-operator-e2e-26-7-x-signed/gpu-operator-e2e",
+                "job_timestamp": 1790781868,
+                "driver_branch": "580.173.02, 595.71.05, 610.57.04"
+            },
+            {
+                "ocp_full_version": "4.22.16",
+                "gpu_operator_version": "26.3.3",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/631/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-3-x-signed/2105243587401748480/artifacts/nvidia-gpu-operator-e2e-26-3-x-signed/gpu-operator-e2e",
+                "job_timestamp": 1790769437,
+                "driver_branch": "580.173.02, 595.71.05, 610.57.04"
+            },
+            {
                 "ocp_full_version": "4.22.15",
                 "gpu_operator_version": "26.3.3",
                 "test_status": "SUCCESS",
@@ -230,6 +246,8 @@
             }
         ],
         "job_history_links": [
+            "https://prow.ci.openshift.org/job-history/gs/test-platform-results-public/pr-logs/directory/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-3-x-signed",
+            "https://prow.ci.openshift.org/job-history/gs/test-platform-results-public/pr-logs/directory/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-7-x-signed",
             "https://prow.ci.openshift.org/job-history/gs/test-platform-results-public/pr-logs/directory/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-master-signed",
             "https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-3-x-signed",
             "https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-7-x-signed",
