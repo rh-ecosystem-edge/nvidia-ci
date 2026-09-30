@@ -181,7 +181,7 @@ It is recommended to execute the runner script through the `make run-tests` make
 
 #### Steps to run MIG tests:
 
-1. Run mig testcases (single-mig and mixed-mig) after nvidia-ci on any cluster, while selecting single.mig.profile=1
+1. Run mig testcases (single-mig and mixed-mig) after nvidia-ci on any cluster, while selecting single.mig.profile=1. Changing the burntime to 120 seconds as well to avoid rare cases where progress logs are missing because of too short burntime.
 ```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
@@ -191,7 +191,7 @@ $ export TEST_LABELS='nvidia-ci,gpu,single-mig,mixed-mig'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
-$ make run-tests ARGS="-- --single.mig.profile=1"
+$ make run-tests ARGS="-- --single.mig.profile=1 --nvidia-ci.burntime=120"
 ```
 2. Running only MIG testcases on an existing cluster which has GPU operator installed,
 e.g. after executing step 1. MIG testcase(s) can be used from either nvidiagpu or
