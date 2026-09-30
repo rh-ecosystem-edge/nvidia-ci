@@ -146,10 +146,11 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 
 	// Create GPU Burn configmap in test-gpu-burn namespace
 	By("Deploy GPU Burn configmap in test-gpu-burn namespace")
+	burnTimeSec := ReadBurnTime()
 	configmapBuilder := configmap.NewBuilder(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
 	if !configmapBuilder.Exists() {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Creating the gpu burn configmap '%s' in namespace '%s'", burn.ConfigMapName, burn.Namespace)
-		_, err = gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
+		_, err = gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName, burn.Namespace, burnTimeSec)
 		Expect(err).ToNot(HaveOccurred(), "Error Creating gpu burn configmap: %v", err)
 	}
 
@@ -339,10 +340,11 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 
 	// Create GPU Burn configmap in test-gpu-burn namespace
 	By("Deploy GPU Burn configmap in test-gpu-burn namespace")
+	burnTimeSec := ReadBurnTime()
 	configmapBuilder := configmap.NewBuilder(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
 	if !configmapBuilder.Exists() {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("Creating the gpu burn configmap '%s' in namespace '%s'", burn.ConfigMapName, burn.Namespace)
-		_, err = gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName, burn.Namespace)
+		_, err = gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName, burn.Namespace, burnTimeSec)
 		Expect(err).ToNot(HaveOccurred(), "Error Creating gpu burn configmap: %v", err)
 	}
 
@@ -612,20 +614,38 @@ func ReadMIGParameter() []int {
 	return defaults
 }
 
+// ReadBurnTime returns the effective gpu_burn duration in seconds from --nvidia-ci.burntime.
+// Values outside [minBurnTime, maxBurnTime] are clamped to the closest limit.
+func ReadBurnTime() int {
+	bt := BurnTimeParam
+	if bt < minBurnTime {
+		glog.V(gpuparams.GpuLogLevel).Infof("--nvidia-ci.burntime=%d below minimum, clamping to %d", bt, minBurnTime)
+		bt = minBurnTime
+	}
+	if bt > maxBurnTime {
+		glog.V(gpuparams.GpuLogLevel).Infof("--nvidia-ci.burntime=%d above maximum, clamping to %d", bt, maxBurnTime)
+		bt = maxBurnTime
+	}
+	glog.V(gpuparams.Gpu10LogLevel).Infof("Effective gpu_burn duration: %d seconds (param=%d)", bt, BurnTimeParam)
+	return bt
+}
+
 // ReadDelayBetweenPods returns the value of mixed.mig.pod-delay.
 // ReadDelayBetweenPods checks the Ginkgo CLI parameter mixed.mig.pod-delay and returns the value.
+// The maximum delay is burntime + 15 seconds (to allow slight overlap or non-overlapping runs).
 func ReadDelayBetweenPods() int {
+	maxDelay := ReadBurnTime() + 15
 	var podDelay int
 	switch {
 	case PodDelay < 0:
 		podDelay = 0
-	case PodDelay > 315:
-		podDelay = 315
+	case PodDelay > maxDelay:
+		podDelay = maxDelay
 	default:
 		podDelay = PodDelay
 	}
 
-	glog.V(gpuparams.Gpu10LogLevel).Infof("--mixed.mig.pod-delay parameter value: %d", podDelay)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("--mixed.mig.pod-delay parameter value: %d (max: %d)", podDelay, maxDelay)
 	return podDelay
 }
 
@@ -1137,7 +1157,7 @@ func MIGProfiles(apiClient *clients.Settings, nodeSelector map[string]string) (b
 // ParseCLIParameters parses CLI parameters and sets the global variables.
 // This must be called after flags are parsed (e.g., in a BeforeSuite or BeforeAll hook).
 func ParseCLIParameters() {
-	wasProvided := isFlagProvided("mixed.mig.instances")
+	wasProvided := IsFlagProvided("mixed.mig.instances")
 	if wasProvided {
 		MixedMigInstances = parseMigInstances(MigInstances, strconv.Itoa(defaultMigInstances))
 	} else {
@@ -1147,7 +1167,7 @@ func ParseCLIParameters() {
 
 // isFlagProvided checks if a flag was explicitly set on the command line.
 // Returns true if the flag was provided, false if it's using the default value.
-func isFlagProvided(flagName string) bool {
+func IsFlagProvided(flagName string) bool {
 	provided := false
 	flag.Visit(func(f *flag.Flag) {
 		if f.Name == flagName {
@@ -1174,21 +1194,28 @@ func parseMigInstances(s string, defaults string) []int {
 
 func LogCLIParameterValues() {
 	// Check if the flags were explicitly provided on the command line
-	wasProvided := isFlagProvided("single.mig.profile")
+	wasProvided := IsFlagProvided("nvidia-ci.burntime")
+	if !wasProvided {
+		GinkgoWriter.Printf("Flag --nvidia-ci.burntime not provided, using default: %d\n", BurnTimeParam)
+	} else {
+		glog.V(gpuparams.Gpu10LogLevel).Infof("%s %d", colorLog(colorCyan+colorBold, "Value of --nvidia-ci.burntime parameter: "), BurnTimeParam)
+	}
+
+	wasProvided = IsFlagProvided("single.mig.profile")
 	if !wasProvided {
 		GinkgoWriter.Printf("Flag --single.mig.profile not provided, using default: %d\n", SingleMigProfile)
 	} else {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("%s %d", colorLog(colorCyan+colorBold, "Value of --single.mig.profile parameter: "), SingleMigProfile)
 	}
 
-	wasProvided = isFlagProvided("mixed.mig.pod-delay")
+	wasProvided = IsFlagProvided("mixed.mig.pod-delay")
 	if !wasProvided {
 		GinkgoWriter.Printf("Flag --mixed.mig.pod-delay not provided, using default: %d\n", PodDelay)
 	} else {
 		glog.V(gpuparams.Gpu10LogLevel).Infof("%s %d", colorLog(colorCyan+colorBold, "Value of --mixed.mig.pod-delay parameter: "), PodDelay)
 	}
 
-	wasProvided = isFlagProvided("mixed.mig.instances")
+	wasProvided = IsFlagProvided("mixed.mig.instances")
 	if !wasProvided {
 		GinkgoWriter.Printf("Flag --mixed.mig.instances not provided, using default: %v\n", defaultMigInstances)
 	} else {
@@ -1197,7 +1224,7 @@ func LogCLIParameterValues() {
 			parseMigInstances(MigInstances, strconv.Itoa(defaultMigInstances)))
 	}
 
-	wasProvided = isFlagProvided("no-color")
+	wasProvided = IsFlagProvided("no-color")
 	if !wasProvided {
 		GinkgoWriter.Printf("Flag --no-color not provided, using default: %v\n", NoColor)
 	} else {

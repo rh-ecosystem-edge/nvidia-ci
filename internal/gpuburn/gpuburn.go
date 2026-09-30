@@ -18,28 +18,34 @@ import (
 var (
 	isFalse bool = false
 	isTrue  bool = true
+)
 
-	gpuBurnConfigMapData = map[string]string{
-		"entrypoint.sh": `#!/bin/bash
+// gpuBurnConfigMapDataWithDuration returns the ConfigMap data for the gpu-burn entrypoint
+// with the specified burn duration in seconds.
+// Optional container args (e.g. time-slicing -m 12%) are appended before the duration via "$@".
+func gpuBurnConfigMapDataWithDuration(burnTimeSec int) map[string]string {
+	return map[string]string{
+		"entrypoint.sh": fmt.Sprintf(`#!/bin/bash
 		NUM_GPUS=$(nvidia-smi -L | wc -l)
 		if [ $NUM_GPUS -eq 0 ]; then
   			echo "ERROR No GPUs found"
 			exit 1
 		fi
-		./gpu_burn 60
+		./gpu_burn "$@" %d
 
 		if [ ! $? -eq 0 ]; then
 		  exit 1
-		fi`,
+		fi`, burnTimeSec),
 	}
-)
+}
 
 // CreateGPUBurnConfigMap returns a configmap with data field populated.
+// burnTimeSec controls the gpu_burn workload duration in the entrypoint script.
 func CreateGPUBurnConfigMap(apiClient *clients.Settings,
-	configMapName, configMapNamespace string) (*corev1.ConfigMap, error) {
+	configMapName, configMapNamespace string, burnTimeSec int) (*corev1.ConfigMap, error) {
 	configMapBuilder := configmap.NewBuilder(apiClient, configMapName, configMapNamespace)
 
-	configMapBuilderWithData := configMapBuilder.WithData(gpuBurnConfigMapData)
+	configMapBuilderWithData := configMapBuilder.WithData(gpuBurnConfigMapDataWithDuration(burnTimeSec))
 
 	createdConfigMapBuilderWithData, err := configMapBuilderWithData.Create()
 

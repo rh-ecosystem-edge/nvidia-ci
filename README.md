@@ -119,10 +119,11 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 
 ### CLI parameters:
 
-NVIDIA MIG parameters for the script are controlled by the following ginkgo parameters which are delivered as `ARGS="-- [{parameter}...]"` for the `make run-tests` (check the examples):
-- `--single.mig-profile=n`, where n is typically a value of int type between 0-5. The parameter is used to choose the MIG profile from list of available MIG profiles (e.g. 1g.5gb is usually referenced with index 0).  If not specified, a valid random number is used. Typically values 0-5. - _optional_
+CLI parameters for the script are controlled by the following ginkgo parameters which are delivered as `ARGS="-- [{parameter}...]"` for the `make run-tests` (check the examples):
+- `--nvidia-ci.burntime=n`, where n is the gpu_burn workload duration in seconds. Accepted range is 30-300. Values outside the range are clamped to the closest limit. If not specified, 60 seconds is used. - _optional_
+- `--single.mig.profile=n`, where n is typically a value of int type between 0-5. The parameter is used to choose the MIG profile from list of available MIG profiles (e.g. 1g.5gb is usually referenced with index 0).  If not specified, a valid random number is used. Typically values 0-5. - _optional_
 - `--mixed.mig.instances=xxx`, where xxx is a comma-separated string inside quotation marks (e.g. "2,0,1,1,0,0") The list of numbers represent how many instances are to be used for each profile when creating a pod. The first number indicates how many instances are to be used for the first profile etc. The instances of different profiles consume GPU slices in a different way. The name of the profile (e.g. 2g.10gb) describes the consumption of each instance (each instance would consume 2 slices and 10gb of memory). _optional_
-- `--mixed.mig.pod-delay=n`, where n is a number in range 0 - 315 (seconds). In mixed MIG testcase there are usually more than 1 pod launched (depends on available GPU and mixed.mig.instances parameter). Since GPU workload is 300 seconds, this parameter can be used to control the delay between the pod launches so that the pods are running completely simultaneously, mostly overlapping (e.g. 15-80), slightly overlapping (e.g. 200-280 seconds), or non-overlapping (over 300 seconds). Values outside valid range are reset to closest limit (either 0 or 315). _optional_
+- `--mixed.mig.pod-delay=n`, where n is a number in range 0 to burntime+15 (seconds). In mixed MIG testcase there are usually more than 1 pod launched (depends on available GPU and mixed.mig.instances parameter). This parameter controls the delay between the pod launches so that the pods are running completely simultaneously, mostly overlapping, slightly overlapping, or non-overlapping (over burntime seconds). Values outside valid range are reset to closest limit. _optional_
 
 ### Testing MPS with GPU Operator
 
@@ -180,7 +181,7 @@ It is recommended to execute the runner script through the `make run-tests` make
 
 #### Steps to run MIG tests:
 
-1. Run mig testcases (single-mig and mixed-mig) after nvidia-ci on any cluster, while selecting single.mig.profile=1
+1. Run mig testcases (single-mig and mixed-mig) after nvidia-ci on any cluster, while selecting single.mig.profile=1. Changing the burntime to 120 seconds as well to avoid rare cases where progress logs are missing because of too short burntime.
 ```bash
 $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
@@ -190,7 +191,7 @@ $ export TEST_LABELS='nvidia-ci,gpu,single-mig,mixed-mig'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
-$ make run-tests ARGS="-- --single.mig.profile=1"
+$ make run-tests ARGS="-- --single.mig.profile=1 --nvidia-ci.burntime=120"
 ```
 2. Running only MIG testcases on an existing cluster which has GPU operator installed,
 e.g. after executing step 1. MIG testcase(s) can be used from either nvidiagpu or
