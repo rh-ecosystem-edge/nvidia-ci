@@ -515,15 +515,25 @@ def format_comment(job_name: str, build_id: str, summary: str, prow_url: str,
 def parse_prow_url(url: str) -> dict | None:
     """
     Parse a Prow URL to extract job info.
-    
+
     Expected formats:
-    - https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/org_repo/PR/job-name/build-id
-    - gs://test-platform-results-public/pr-logs/pull/org_repo/PR/job-name/build-id
+    - https://prow.ci.openshift.org/view/gs/{bucket}/pr-logs/pull/org_repo/PR/job-name/build-id
+    - gs://{bucket}/pr-logs/pull/org_repo/PR/job-name/build-id
     """
-    # Match: /pr-logs/pull/org_repo/PR/job-name/build-id
+    match = re.search(r'(?:view/gs|gs:/)/([^/]+)/pr-logs/pull/([^/]+)/(\d+)/([^/]+)/(\d+)', url)
+    if match:
+        return {
+            "bucket": match.group(1),
+            "org_repo": match.group(2),
+            "pr_number": match.group(3),
+            "job_name": match.group(4),
+            "build_id": match.group(5),
+        }
+    # Fallback: match without bucket prefix
     match = re.search(r'pr-logs/pull/([^/]+)/(\d+)/([^/]+)/(\d+)', url)
     if match:
         return {
+            "bucket": GCS_BUCKET,
             "org_repo": match.group(1),
             "pr_number": match.group(2),
             "job_name": match.group(3),
@@ -556,6 +566,7 @@ def main():
     org_repo = os.environ.get("ORG_REPO", DEFAULT_ORG_REPO)
     
     # Alternatively, parse from a Prow URL
+    bucket = GCS_BUCKET
     prow_url_input = os.environ.get("PROW_URL")
     if prow_url_input and not all([pr_number, job_name, build_id]):
         parsed = parse_prow_url(prow_url_input)
@@ -564,18 +575,19 @@ def main():
             job_name = parsed["job_name"]
             build_id = parsed["build_id"]
             org_repo = parsed["org_repo"]
-    
+            bucket = parsed["bucket"]
+
     if not all([pr_number, job_name, build_id]):
         logger.error("Missing required parameters. Need PR_NUMBER, JOB_NAME, BUILD_ID or PROW_URL")
         sys.exit(1)
-    
+
     logger.info(f"Analyzing failure for PR #{pr_number}, job: {job_name}, build: {build_id}")
-    
+
     # Fetch the build log
     log_path = build_log_path(org_repo, pr_number, job_name, build_id)
-    logger.info(f"Fetching log from gs://{GCS_BUCKET}/{log_path}")
-    
-    build_log = fetch_file_from_gcs(GCS_BUCKET, log_path)
+    logger.info(f"Fetching log from gs://{bucket}/{log_path}")
+
+    build_log = fetch_file_from_gcs(bucket, log_path)
     
     if not build_log:
         error_msg = f"Could not fetch build log from {log_path}"
