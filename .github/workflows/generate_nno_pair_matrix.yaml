@@ -1,6 +1,9 @@
 name: Generate NNO and DOCA2 pair matrices
 
 on:
+  pull_request:
+    branches:
+      - main
   schedule:
     - cron: '17 6 * * *'
   workflow_dispatch:
@@ -12,12 +15,75 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  publish:
-    if: github.repository == 'rh-ecosystem-edge/nvidia-ci'
+  preview:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    env:
+      PREVIEW_ROOT: ${{ runner.temp }}/nno-report-preview
+    steps:
+      - name: Check out report code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install report dependencies
+        run: python3 -m pip install -r .github/scripts/gpu_operator_dashboard/requirements.txt
+
+      - name: Test collection and rendering
+        run: PYTHONPATH=.github/scripts python3 -m unittest nno_pair_report.test_report
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Test Prow manifest writer
+        run: go test -mod=vendor ./internal/nnopairreport ./cmd/nno-pair-report
+
+      - name: Render synthetic preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=.github/scripts python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from nno_pair_report.test_report import write_sample_manifests
+
+          write_sample_manifests(Path(os.environ["PREVIEW_ROOT"]) / "input")
+          PY
+          PYTHONPATH=.github/scripts python3 -m nno_pair_report.collect \
+            --input-dir "$PREVIEW_ROOT/input" \
+            --output "$PREVIEW_ROOT/history.json"
+          python3 .github/scripts/nno_pair_report/render.py \
+            --data "$PREVIEW_ROOT/history.json" \
+            --output-dir "$PREVIEW_ROOT/report" \
+            --label 'Synthetic PR preview'
+          cp "$PREVIEW_ROOT/history.json" "$PREVIEW_ROOT/report/nno_doca2_history.json"
+
+      - name: Upload synthetic report preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: nno-report-synthetic-preview
+          path: ${{ env.PREVIEW_ROOT }}/report/
+          retention-days: 7
+
+  publish:
+    if: >-
+      github.repository == 'rh-ecosystem-edge/nvidia-ci' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       PERIODIC_JOB: ${{ inputs.periodic_job || 'periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-deploy-cluster' }}
       REPORT_HISTORY: ${{ runner.temp }}/nno-pair-report/history.json
@@ -25,12 +91,15 @@ jobs:
     steps:
       - name: Check out report code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Check out published report history
         uses: actions/checkout@v4
         with:
           ref: gh-pages
           path: nno-pages-baseline
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
