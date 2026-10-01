@@ -227,15 +227,18 @@ jobs:
                 CATCHUP_NUMBER=$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number' 2>/dev/null || true)
 
                 if [ -z "${CATCHUP_NUMBER}" ]; then
-                  # Create branch if it doesn't already exist
+                  MAIN_SHA=$(gh api repos/{owner}/{repo}/git/ref/heads/main --jq '.object.sha')
+                  TREE_SHA=$(gh api repos/{owner}/{repo}/git/commits/"${MAIN_SHA}" --jq '.tree.sha')
+                  COMMIT_SHA=$(gh api repos/{owner}/{repo}/git/commits -X POST \
+                    -f message="Signed test catch-up for weekend PR #${PR}" \
+                    -f "tree=${TREE_SHA}" -f "parents[]=${MAIN_SHA}" --jq '.sha')
+
                   if ! gh api repos/{owner}/{repo}/git/ref/heads/"${BRANCH}" > /dev/null 2>&1; then
-                    MAIN_SHA=$(gh api repos/{owner}/{repo}/git/ref/heads/main --jq '.object.sha')
+                    # Create branch pointing directly at the catch-up commit
                     gh api repos/{owner}/{repo}/git/refs -X POST \
-                      -f ref="refs/heads/${BRANCH}" -f sha="${MAIN_SHA}"
-                    TREE_SHA=$(gh api repos/{owner}/{repo}/git/commits/"${MAIN_SHA}" --jq '.tree.sha')
-                    COMMIT_SHA=$(gh api repos/{owner}/{repo}/git/commits -X POST \
-                      -f message="Signed test catch-up for weekend PR #${PR}" \
-                      -f "tree=${TREE_SHA}" -f "parents[]=${MAIN_SHA}" --jq '.sha')
+                      -f ref="refs/heads/${BRANCH}" -f sha="${COMMIT_SHA}"
+                  else
+                    # Branch exists without a PR (partial failure); ensure it has the commit
                     gh api repos/{owner}/{repo}/git/refs/heads/"${BRANCH}" -X PATCH \
                       -f sha="${COMMIT_SHA}"
                   fi
