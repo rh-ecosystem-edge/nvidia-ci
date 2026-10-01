@@ -228,19 +228,26 @@ jobs:
 
                 if [ -z "${CATCHUP_NUMBER}" ]; then
                   MAIN_SHA=$(gh api repos/{owner}/{repo}/git/ref/heads/main --jq '.object.sha')
-                  TREE_SHA=$(gh api repos/{owner}/{repo}/git/commits/"${MAIN_SHA}" --jq '.tree.sha')
-                  COMMIT_SHA=$(gh api repos/{owner}/{repo}/git/commits -X POST \
-                    -f message="Signed test catch-up for weekend PR #${PR}" \
-                    -f "tree=${TREE_SHA}" -f "parents[]=${MAIN_SHA}" --jq '.sha')
 
                   if ! gh api repos/{owner}/{repo}/git/ref/heads/"${BRANCH}" > /dev/null 2>&1; then
-                    # Create branch pointing directly at the catch-up commit
+                    # Branch doesn't exist: create commit then branch
+                    TREE_SHA=$(gh api repos/{owner}/{repo}/git/commits/"${MAIN_SHA}" --jq '.tree.sha')
+                    COMMIT_SHA=$(gh api repos/{owner}/{repo}/git/commits -X POST \
+                      -f message="Signed test catch-up for weekend PR #${PR}" \
+                      -f "tree=${TREE_SHA}" -f "parents[]=${MAIN_SHA}" --jq '.sha')
                     gh api repos/{owner}/{repo}/git/refs -X POST \
                       -f ref="refs/heads/${BRANCH}" -f sha="${COMMIT_SHA}"
                   else
-                    # Branch exists without a PR (partial failure); ensure it has the commit
-                    gh api repos/{owner}/{repo}/git/refs/heads/"${BRANCH}" -X PATCH \
-                      -f sha="${COMMIT_SHA}"
+                    # Branch exists without a PR (partial failure): add commit only if needed
+                    BRANCH_SHA=$(gh api repos/{owner}/{repo}/git/ref/heads/"${BRANCH}" --jq '.object.sha')
+                    if [ "${BRANCH_SHA}" = "${MAIN_SHA}" ]; then
+                      TREE_SHA=$(gh api repos/{owner}/{repo}/git/commits/"${MAIN_SHA}" --jq '.tree.sha')
+                      COMMIT_SHA=$(gh api repos/{owner}/{repo}/git/commits -X POST \
+                        -f message="Signed test catch-up for weekend PR #${PR}" \
+                        -f "tree=${TREE_SHA}" -f "parents[]=${MAIN_SHA}" --jq '.sha')
+                      gh api repos/{owner}/{repo}/git/refs/heads/"${BRANCH}" -X PATCH \
+                        -f sha="${COMMIT_SHA}"
+                    fi
                   fi
 
                   PR_BODY=$(printf 'Catch-up PR for signed tests skipped on weekend PR #%s.\n\nSigned triggers:\n```\n%s\n```' "${PR}" "${TRIGGERS}")
