@@ -160,7 +160,8 @@ jobs:
         if: |
           github.event_name == 'pull_request_target' &&
           github.event.pull_request.merged == true &&
-          github.event.pull_request.user.login == 'github-actions[bot]'
+          (github.event.pull_request.user.login == 'github-actions[bot]' ||
+           contains(github.event.pull_request.head.ref, 'signed-monday'))
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
