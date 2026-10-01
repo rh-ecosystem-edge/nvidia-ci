@@ -13,6 +13,11 @@ on:
         required: false
         default: 'periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-deploy-cluster'
         type: string
+      publish:
+        description: 'Commit the generated reports to gh-pages'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -76,14 +81,14 @@ jobs:
           path: ${{ env.PREVIEW_ROOT }}/report/
           retention-days: 7
 
-  publish:
+  report:
     if: >-
       github.repository == 'rh-ecosystem-edge/nvidia-ci' &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    outputs:
+      has_data: ${{ steps.report_data.outputs.has_data }}
     env:
       PERIODIC_JOB: ${{ inputs.periodic_job || 'periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-deploy-cluster' }}
       REPORT_HISTORY: ${{ runner.temp }}/nno-pair-report/history.json
@@ -136,7 +141,7 @@ jobs:
               if has_data:
                   summary.write(f"NNO report contains {len(history['builds'])} Prow builds.\n")
               else:
-                  summary.write("No NNO pair manifest found; Pages publication skipped.\n")
+                  summary.write("No NNO pair manifest found; no report to preview or publish.\n")
           PY
 
       - name: Render and stage report pages
@@ -157,11 +162,38 @@ jobs:
           cp "$RUNNER_TEMP/nno-pair-report/rendered/nno_doca2_signed_matrix.html" "$REPORT_OUTPUT/"
           cp "$RUNNER_TEMP/nno-pair-report/rendered/nno_doca2_signed_explorer.html" "$REPORT_OUTPUT/"
 
-      - name: Publish NNO reports to GitHub Pages
+      - name: Upload report preview
         if: steps.report_data.outputs.has_data == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nno-report-live-preview
+          path: ${{ env.REPORT_OUTPUT }}/
+          retention-days: 7
+
+  publish:
+    needs: report
+    if: >-
+      needs.report.outputs.has_data == 'true' &&
+      (github.event_name == 'schedule' || inputs.publish == true)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download generated reports
+        uses: actions/download-artifact@v4
+        with:
+          name: nno-report-live-preview
+          path: nno-pair-report-output
+
+      - name: Publish NNO reports to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           branch: gh-pages
-          folder: ${{ env.REPORT_OUTPUT }}
+          folder: nno-pair-report-output
           clean: false
           force: false
