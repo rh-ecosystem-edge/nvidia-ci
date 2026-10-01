@@ -9,13 +9,14 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
 
-BUCKET = "test-platform-results"
+import requests
+
+from common import gcs_utils
+
+BUCKET = gcs_utils.GCS_BUCKET
 MANIFEST_NAME = "nno-pairs.json"
 PR_PATH = re.compile(
     r"^pr-logs/pull/(?P<repo>[^/]+)/(?P<pr>\d+)/(?P<job>[^/]+)/(?P<build>[^/]+)/"
@@ -94,9 +95,10 @@ def normalize_manifest(data: Any, path: str) -> dict[str, Any]:
     else:
         build_path = identity["build_path"]
 
-    prow_url = run.get("prow_url")
-    if not prow_url and identity:
-        prow_url = f"https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/{BUCKET}/{build_path}"
+    if identity:
+        prow_url = f"https://prow.ci.openshift.org/view/gs/{BUCKET}/{build_path}"
+    else:
+        prow_url = run.get("prow_url")
     if prow_url and not str(prow_url).startswith("https://"):
         raise ValueError("run.prow_url must be an HTTPS URL")
     planned_modes = run.get("planned_modes", [])
@@ -178,21 +180,22 @@ def load_local(root: Path) -> list[dict[str, Any]]:
 
 
 def _gcs_json(params: dict[str, str]) -> dict[str, Any]:
-    query = urllib.parse.urlencode(params)
-    url = f"https://storage.googleapis.com/storage/v1/b/{BUCKET}/o?{query}"
-    with urllib.request.urlopen(url, timeout=30) as response:
-        return json.load(response)
+    return gcs_utils.http_get_json(gcs_utils.GCS_API_BASE_URL, params=params)
 
 
 def _gcs_manifest(path: str) -> dict[str, Any]:
-    quoted = urllib.parse.quote(path, safe="")
-    url = f"https://storage.googleapis.com/storage/v1/b/{BUCKET}/o/{quoted}?alt=media"
-    with urllib.request.urlopen(url, timeout=30) as response:
-        return json.load(response)
+    return json.loads(gcs_utils.fetch_gcs_file_content(path))
 
 
 def list_gcs_manifests(prefix: str) -> list[str]:
     """List pair artifacts under one PR or periodic job prefix."""
+    if gcs_utils.gcsweb_enabled():
+        return sorted({
+            item["name"]
+            for item in gcs_utils.list_gcsweb_objects(prefix, f"{prefix}**/{MANIFEST_NAME}")
+            if item["name"].endswith(f"/{MANIFEST_NAME}")
+        })
+
     paths: list[str] = []
     page_token = ""
     while True:
@@ -229,17 +232,25 @@ def load_gcs(
     for job in periodic_jobs:
         if "/" in job or not job.startswith("periodic-"):
             raise ValueError(f"invalid periodic job name: {job}")
-        job_paths = list_gcs_manifests(f"logs/{job}/")
-        # Prow build IDs are increasing decimal strings. Only inspect recent runs.
-        paths.update(sorted(job_paths, key=lambda path: int(source_identity(path)["build_id"]), reverse=True)[:max_periodic_builds])
+        if gcs_utils.gcsweb_enabled():
+            # Avoid traversing old builds and their large must-gather trees.
+            build_dirs, _ = gcs_utils.list_gcsweb_directory(f"logs/{job}/")
+            recent = sorted((build for build in build_dirs if build.isdigit()), key=int, reverse=True)[:max_periodic_builds]
+            for build in recent:
+                paths.update(list_gcs_manifests(f"logs/{job}/{build}/"))
+        else:
+            job_paths = list_gcs_manifests(f"logs/{job}/")
+            # Prow build IDs are increasing decimal strings. Only inspect recent runs.
+            paths.update(sorted(job_paths, key=lambda path: int(source_identity(path)["build_id"]), reverse=True)[:max_periodic_builds])
     builds = []
     for path in sorted(paths):
         build = normalize_manifest(_gcs_manifest(path), path)
         finished_path = f"{build['build_path']}/finished.json"
         try:
             finished = _gcs_manifest(finished_path)
-        except urllib.error.HTTPError as error:
-            if error.code != 404:
+        except requests.HTTPError as error:
+            status = error.response.status_code if error.response is not None else None
+            if status != 404 and "File not found in curated view" not in str(error):
                 raise
         else:
             result = str(finished.get("result", "")).lower()

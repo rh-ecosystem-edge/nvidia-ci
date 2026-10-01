@@ -85,6 +85,37 @@ class CollectTests(SampleArtifacts):
         self.assertEqual((pr["kind"], pr["pr"], pr["build_id"]), ("presubmit", "85277", "123"))
         self.assertEqual((periodic["kind"], periodic["job_name"], periodic["build_id"]), ("periodic", "periodic-ci-example", "456"))
 
+    def test_report_link_uses_public_prow_bucket(self):
+        source = next(self.fixtures.glob("logs/**/nno-pairs.json"))
+        manifest = json.loads(source.read_text())
+        manifest["run"]["prow_url"] = (
+            "https://prow.ci.openshift.org/view/gs/test-platform-results/"
+            "logs/periodic-ci-example/10002")
+        normalized = collect.normalize_manifest(
+            manifest, source.relative_to(self.fixtures).as_posix())
+        self.assertEqual(
+            normalized["run"]["prow_url"],
+            "https://prow.ci.openshift.org/view/gs/test-platform-results-public/"
+            "logs/periodic-ci-example/10002")
+
+    def test_public_bucket_uses_shared_artifact_client(self):
+        with patch.object(collect.gcs_utils, "http_get_json", return_value={"items": []}) as fetch:
+            self.assertEqual(collect._gcs_json({"prefix": "logs/periodic-ci-example/"}), {"items": []})
+        fetch.assert_called_once_with(
+            "https://storage.googleapis.com/storage/v1/b/test-platform-results-public/o",
+            params={"prefix": "logs/periodic-ci-example/"})
+
+    def test_proxy_listing_matches_only_pair_manifests(self):
+        prefix = "logs/periodic-ci-example/10002/"
+        paths = [
+            f"curated/{prefix}artifacts/nno-report/nno-pairs.json",
+            f"curated/{prefix}artifacts/nno-report/ocp.version",
+        ]
+        with patch.object(collect.gcs_utils, "_use_gcsweb", return_value=True):
+            with patch.object(collect.gcs_utils, "_gcsweb_list_all_files", return_value=paths):
+                self.assertEqual(collect.list_gcs_manifests(prefix),
+                                 [f"{prefix}artifacts/nno-report/nno-pairs.json"])
+
     def test_local_sample_has_multiple_pairs_per_build(self):
         builds = collect.load_local(self.fixtures)
         self.assertEqual(len(builds), 5)

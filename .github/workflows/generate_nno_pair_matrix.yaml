@@ -3,15 +3,8 @@ name: Generate NNO and DOCA2 pair matrices
 on:
   schedule:
     - cron: '17 6 * * *'
-  pull_request_target:
-    branches: [main]
-    types: [closed]
   workflow_dispatch:
     inputs:
-      pr_number:
-        description: 'Optional nvidia-ci or openshift/release PR number to collect (including rehearsals)'
-        required: false
-        type: string
       periodic_job:
         description: 'Periodic Prow job to poll once its NNO pair artifact is available'
         required: false
@@ -23,19 +16,15 @@ permissions:
 
 jobs:
   publish:
-    if: github.repository == 'rh-ecosystem-edge/nvidia-ci' && (github.event_name != 'pull_request_target' || github.event.pull_request.merged == true)
+    if: github.repository == 'rh-ecosystem-edge/nvidia-ci'
     runs-on: ubuntu-latest
     env:
-      PR_JOB: pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-deploy-cluster
       PERIODIC_JOB: ${{ inputs.periodic_job || 'periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-deploy-cluster' }}
-      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number || '' }}
       REPORT_HISTORY: ${{ runner.temp }}/nno-pair-report/history.json
       REPORT_OUTPUT: nno-pair-report-output
     steps:
       - name: Check out report code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.ref || github.ref_name }}
 
       - name: Check out published report history
         uses: actions/checkout@v4
@@ -48,18 +37,20 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install artifact client dependencies
+        run: python3 -m pip install -r .github/scripts/gpu_operator_dashboard/requirements.txt
+
       - name: Collect NNO pair manifests
+        env:
+          PROW_TOKEN: ${{ secrets.PROW_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          args=(--output "$REPORT_HISTORY" --presubmit-job "$PR_JOB" --periodic-job "$PERIODIC_JOB")
+          args=(--output "$REPORT_HISTORY" --periodic-job "$PERIODIC_JOB")
           if [[ -f nno-pages-baseline/nno_doca2_history.json ]]; then
             args+=(--baseline nno-pages-baseline/nno_doca2_history.json)
           fi
-          if [[ -n "$PR_NUMBER" ]]; then
-            args+=(--pr "$PR_NUMBER")
-          fi
-          python3 .github/scripts/nno_pair_report/collect.py "${args[@]}"
+          PYTHONPATH=.github/scripts python3 -m nno_pair_report.collect "${args[@]}"
 
       - name: Check whether report data exists
         id: report_data
