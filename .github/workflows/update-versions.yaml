@@ -159,6 +159,88 @@ jobs:
               }
             }
 
+      - name: Monday catch-up for weekend-skipped signed tests
+        env:
+          GH_TOKEN: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
+          CURRENT_PR: ${{ steps.create-pr.outputs.pull-request-number }}
+        run: |
+          DAY_OF_WEEK=$(date +%u)
+          if [ "${DAY_OF_WEEK}" -ne 1 ]; then
+            exit 0
+          fi
+
+          echo "Monday catch-up: looking for weekend PRs missing signed tests..."
+          CUTOFF=$(date -d '3 days ago' +%Y-%m-%d)
+          SEARCH="in:title \"[Automatic] Update versions\" created:>=${CUTOFF}"
+
+          # Collect triggers already posted on today's PR (if any) for deduplication
+          MONDAY_TRIGGERS=""
+          if [ -n "${CURRENT_PR}" ]; then
+            MONDAY_TRIGGERS=$(gh pr view "${CURRENT_PR}" --json comments --jq '.comments[].body' 2>/dev/null || true)
+          fi
+
+          for STATE in open merged; do
+            PRS=$(gh pr list --search "${SEARCH}" --state "${STATE}" --json number --jq '.[].number' 2>/dev/null || true)
+
+            for PR in ${PRS}; do
+              if [ -n "${CURRENT_PR}" ] && [ "${PR}" = "${CURRENT_PR}" ]; then
+                continue
+              fi
+
+              # Skip if signed triggers were already posted as a comment
+              if gh pr view "${PR}" --json comments --jq '.comments[].body' | grep -q -- '-signed'; then
+                echo "PR #${PR}: signed triggers already posted."
+                continue
+              fi
+
+              # Extract signed /test commands from the PR description
+              TRIGGERS=$(gh pr view "${PR}" --json body --jq '.body' | grep -oE '/test [^ ]*-signed' || true)
+              if [ -z "${TRIGGERS}" ]; then
+                continue
+              fi
+
+              # Remove triggers already covered by today's Monday PR
+              if [ -n "${MONDAY_TRIGGERS}" ]; then
+                TRIGGERS=$(echo "${TRIGGERS}" | while read -r line; do
+                  [ -z "${line}" ] && continue
+                  echo "${MONDAY_TRIGGERS}" | grep -qF "${line}" || echo "${line}"
+                done)
+              fi
+              if [ -z "${TRIGGERS}" ]; then
+                echo "PR #${PR}: all signed triggers already covered by today's PR #${CURRENT_PR}."
+                continue
+              fi
+
+              if [ "${STATE}" = "open" ]; then
+                echo "Posting signed triggers on open weekend PR #${PR}"
+                gh pr comment "${PR}" --body "${TRIGGERS}"
+              else
+                echo "Creating catch-up PR for merged weekend PR #${PR}"
+                BRANCH="update-versions/${{ github.run_id }}-${PR}-signed-monday"
+
+                # Create branch + empty commit via GitHub API (avoids touching local git state)
+                MAIN_SHA=$(gh api repos/{owner}/{repo}/git/ref/heads/main --jq '.object.sha')
+                gh api repos/{owner}/{repo}/git/refs -X POST \
+                  -f ref="refs/heads/${BRANCH}" -f sha="${MAIN_SHA}"
+                TREE_SHA=$(gh api repos/{owner}/{repo}/git/commits/"${MAIN_SHA}" --jq '.tree.sha')
+                COMMIT_SHA=$(gh api repos/{owner}/{repo}/git/commits -X POST \
+                  -f message="Signed test catch-up for weekend PR #${PR}" \
+                  -f "tree=${TREE_SHA}" -f "parents[]=${MAIN_SHA}" --jq '.sha')
+                gh api repos/{owner}/{repo}/git/refs/heads/"${BRANCH}" -X PATCH \
+                  -f sha="${COMMIT_SHA}"
+
+                PR_BODY=$(printf 'Catch-up PR for signed tests skipped on weekend PR #%s.\n\nSigned triggers:\n```\n%s\n```' "${PR}" "${TRIGGERS}")
+                CATCHUP_URL=$(gh pr create \
+                  --title "[Automatic] Update versions, run ID: ${{ github.run_id }} - #${PR} / signed_monday" \
+                  --body "${PR_BODY}" \
+                  --base main --head "${BRANCH}")
+                CATCHUP_NUMBER=$(echo "${CATCHUP_URL}" | grep -oE '[0-9]+$')
+                echo "Posting signed triggers on catch-up PR #${CATCHUP_NUMBER}"
+                gh pr comment "${CATCHUP_NUMBER}" --body "${TRIGGERS}"
+              fi
+            done
+          done
+
       - name: Notify on failure
         if: failure()
         uses: ./.github/actions/notify-failure
