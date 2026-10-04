@@ -17,8 +17,9 @@ import requests
 
 from common.utils import logger
 
-# GCS API base URL for test-platform-results-public bucket
-GCS_API_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results-public/o"
+# Public Prow artifact bucket used for fetching and report links.
+GCS_BUCKET = "test-platform-results-public"
+GCS_API_BASE_URL = f"https://storage.googleapis.com/storage/v1/b/{GCS_BUCKET}/o"
 
 # Maximum number of results per GCS API request for pagination
 GCS_MAX_RESULTS_PER_REQUEST = 1000
@@ -34,11 +35,15 @@ if _PROW_TOKEN and not _GCSWEB_API_URL.startswith("https://"):
         f"PROW_GCSWEB_API_URL must use HTTPS when PROW_TOKEN is set "
         f"(got {_GCSWEB_API_URL!r})"
     )
-_GCS_BUCKET = "test-platform-results-public"
+_GCS_BUCKET = GCS_BUCKET
 _CURATED_PREFIX = os.environ.get("PROW_CURATED_PREFIX", "curated/")
 
 # Cache for recursive directory traversals (avoids re-crawling the same prefix)
 _files_cache: Dict[str, List[str]] = {}
+
+
+class GCSFileNotFoundError(requests.HTTPError):
+    """A requested file is absent from the curated gcsweb view."""
 
 
 def _matches_gcs_glob(path: str, pattern: str) -> bool:
@@ -98,6 +103,24 @@ def list_gcsweb_directory(dir_path: str) -> Tuple[List[str], List[str]]:
 
 def _use_gcsweb() -> bool:
     return bool(_PROW_TOKEN)
+
+
+def gcsweb_enabled() -> bool:
+    """Whether artifact reads use the authenticated gcsweb proxy."""
+    return _use_gcsweb()
+
+
+def list_gcsweb_objects(prefix: str, glob_pattern: str) -> list[Dict[str, Any]]:
+    """List matching objects below one Prow prefix through the curated view."""
+    if not _use_gcsweb():
+        raise ValueError("PROW_TOKEN is required for gcsweb object listing")
+
+    paths = _gcsweb_list_all_files(f"{_CURATED_PREFIX}{prefix}")
+    return [
+        {"name": path.removeprefix(_CURATED_PREFIX)}
+        for path in paths
+        if _matches_gcs_glob(path.removeprefix(_CURATED_PREFIX), glob_pattern)
+    ]
 
 
 def _get_auth_headers() -> Dict[str, str]:
@@ -233,7 +256,7 @@ def fetch_gcs_file_content(file_path: str) -> str:
         # gcsweb returns 200 with HTML directory listing for non-existent files
         content_type = response.headers.get("Content-Type", "")
         if "text/html" in content_type and "<title>GCS browser:" in response.text[:1000]:
-            raise requests.exceptions.HTTPError(
+            raise GCSFileNotFoundError(
                 f"File not found in curated view: {file_path}",
                 response=response,
             )

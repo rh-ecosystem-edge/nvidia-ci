@@ -1,0 +1,147 @@
+name: Generate NNO and DOCA2 pair matrices
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      periodic_job:
+        description: 'Prow periodic job to collect'
+        required: false
+        default: 'periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-e2e'
+        type: string
+      publish:
+        description: 'Publish changed reports to GitHub Pages (upstream main only)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'rh-ecosystem-edge/nvidia-ci'
+    runs-on: ubuntu-latest
+    outputs:
+      has_data: ${{ steps.report_data.outputs.has_data }}
+      changed: ${{ steps.publish_diff.outputs.changed }}
+    env:
+      PERIODIC_JOB: ${{ inputs.periodic_job || 'periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-e2e' }}
+      REPORT_OUTPUT: nno-pair-report-output
+    steps:
+      - name: Check out report code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check out published report history
+        uses: actions/checkout@v4
+        with:
+          repository: rh-ecosystem-edge/nvidia-ci
+          ref: gh-pages
+          path: nno-pages-baseline
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install artifact client dependencies
+        run: python3 -m pip install -r .github/scripts/gpu_operator_dashboard/requirements.txt
+
+      - name: Collect Prow periodic results and merge history
+        shell: bash
+        env:
+          PROW_TOKEN: ${{ github.repository == 'rh-ecosystem-edge/nvidia-ci' && secrets.PROW_TOKEN || '' }}
+        run: |
+          set -euo pipefail
+          args=(--output "$RUNNER_TEMP/nno-pair-report/history.json")
+          args+=(--summary-output "$RUNNER_TEMP/nno-pair-report/collection.json")
+          args+=(--periodic-job "$PERIODIC_JOB")
+          if [[ -f nno-pages-baseline/nno_doca2_history.json ]]; then
+            args+=(--baseline nno-pages-baseline/nno_doca2_history.json)
+          fi
+          PYTHONPATH=.github/scripts python3 -m nno_pair_report.collect "${args[@]}"
+
+      - name: Summarize collected data
+        id: report_data
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=.github/scripts python3 -m nno_pair_report.workflow summarize \
+            --history "$RUNNER_TEMP/nno-pair-report/history.json" \
+            --collection "$RUNNER_TEMP/nno-pair-report/collection.json" \
+            --baseline nno-pages-baseline/nno_doca2_history.json \
+            --github-output "$GITHUB_OUTPUT" \
+            --step-summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Require NNO report artifacts
+        if: steps.report_data.outputs.has_data != 'true'
+        run: |
+          echo 'No NNO report artifacts were found in the public Prow bucket.' >&2
+          exit 1
+
+      - name: Render matrix reports and site index
+        if: steps.report_data.outputs.has_data == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/nno_pair_report/render.py \
+            --data "$RUNNER_TEMP/nno-pair-report/history.json" \
+            --output-dir "$REPORT_OUTPUT" \
+            --label 'Prow job history'
+          cp "$RUNNER_TEMP/nno-pair-report/history.json" "$REPORT_OUTPUT/nno_doca2_history.json"
+          python3 .github/scripts/nno_pair_report/update_index.py \
+            --source nno-pages-baseline/index.html \
+            --output "$REPORT_OUTPUT/index.html"
+
+      - name: Check whether published files changed
+        id: publish_diff
+        if: steps.report_data.outputs.has_data == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=.github/scripts python3 -m nno_pair_report.workflow diff \
+            --output-dir "$REPORT_OUTPUT" \
+            --baseline-dir nno-pages-baseline \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Upload report for review
+        if: steps.report_data.outputs.has_data == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nno-report-live-preview
+          path: ${{ env.REPORT_OUTPUT }}/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: report
+    if: >-
+      (github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish == true)) &&
+      github.repository == 'rh-ecosystem-edge/nvidia-ci' &&
+      github.ref == 'refs/heads/main' &&
+      needs.report.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download generated reports
+        uses: actions/download-artifact@v4
+        with:
+          name: nno-report-live-preview
+          path: nno-pair-report-output
+
+      - name: Publish NNO reports alongside existing matrices
+        uses: JamesIves/github-pages-deploy-action@fa24774553152dd7873cd16ebd8d959b010c5445 # v4
+        with:
+          branch: gh-pages
+          folder: nno-pair-report-output
+          clean: false
+          force: false
