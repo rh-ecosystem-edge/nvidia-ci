@@ -1,0 +1,95 @@
+name: Generate DPF dashboard
+
+on:
+  schedule:
+    - cron: '30 5 * * *'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to check out'
+        default: 'main'
+        required: false
+        type: string
+      gh_pages_branch:
+        description: 'GitHub pages branch to update'
+        default: 'gh-pages'
+        required: false
+        type: string
+      job_limit:
+        description: 'Number of recent job runs to fetch (use 30 for initial backfill)'
+        default: '1'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  generate-dpf-dashboard:
+    if: github.event_name != 'schedule' || github.repository == 'rh-ecosystem-edge/nvidia-ci'
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_OUTPUT_DIR: '.github/scripts/test_matrix_dashboard/output'
+    steps:
+      - name: Set dynamic env vars
+        run: |
+          echo "GH_PAGES_BRANCH=${{ github.event.inputs.gh_pages_branch || 'gh-pages' }}" >> "$GITHUB_ENV"
+          echo "JOB_LIMIT=${{ github.event.inputs.job_limit || '1' }}" >> "$GITHUB_ENV"
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || 'main' }}
+
+      - name: Checkout GitHub Pages
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.GH_PAGES_BRANCH }}
+          path: ${{ env.DASHBOARD_OUTPUT_DIR }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r .github/scripts/dpf_dashboard/requirements.txt
+
+      - name: Fetch DPF job results
+        run: |
+          PYTHONPATH=.github/scripts python -m dpf_dashboard.fetch_ci_data \
+            --output-data "${{ env.DASHBOARD_OUTPUT_DIR }}/dpf_matrix.json" \
+            --job-limit "${{ env.JOB_LIMIT }}"
+
+      - name: Generate DPF dashboard
+        run: |
+          cd "${{ env.DASHBOARD_OUTPUT_DIR }}"
+          DPF_CHANGED=false
+          if git ls-files --error-unmatch dpf_matrix.json 2>/dev/null && git diff --exit-code dpf_matrix.json; then
+            echo "DPF: no changes"
+          else
+            echo "DPF: changes detected or new file"
+            DPF_CHANGED=true
+          fi
+          cd "${{ github.workspace }}"
+          if [ "$DPF_CHANGED" = true ]; then
+            PYTHONPATH=.github/scripts python -m dpf_dashboard.generate_ci_dashboard \
+              --input-data "${{ env.DASHBOARD_OUTPUT_DIR }}/dpf_matrix.json" \
+              --output-html "${{ env.DASHBOARD_OUTPUT_DIR }}/dpf_matrix.html"
+          fi
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: ${{ env.GH_PAGES_BRANCH }}
+          folder: ${{ env.DASHBOARD_OUTPUT_DIR }}
+          clean: false
+          force: false
+
+      - name: Notify on failure
+        if: failure()
+        uses: ./.github/actions/notify-failure
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
