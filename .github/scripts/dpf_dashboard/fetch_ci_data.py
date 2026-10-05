@@ -9,6 +9,8 @@ Cloud Storage, and merges them into an accumulated results file.
 import argparse
 import json
 import os
+import sys
+import tempfile
 import urllib.parse
 from typing import Dict, Any, List, Optional
 
@@ -32,13 +34,20 @@ def load_versions_config() -> Dict[str, Any]:
 
 
 def gcs_list_dir(prefix: str) -> List[str]:
-    resp = requests.get(
-        GCS_API_BASE_URL,
-        params={"prefix": prefix, "delimiter": "/"},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json().get("prefixes", [])
+    all_prefixes: List[str] = []
+    page_token = None
+    while True:
+        params: Dict[str, Any] = {"prefix": prefix, "delimiter": "/"}
+        if page_token:
+            params["pageToken"] = page_token
+        resp = requests.get(GCS_API_BASE_URL, params=params, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        all_prefixes.extend(data.get("prefixes", []))
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
+    return all_prefixes
 
 
 def gcs_get_file(path: str) -> Optional[str]:
@@ -246,14 +255,22 @@ def main():
                 existing_data = json.load(f)
             logger.info(f"Loaded existing data from {args.output_data}")
         except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"Failed to load existing data: {e}")
+            logger.error(f"Failed to load existing data: {e}")
+            sys.exit(1)
 
     new_data = fetch_all_results(config, args.job_limit)
 
     merged = merge_results(new_data, existing_data)
 
-    with open(args.output_data, "w") as f:
-        json.dump(merged, f, indent=2)
+    out_dir = os.path.dirname(os.path.abspath(args.output_data))
+    fd, tmp_path = tempfile.mkstemp(dir=out_dir, suffix=".json")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(merged, f, indent=2)
+        os.replace(tmp_path, args.output_data)
+    except BaseException:
+        os.unlink(tmp_path)
+        raise
 
     total = sum(len(d["results"]) for d in merged.values())
     logger.info(f"Saved {total} results to {args.output_data}")

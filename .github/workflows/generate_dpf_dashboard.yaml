@@ -65,20 +65,9 @@ jobs:
 
       - name: Generate DPF dashboard
         run: |
-          cd "${{ env.DASHBOARD_OUTPUT_DIR }}"
-          DPF_CHANGED=false
-          if git ls-files --error-unmatch dpf_matrix.json 2>/dev/null && git diff --exit-code dpf_matrix.json; then
-            echo "DPF: no changes"
-          else
-            echo "DPF: changes detected or new file"
-            DPF_CHANGED=true
-          fi
-          cd "${{ github.workspace }}"
-          if [ "$DPF_CHANGED" = true ]; then
-            PYTHONPATH=.github/scripts python -m dpf_dashboard.generate_ci_dashboard \
-              --input-data "${{ env.DASHBOARD_OUTPUT_DIR }}/dpf_matrix.json" \
-              --output-html "${{ env.DASHBOARD_OUTPUT_DIR }}/dpf_matrix.html"
-          fi
+          PYTHONPATH=.github/scripts python -m dpf_dashboard.generate_ci_dashboard \
+            --input-data "${{ env.DASHBOARD_OUTPUT_DIR }}/dpf_matrix.json" \
+            --output-html "${{ env.DASHBOARD_OUTPUT_DIR }}/dpf_matrix.html"
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
