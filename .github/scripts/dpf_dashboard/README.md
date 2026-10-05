@@ -1,6 +1,6 @@
 # Red Hat OpenShift DPF CI Dashboard
 
-This module generates an HTML dashboard displaying CI test results for Red Hat OpenShift DPF (Data Processing Framework).
+This module generates an HTML dashboard displaying CI test results for Red Hat OpenShift DPF (DOCA Platform Framework).
 
 ## Overview
 
