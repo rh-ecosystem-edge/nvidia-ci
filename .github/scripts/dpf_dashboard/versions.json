@@ -1,0 +1,16 @@
+{
+  "ocp_versions": {
+    "4.22": {
+      "status": "active",
+      "jobs": [
+        {
+          "name": "periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4",
+          "branch": "main"
+        }
+      ]
+    }
+  },
+  "env_step": "dpf-hypervisor-deploy-cluster",
+  "networking_step": "dpf-hypervisor-network-tests",
+  "step_prefix": "daily-e2e-doca4"
+}
