@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Matrix: Red Hat OpenShift DPF</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-main {
+            background-color: #e0f2f1;
+            color: #00695c;
+            border: 1px solid #80cbc4;
+        }
+        .badge-release {
+            background-color: #e8eaf6;
+            color: #283593;
+            border: 1px solid #9fa8da;
+        }
+        .image-cell {
+            font-family: monospace;
+            font-size: 13px;
+            word-break: break-all;
+            max-width: 350px;
+        }
+        .image-tag {
+            color: #009688;
+            font-weight: bold;
+        }
+        td.status-success {
+            background-color: #e8f5e9;
+        }
+        td.status-failure {
+            background-color: #ffebee;
+        }
+        .run-date {
+            font-size: 12px;
+            color: #888;
+            display: block;
+        }
+    </style>
+    <script>
+    function sortTable(table, col) {
+        var rows = Array.from(table.querySelectorAll('tbody tr'));
+        var asc = table.getAttribute('data-sort-asc') !== 'true';
+        table.setAttribute('data-sort-asc', asc);
+        rows.sort(function(a, b) {
+            var A = a.cells[col].textContent.trim();
+            var B = b.cells[col].textContent.trim();
+            return asc ? A.localeCompare(B, undefined, {numeric: true}) : B.localeCompare(A, undefined, {numeric: true});
+        });
+        var tbody = table.querySelector('tbody');
+        rows.forEach(function(row) { tbody.appendChild(row); });
+    }
+    </script>
+</head>
+<body>
+
+<h1>Test Matrix: Red Hat OpenShift DPF</h1>
+<div class="toc">
+    <div class="ocp-version-header">OpenShift Versions</div>
+    <a href="#ocp-4.22">4.22</a>
+</div>
+
+<div class="ocp-version-container" id="ocp-4.22">
+    <div class="ocp-version-header">OpenShift 4.22</div>
+
+    <table>
+        <thead>
+            <tr>
+                <th onclick="sortTable(this.closest('table'), 0)" style="cursor:pointer">OpenShift &#x25B4;&#x25BE;</th>
+                <th onclick="sortTable(this.closest('table'), 1)" style="cursor:pointer">Branch &#x25B4;&#x25BE;</th>
+                <th onclick="sortTable(this.closest('table'), 2)" style="cursor:pointer">DPF Version &#x25B4;&#x25BE;</th>
+                <th onclick="sortTable(this.closest('table'), 3)" style="cursor:pointer">OVN Chart &#x25B4;&#x25BE;</th>
+                <th>BlueField OCP Image</th>
+                <th>HCP Provisioner</th>
+                <th onclick="sortTable(this.closest('table'), 6)" style="cursor:pointer">Status &#x25B4;&#x25BE;</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="version-cell">4.22.7</td>
+                <td><span class="badge badge-main">main</span></td>
+                <td class="version-cell">v26.4.1</td>
+                <td class="version-cell">v26.4-ocp-beta4-kata</td>
+                <td class="image-cell">quay.io/edge-infrastructure/bluefield-ocp:<span class="image-tag">4.22.7</span></td>
+                <td class="image-cell">quay.io/redhat-user-workloads/dpu-kit-for-nvidia-operator-tenant/dpf-hcp-provisioner-rhel10-operator:<span class="image-tag">latest</span></td>
+                <td class="status-success">
+                    <a class="success-link" href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2106905001866563584" target="_blank" rel="noopener noreferrer">SUCCESS</a>
+                    <span class="run-date">Oct 05, 2026</span>
+                </td>
+            </tr>
+        </tbody>
+    </table><div class="history-bar-outer"><div class="history-bar-inner"><span>Recent runs (main):</span>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2106905001866563584" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-success"><span class="history-square-tooltip">SUCCESS - Oct 05</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2106542590869377024" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Oct 04</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2106180182959198208" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Oct 03</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2105817783911583744" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Oct 02</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2105455337678049280" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-success"><span class="history-square-tooltip">SUCCESS - Oct 01</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2105092939016310784" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-success"><span class="history-square-tooltip">SUCCESS - Sep 30</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2104730589805416448" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-success"><span class="history-square-tooltip">SUCCESS - Sep 29</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2104368182482440192" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Sep 28</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2104005757140733952" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-success"><span class="history-square-tooltip">SUCCESS - Sep 27</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2103643339109699584" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-success"><span class="history-square-tooltip">SUCCESS - Sep 26</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2103280979308187648" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Sep 25</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2102918808657203200" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Sep 24</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2102556288041881600" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-success"><span class="history-square-tooltip">SUCCESS - Sep 23</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2102193933864931328" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Sep 22</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2101831496640761856" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Sep 21</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2101469084943126528" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Sep 20</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2101106691209695232" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Sep 19</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2100744288311709696" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Sep 18</span></div></a>
+<a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2100381869383094272" style="text-decoration:none" target="_blank" rel="noopener noreferrer"><div class="history-square history-failure"><span class="history-square-tooltip">FAILURE - Sep 17</span></div></a>
+</div></div>
+</div>
+
+  <div class="last-updated">
+    Last updated: 2026-10-05 12:07:31 UTC
+  </div>
+</body>
+</html>
+    
