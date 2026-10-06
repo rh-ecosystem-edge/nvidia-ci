@@ -12,6 +12,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiwait "k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -117,16 +118,41 @@ func InstallOperatorFromCatalog(apiClient *clients.Settings, logLevel glog.Level
 
 	glog.V(logLevel).Infof("Ensuring OperatorGroup %q exists in namespace %q", cfg.OperatorGroupName, cfg.Namespace)
 
-	ogBuilder := olm.NewOperatorGroupBuilder(apiClient, cfg.OperatorGroupName, cfg.Namespace)
-	if ogBuilder.Exists() {
-		glog.V(logLevel).Infof("OperatorGroup %q already exists", cfg.OperatorGroupName)
-	} else {
+	existingOGs, err := apiClient.OperatorGroups(cfg.Namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return result, fmt.Errorf("failed to list OperatorGroups in namespace %q: %w", cfg.Namespace, err)
+	}
+
+	var ogBuilder *olm.OperatorGroupBuilder
+
+	switch len(existingOGs.Items) {
+	case 0:
+		ogBuilder = olm.NewOperatorGroupBuilder(apiClient, cfg.OperatorGroupName, cfg.Namespace)
+
 		createdOgBuilder, err := ogBuilder.Create()
 		if err != nil {
 			return result, fmt.Errorf("failed to create OperatorGroup %q: %w", cfg.OperatorGroupName, err)
 		}
 
 		ogBuilder = createdOgBuilder
+	default:
+		existing := &existingOGs.Items[0]
+		if existing.Name != cfg.OperatorGroupName {
+			glog.V(logLevel).Infof("Reusing existing OperatorGroup %q in namespace %q (requested name was %q)",
+				existing.Name, cfg.Namespace, cfg.OperatorGroupName)
+		} else {
+			glog.V(logLevel).Infof("OperatorGroup %q already exists in namespace %q", existing.Name, cfg.Namespace)
+		}
+
+		ogBuilder, err = olm.PullOperatorGroup(apiClient, existing.Name, cfg.Namespace)
+		if err != nil {
+			return result, fmt.Errorf("failed to pull existing OperatorGroup %q: %w", existing.Name, err)
+		}
+
+		if len(existingOGs.Items) > 1 {
+			glog.Warningf("Multiple OperatorGroups found in namespace %q; OLM supports only one. "+
+				"Using %q, but manual cleanup of the extras is recommended.", cfg.Namespace, existing.Name)
+		}
 	}
 
 	result.OperatorGroupBuilder = ogBuilder

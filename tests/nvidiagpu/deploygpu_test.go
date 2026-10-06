@@ -527,13 +527,32 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					"in namespace '%s", deployBundleConfig.BundleImage, nvidiagpu.NvidiaGPUNamespace)
 			} else {
 				By("Create OperatorGroup in NVIDIA GPU Operator Namespace")
-				ogBuilder := olm.NewOperatorGroupBuilder(inittools.APIClient, nvidiagpu.OperatorGroupName, nvidiagpu.NvidiaGPUNamespace)
-				if ogBuilder.Exists() {
-					glog.V(gpuparams.GpuLogLevel).Infof("The ogBuilder that exists has name:  %v",
-						ogBuilder.Object.Name)
+
+				existingOGs, err := inittools.APIClient.OperatorGroups(nvidiagpu.NvidiaGPUNamespace).List(
+					context.TODO(), metav1.ListOptions{})
+				Expect(err).ToNot(HaveOccurred(), "error listing OperatorGroups: %v", err)
+
+				var ogBuilder *olm.OperatorGroupBuilder
+
+				if len(existingOGs.Items) > 0 {
+					existing := &existingOGs.Items[0]
+					if existing.Name != nvidiagpu.OperatorGroupName {
+						glog.V(gpuparams.GpuLogLevel).Infof(
+							"Reusing existing OperatorGroup %q (requested name was %q)",
+							existing.Name, nvidiagpu.OperatorGroupName)
+					} else {
+						glog.V(gpuparams.GpuLogLevel).Infof("The ogBuilder that exists has name:  %v",
+							existing.Name)
+					}
+
+					ogBuilder, err = olm.PullOperatorGroup(inittools.APIClient, existing.Name, nvidiagpu.NvidiaGPUNamespace)
+					Expect(err).ToNot(HaveOccurred(), "error pulling existing OperatorGroup %q: %v",
+						existing.Name, err)
 				} else {
+					ogBuilder = olm.NewOperatorGroupBuilder(inittools.APIClient,
+						nvidiagpu.OperatorGroupName, nvidiagpu.NvidiaGPUNamespace)
 					glog.V(gpuparams.GpuLogLevel).Infof("Create a new operatorgroup with name:  %v",
-						ogBuilder.Object.Name)
+						nvidiagpu.OperatorGroupName)
 
 					ogBuilderCreated, err := ogBuilder.Create()
 					Expect(err).ToNot(HaveOccurred(), "error creating operatorgroup %v :  %v ",
