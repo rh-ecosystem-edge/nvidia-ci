@@ -228,6 +228,18 @@
         "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2106905001866563584",
         "job_timestamp": "1791182801",
         "build_id": "2106905001866563584"
+      },
+      {
+        "ocp_version": "4.22.11-multi",
+        "branch": "main",
+        "dpf_version": "v26.4.1",
+        "ovn_chart_version": "v26.4-ocp-beta4-kata",
+        "bluefield_ocp_image": "quay.io/edge-infrastructure/bluefield-ocp:4.22.7",
+        "hcp_provisioner_image": "quay.io/redhat-user-workloads/dpu-kit-for-nvidia-operator-tenant/dpf-hcp-provisioner-rhel10-operator:latest",
+        "networking_status": "FAILURE",
+        "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2107267408333901824",
+        "job_timestamp": "1791265147",
+        "build_id": "2107267408333901824"
       }
     ]
   }
