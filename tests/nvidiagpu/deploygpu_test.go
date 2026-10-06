@@ -534,6 +534,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 				var ogBuilder *olm.OperatorGroupBuilder
 
+
+				ogCreatedByTest := false
+
 				if len(existingOGs.Items) > 0 {
 					existing := &existingOGs.Items[0]
 					if existing.Name != nvidiagpu.OperatorGroupName {
@@ -557,11 +560,12 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					ogBuilderCreated, err := ogBuilder.Create()
 					Expect(err).ToNot(HaveOccurred(), "error creating operatorgroup %v :  %v ",
 						ogBuilderCreated.Definition.Name, err)
+					ogCreatedByTest = true
 				}
 
 				defer func() {
 					defer GinkgoRecover()
-					if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
+					if ogCreatedByTest && cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
 						err := ogBuilder.Delete()
 						Expect(err).ToNot(HaveOccurred())
 					}
