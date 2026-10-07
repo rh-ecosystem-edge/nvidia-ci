@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NNO CI · Signed compatibility explorer</title>
+  <style>
+    :root { color-scheme: light dark; --page:light-dark(#f7f9fa,#10161b); --surface:light-dark(#fff,#192127); --ink:light-dark(#17242d,#edf3f5); --muted:light-dark(#52636e,#a8b6be); --line:light-dark(#dce4e8,#344148); --soft:light-dark(#f1f5f6,#222d33); --good:light-dark(#176a48,#78d4a7); --good-soft:light-dark(#e8f5ed,#1c392c); --bad:light-dark(#a63837,#f28f89); --bad-soft:light-dark(#faeeec,#3b2828); --warn:light-dark(#b77916,#e6b45c); --focus:light-dark(#0969da,#83b4ff); }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--page); color:var(--ink); font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    button,input,select { font:inherit; }
+    a { color:inherit; text-underline-offset:3px; }
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline:2px solid var(--focus); outline-offset:3px; }
+    [hidden] { display:none!important; }
+    .shell { max-width:1140px; margin:auto; padding:36px 24px 70px; }
+    .topbar,.brand,.hero,.section-heading,.detail-head,.footer { display:flex; align-items:center; gap:16px; }
+    .topbar { justify-content:space-between; margin-bottom:30px; }
+    .brand { gap:10px; font-size:16px; font-weight:600; letter-spacing:-.02em; }
+    .brand-mark { width:25px; height:25px; border-radius:7px; background:var(--ink); position:relative; }
+    .brand-mark::after { content:""; position:absolute; inset:7px; border:2px solid var(--surface); border-radius:3px; }
+    .topbar a,.eyebrow,.muted,.footer { color:var(--muted); }
+    .topbar a { font-size:13px; }
+    .topbar-links { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px 18px; }
+    .report { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:38px 44px 42px; }
+    .hero { align-items:flex-start; justify-content:space-between; }
+    .eyebrow { font-size:12px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; }
+    h1 { margin:8px 0 10px; font-size:clamp(26px,3vw,34px); line-height:1.15; letter-spacing:-.035em; font-weight:600; }
+    .hero p { margin:0; max-width:690px; color:var(--muted); }
+    .summary-pill { white-space:nowrap; padding:6px 10px; border-radius:999px; color:var(--bad); background:var(--bad-soft); font-size:13px; }
+    .summary-pill.good { color:var(--good); background:var(--good-soft); }
+    .ocp-nav { display:flex; align-items:center; flex-wrap:wrap; gap:9px 14px; margin-top:27px; padding-top:18px; border-top:1px solid var(--line); }
+    .ocp-nav-label { color:var(--muted); font-size:12px; }
+    .ocp-links { display:flex; flex-wrap:wrap; gap:5px; }
+    .ocp-links a { padding:5px 9px; border-radius:6px; color:var(--muted); font-size:13px; text-decoration:none; }
+    .ocp-links a:hover,.ocp-links a[aria-current="page"] { background:var(--soft); color:var(--ink); }
+    .stability { padding:15px 12px 5px; }
+    .stability-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:10px; }
+    .stability-head h4 { margin:0; font-size:13px; font-weight:500; }
+    .stability-head p,.stability-note { margin:0; color:var(--muted); font-size:12px; }
+    .stability-group + .stability-group { margin-top:14px; }
+    .stability-group-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:9px; }
+    .stability-group-head { margin-bottom:7px; color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+    .stability-strip { display:flex; flex-wrap:wrap; gap:6px; }
+    .stability-run { display:block; width:17px; height:17px; flex:none; border-radius:3px; background:var(--line); }
+    .stability-run.success { background:var(--good); }
+    .stability-run.failure { background:var(--bad); }
+    .stability-run.aborted { background:var(--warn); }
+    .stability-run:hover { outline:2px solid var(--ink); outline-offset:2px; }
+    .stability-legend { display:flex; flex-wrap:wrap; gap:6px 15px; margin-top:11px; color:var(--muted); font-size:12px; }
+    .stability-legend span { display:inline-flex; align-items:center; gap:6px; }
+    .stability-legend i { display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--line); }
+    .stability-legend .success { background:var(--good); } .stability-legend .failure { background:var(--bad); } .stability-legend .aborted { background:var(--warn); }
+    .stability-note { margin-top:7px; }
+    .stability-older { margin-top:7px; border:0; }
+    .stability-older summary { padding:5px 0; color:var(--muted); font-size:12px; }
+    .stability-older .stability-strip { padding:6px 0; }
+    section { margin-top:34px; }
+    .ocp-nav + section { margin-top:24px; }
+    .section-heading { align-items:baseline; justify-content:space-between; margin-bottom:14px; }
+    h2 { margin:0; font-size:18px; line-height:1.25; letter-spacing:-.015em; font-weight:600; }
+    .section-heading p { margin:0; color:var(--muted); font-size:13px; text-align:right; }
+    .filters { display:flex; align-items:end; flex-wrap:wrap; gap:10px 14px; margin-bottom:18px; }
+    .filters label { display:block; color:var(--muted); font-size:12px; }
+    .filters input,.filters select { display:block; min-height:38px; margin-top:4px; padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:var(--surface); color:var(--ink); font-size:13px; }
+    .filters .version-filter { flex:1 1 250px; }
+    .filters .version-filter input { width:100%; }
+    .filters select { min-width:150px; }
+    .clear-filters { min-height:38px; padding:7px 2px; border:0; background:transparent; color:var(--muted); font-size:13px; text-decoration:underline; cursor:pointer; }
+    .pair-group + .pair-group { margin-top:26px; }
+    .pair-group { scroll-margin-top:20px; }
+    .pair-group-head { display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin-bottom:8px; }
+    .pair-group-head h3 { margin:0; font-size:15px; font-weight:600; }
+    .pair-group-head p { margin:0; color:var(--muted); font-size:12px; }
+    .pair-list { border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+    .pair-columns,.pair-row { display:grid; grid-template-columns:105px 100px minmax(0,1fr) 185px; gap:14px; align-items:center; }
+    .pair-columns { padding:8px 12px; border-bottom:1px solid var(--line); color:var(--muted); font-size:12px; }
+    .pair-row { width:100%; padding:12px; border:0; border-bottom:1px solid var(--line); background:var(--surface); color:var(--ink); text-align:left; cursor:pointer; scroll-margin-top:20px; }
+    .pair-row:last-child { border-bottom:0; }
+    .pair-row:hover,.pair-row[aria-expanded="true"] { background:var(--soft); }
+    .pair-row[aria-expanded="true"] { box-shadow:inset 2px 0 var(--ink); }
+    .pair-row[data-recent-failure="true"] { box-shadow:inset 3px 0 var(--warn); }
+    .pair-row[data-status="failed"],.pair-row[data-status="failed"]:hover,.pair-row[data-status="failed"][aria-expanded="true"] { background:var(--bad-soft); box-shadow:inset 3px 0 var(--bad); }
+    .pair-row span { min-width:0; }
+    .pair-row .driver-tag { overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+    .pair-result { display:block; position:relative; }
+    .pair-row[data-key] .pair-result { padding-right:16px; }
+    .pair-row[data-key] .pair-result::after { content:"⌄"; position:absolute; right:0; top:0; color:var(--muted); }
+    .pair-row[aria-expanded="true"] .pair-result::after { content:"⌃"; }
+    .pair-result::before { content:""; display:inline-block; width:7px; height:7px; margin-right:7px; border-radius:50%; background:currentColor; vertical-align:1px; }
+    .pair-result.good,.good-text { color:var(--good); } .pair-result.bad,.bad-text { color:var(--bad); }
+    .result-main.failed-tag { display:inline-block; padding:1px 6px; margin-left:-6px; border:1px solid var(--bad); border-radius:4px; background:var(--bad-soft); }
+    .pair-result.pending { color:var(--muted); } .pair-result.pending::before { background:var(--line); }
+    .pair-result small { display:block; margin-left:14px; color:var(--muted); font-size:12px; }
+    .pair-result .failure-reason,.pair-result .recent-failure { color:var(--bad); }
+    .pair-row.no-result { cursor:default; }
+    .pair-row.no-result:hover { background:var(--surface); }
+    .group-empty,.filter-empty { margin:0; padding:17px 12px; color:var(--muted); font-size:13px; }
+    .matrix-note { margin-top:11px; color:var(--muted); font-size:12px; }
+    .detail { padding:22px 24px 26px; border-bottom:1px solid var(--line); background:var(--soft); }
+    .detail-head { align-items:flex-start; justify-content:space-between; }
+    .detail-head h2 { font-size:17px; } .detail-head p { margin:5px 0 0; font-size:13px; color:var(--muted); }
+    .detail-head #detail-driver { margin-top:9px; color:var(--ink); font-size:14px; font-weight:500; }
+    .result-label { white-space:nowrap; font-size:13px; }
+    .detail-grid { display:grid; grid-template-columns:1.2fr .8fr; gap:32px; margin-top:22px; }
+    h3 { margin:0 0 10px; font-size:14px; font-weight:500; }
+    .checks { border-top:1px solid var(--line); }
+    .check { display:flex; justify-content:space-between; gap:16px; padding:9px 0; border-bottom:1px solid var(--line); }
+    .check span:last-child { text-align:right; }
+    .measurements { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:0; }
+    .measurements dt { color:var(--muted); font-size:12px; }
+    .measurements dd { margin:4px 0 0; font-size:20px; line-height:1.2; font-variant-numeric:tabular-nums; }
+    .measurements small { display:block; margin-top:4px; color:var(--muted); font-size:12px; }
+    .disclosures { margin-top:25px; } details { border-top:1px solid var(--line); }
+    .disclosures details:last-child,.run-coverage details { border-bottom:1px solid var(--line); }
+    summary { padding:13px 0; cursor:pointer; }
+    .disclosure-body { padding:0 0 14px 20px; color:var(--muted); font-size:13px; }
+    .evidence { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 22px; margin:0; }
+    .evidence dt { color:var(--muted); font-size:12px; } .evidence dd { margin:2px 0 0; color:var(--ink); overflow-wrap:anywhere; }
+    .history { list-style:none; margin:0; padding:0; } .history li { display:flex; justify-content:space-between; gap:18px; padding:7px 0; border-bottom:1px solid var(--line); }
+    .history li:last-child { border:0; } .history small { display:block; color:var(--muted); }
+    .run-coverage { margin-top:34px; } .run-coverage p { margin:0 0 15px 20px; color:var(--muted); font-size:13px; }
+    .empty-state { padding:24px 0; color:var(--muted); }
+    .footer { justify-content:space-between; margin-top:28px; font-size:12px; }
+    @media (max-width:760px) { .report { padding:27px 24px 32px; } .detail-grid { grid-template-columns:1fr; gap:23px; } .pair-columns { display:none; } .pair-row { grid-template-columns:1fr 1fr; gap:8px 15px; } .pair-row span[data-label]::before { content:attr(data-label); display:block; margin-bottom:2px; color:var(--muted); font-size:11px; } .pair-row .driver-tag { grid-column:1 / -1; } .pair-row .pair-result { grid-column:1 / -1; } }
+    @media (max-width:760px) { .pair-row span[data-label="DOCA"]:empty { display:none; } }
+    @media (max-width:560px) { .shell { padding:16px 12px 40px; } .topbar,.hero,.section-heading,.detail-head,.footer,.stability-head,.stability-group-head { align-items:flex-start; flex-direction:column; gap:8px; } .topbar { margin-bottom:18px; } .report { padding:24px 18px 28px; } .section-heading p { text-align:left; } .evidence { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>NNO CI <span class="muted">/ DOCA2</span></span></div>
+      <div class="topbar-links"><a href="nno_doca2_signed_matrix.html">View matrix →</a><a href="nno_doca2_explorer.html">View Standard explorer →</a></div>
+    </div>
+    <article class="report">
+      <header class="hero">
+        <div><div class="eyebrow">Prow job history · Prow job history</div><h1>Signed compatibility explorer</h1><p>One row per configured NNO and DOCA/OFED driver combination, grouped by OpenShift. A combination passes when any recorded execution passed; otherwise its newest failed test is shown.</p></div>
+        <span class="summary-pill" id="failure-summary">Loading results</span>
+      </header>
+      <nav class="ocp-nav" id="ocp-nav" aria-label="OpenShift version links" hidden><span class="ocp-nav-label">OpenShift</span><div class="ocp-links" id="ocp-links"></div></nav>
+      <section aria-labelledby="matrix-heading">
+        <div class="section-heading"><h2 id="matrix-heading">NNO and signed DOCA/OFED combinations</h2><p id="filter-count" aria-live="polite">Result for each combination</p></div>
+        <div class="filters" id="filters" hidden>
+          <label class="version-filter">Find a version<input id="version-filter" type="search" placeholder="NNO, DOCA or driver version" autocomplete="off"></label>
+          <label>Result<select id="result-filter"><option value="all">All results</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="none">No result</option></select></label>
+          <button class="clear-filters" id="clear-filters" type="button" hidden>Clear filters</button>
+        </div>
+        <p class="empty-state" id="empty-state" hidden></p>
+        <p class="filter-empty" id="filter-empty" hidden>No combinations match these filters.</p>
+        <div id="matrix-region" role="group" aria-label="Combinations grouped by OpenShift version"></div>
+        <p class="matrix-note">Select a result to see its checks and Prow build below that row. The signed report currently uses precompiled OFED image selection and deployment results; RDMA and signature checks are not part of that step. DOCA is shown when the image tag identifies its release.</p>
+      </section>
+      <section class="detail" id="selection-detail" aria-labelledby="detail-heading" aria-live="polite" hidden>
+        <div class="detail-head"><div><div class="eyebrow">Combination details</div><h2 id="detail-heading"></h2><p id="detail-driver"></p><p id="detail-source"></p><p id="detail-recency" hidden></p><p id="detail-context"></p></div><span class="result-label" id="detail-status"></span></div>
+        <div class="detail-grid"><div><h3>What was validated</h3><div class="checks" id="checks"></div></div><div><h3>RDMA write results</h3><dl class="measurements"><div><dt>Standard bandwidth</dt><dd id="standard-bandwidth">—</dd></div><div><dt>Standard message rate</dt><dd id="standard-message-rate">—</dd></div><div><dt>GPUDirect bandwidth</dt><dd id="bandwidth">—</dd><small id="bandwidth-min"></small></div><div><dt>GPUDirect message rate</dt><dd id="message-rate">—</dd><small id="message-rate-min"></small></div></dl></div></div>
+        <div class="disclosures"><details><summary>Versions and image evidence</summary><div class="disclosure-body"><dl class="evidence" id="evidence"></dl></div></details><details><summary>Run history and artifacts</summary><div class="disclosure-body"><ul class="history" id="history"></ul><div id="artifacts"></div></div></details></div>
+      </section>
+      <div class="run-coverage"><details id="unreported" hidden><summary id="unreported-summary"></summary><div id="unreported-list"></div></details></div>
+      <div class="footer"><span>Source: Prow job history</span><span>Pair-level Prow artifacts</span></div>
+    </article>
+  </main>
+  <script>
+    const report = {"schema_version":1,"mode":"signed","builds":[],"scheduled_stability":[]};
+    const mode = report.mode;
+    let selectedKey = null;
+    const $ = id => document.getElementById(id);
+    const label = {nno_csv:"NNO CSV", nno_deployment:"NNO deployment", nic_cluster_policy_ready:"NIC cluster policy ready", rdma_shared_device:"Standard RDMA", rdma_gpudirect:"GPUDirect RDMA", driver_image:"DOCA/OFED image in use", shared_device_policy:"Shared-device policy", gpudirect_rdma_write:"GPUDirect RDMA write"};
+    const name = value => label[value] || value.replaceAll("_", " ").replace(/\b\w/g, char => char.toUpperCase());
+    const statusText = value => value === "passed" ? "Passed" : value === "failed" ? "Failed" : name(value);
+    const safeUrl = value => typeof value === "string" && /^https:\/\//.test(value) ? value : null;
+    const versionParts = value => (value.match(/\d+|[^\d]+/g) || []).map(part => /^\d+$/.test(part) ? Number(part) : part);
+    function compareVersions(a,b) {
+      const aa=versionParts(a), bb=versionParts(b);
+      for(let i=0;i<Math.max(aa.length,bb.length);i++) {
+        const x=aa[i]??0, y=bb[i]??0;
+        if(x===y) continue;
+        return typeof x === typeof y ? (x<y?-1:1) : String(x).localeCompare(String(y));
+      }
+      return 0;
+    }
+    function addText(parent, tag, value, className) {
+      const el=document.createElement(tag); el.textContent=value;
+      if(className) el.className=className;
+      parent.append(el); return el;
+    }
+    function addLink(parent, text, url) {
+      const safe=safeUrl(url);
+      if(!safe) return addText(parent,"span",text);
+      const a=addText(parent,"a",text); a.href=safe; a.target="_blank"; a.rel="noopener noreferrer"; return a;
+    }
+    function resultTime(entry) { return entry.pair.completed_at || entry.build.run.started_at; }
+    function displayRun(runs) { return runs.find(item=>item.pair.status==="passed") || runs[0]; }
+    function driverTagParts(tag) {
+      const match=/^doca(\d+(?:\.\d+)+)-(.+)$/.exec(tag);
+      return match ? {doca:match[1],driver:match[2]} : null;
+    }
+    function buildStatus(status) {
+      return {success:"Succeeded",failure:"Failed",aborted:"Aborted",pending:"Pending",running:"Running"}[status] || "Unknown";
+    }
+    function failedCheckSummary(pair) {
+      const failed=Object.entries(pair.checks||{}).filter(([,value])=>value==="failed").map(([key])=>name(key));
+      return failed.length ? `${failed[0]}${failed.length>1?` +${failed.length-1} more`:""}` : "";
+    }
+    function renderStability(parent, ocp) {
+      const groups=(report.scheduled_stability||[]).filter(item=>item.ocp_version===ocp && item.runs.length);
+      if(!groups.length) return;
+      const section=addText(parent,"div","","stability");
+      section.setAttribute("role","group");
+      section.setAttribute("aria-label",`Scheduled build stability for OpenShift ${ocp}`);
+      const latest=groups.flatMap(item=>item.runs).sort((a,b)=>b.started_at.localeCompare(a.started_at)||b.build_id.localeCompare(a.build_id))[0];
+      const heading=addText(section,"div","","stability-head");
+      addText(heading,"h4","Scheduled build stability");
+      addText(heading,"p",`Latest: ${buildStatus(latest.status)} · ${latest.started_at.slice(0,10)} · newest first`);
+      function addRuns(parent, runs, jobName) {
+        const strip=addText(parent,"div","","stability-strip");
+        for(const run of runs) {
+          const url=safeUrl(run.prow_url);
+          const mark=addText(strip,url?"a":"span","",`stability-run ${run.status}`);
+          const pairs=run.passed_pairs+run.failed_pairs ? `${run.passed_pairs} pairs passed, ${run.failed_pairs} failed` : "No pair result recorded";
+          const description=`${buildStatus(run.status)} · ${jobName} build ${run.build_id} · OpenShift ${run.ocp_version} · ${run.started_at} · ${pairs}`;
+          mark.title=description;
+          mark.setAttribute("aria-label",description);
+          if(url) { mark.href=url; mark.target="_blank"; mark.rel="noopener noreferrer"; }
+        }
+      }
+      for(const item of groups) {
+        const group=addText(section,"div","","stability-group");
+        if(groups.length>1) addText(group,"div",item.job_name,"stability-group-head");
+        addRuns(group,item.runs.slice(0,24),item.job_name);
+        if(item.runs.length>24) {
+          const older=addText(group,"details","","stability-older");
+          addText(older,"summary",`Show ${item.runs.length-24} older builds`);
+          addRuns(older,item.runs.slice(24),item.job_name);
+        }
+      }
+      const legend=addText(section,"div","","stability-legend");
+      legend.setAttribute("aria-label","Build status legend");
+      for(const [status,label] of [["success","Succeeded"],["failure","Failed"],["aborted","Aborted"],["","Pending or unknown"]]) {
+        const item=addText(legend,"span",label);
+        const icon=addText(item,"i","",status);
+        icon.setAttribute("aria-hidden","true");
+        item.prepend(icon);
+      }
+      addText(section,"p","One mark per scheduled build with a recorded report. Select a mark to open Prow.","stability-note");
+    }
+    function pairKey(item) { return JSON.stringify([item.build.run.ocp_version||"Unknown",item.pair.nno_requested,item.pair.driver_requested.version]); }
+    function hideDetails() {
+      selectedKey=null;
+      $("selection-detail").hidden=true;
+      document.querySelectorAll(".pair-row[data-key]").forEach(button=>button.setAttribute("aria-expanded","false"));
+    }
+    function showDetails(key, cells, reveal=false) {
+      const runs=cells.get(key); if(!runs) return;
+      const row=[...document.querySelectorAll(".pair-row[data-key]")].find(button=>button.dataset.key===key);
+      if(!row) return;
+      selectedKey=key;
+      const chosen=displayRun(runs), latest=runs[0], pair=chosen.pair, run=chosen.build.run;
+      document.querySelectorAll(".pair-row[data-key]").forEach(button => button.setAttribute("aria-expanded",String(button===row)));
+      const detail=$("selection-detail");
+      row.after(detail);
+      detail.hidden=false;
+      const tag=driverTagParts(pair.driver_requested.version);
+      const doca=pair.driver_requested.doca_version||tag?.doca;
+      $("detail-heading").textContent=doca ? `NNO ${pair.nno_requested} · DOCA ${doca} · ${mode === "signed" ? "signed " : ""}driver ${tag?.driver||pair.driver_requested.version}` : `NNO ${pair.nno_requested} · ${mode === "signed" ? "signed " : ""}driver image ${pair.driver_requested.version}`;
+      $("detail-driver").textContent=`Installed OFED: ${pair.driver_observed.ofed_version||"not recorded"}`;
+      const source=$("detail-source"); source.replaceChildren();
+      addText(source,"span","Result from ");
+      addLink(source,`${run.kind} build ${run.build_id}`,run.prow_url);
+      addText(source,"span",` · ${resultTime(chosen)} · ${runs.length} execution${runs.length===1?"":"s"}`);
+      const recency=$("detail-recency"); recency.replaceChildren();
+      recency.hidden=chosen===latest;
+      if(chosen!==latest) {
+        addText(recency,"span",`Newest attempt ${statusText(latest.pair.status).toLowerCase()}: `);
+        addLink(recency,`${latest.build.run.kind} build ${latest.build.run.build_id}`,latest.build.run.prow_url);
+        addText(recency,"span",` · ${resultTime(latest)}`);
+      }
+      $("detail-context").textContent=`OpenShift ${run.ocp_version||"unknown"} · GPU Operator ${run.gpu_operator_version||"not recorded"} · ${run.environment||"environment not recorded"}`;
+      $("detail-status").textContent=statusText(pair.status);
+      $("detail-status").className=`result-label ${pair.status==="passed"?"good-text":"bad-text"}`;
+      const checks=$("checks"); checks.replaceChildren();
+      for(const [key,value] of Object.entries(pair.checks)) {
+        const row=addText(checks,"div","","check");
+        addText(row,"span",name(key)); addText(row,"span",statusText(value),value==="passed"?"good-text":value==="failed"?"bad-text":"muted");
+      }
+      if(!Object.keys(pair.checks).length) addText(checks,"p","No structured checks recorded.","muted");
+      const m=pair.metrics;
+      $("standard-bandwidth").textContent=m.standard_bandwidth_gbps == null ? "—" : `${m.standard_bandwidth_gbps} Gb/s`;
+      $("standard-message-rate").textContent=m.standard_message_rate_mpps == null ? "—" : `${m.standard_message_rate_mpps} Mpps`;
+      $("bandwidth").textContent=m.bandwidth_gbps == null ? "—" : `${m.bandwidth_gbps} Gb/s`;
+      $("message-rate").textContent=m.message_rate_mpps == null ? "—" : `${m.message_rate_mpps} Mpps`;
+      $("bandwidth-min").textContent=m.min_bandwidth_gbps == null ? "" : `Minimum ${m.min_bandwidth_gbps} Gb/s`;
+      $("message-rate-min").textContent=m.min_message_rate_mpps == null ? "" : `Minimum ${m.min_message_rate_mpps} Mpps`;
+      const evidence=$("evidence"); evidence.replaceChildren();
+      const items=[
+        ["Requested NNO",pair.nno_requested],["Observed NNO CSV",pair.nno_observed||"Not recorded"],
+        ["Requested driver image version",pair.driver_requested.version],["Observed driver image version",pair.driver_observed.version||"Not recorded"],
+        ["Installed OFED (ofed_info -s)",pair.driver_observed.ofed_version||"Not recorded"],
+        ["Requested image",pair.driver_requested.image||"Not recorded"],["Observed image",pair.driver_observed.image||"Not recorded"],
+        ["Observed digest",pair.driver_observed.digest||"Not recorded"]
+      ];
+      for(const [key,value] of items) { const item=addText(evidence,"div",""); addText(item,"dt",key); addText(item,"dd",value); }
+      const history=$("history"); history.replaceChildren();
+      for(const item of runs) {
+        const li=addText(history,"li",""); const context=addText(li,"span","");
+        addLink(context,`${item.build.run.kind} build ${item.build.run.build_id}`,item.build.run.prow_url);
+        addText(context,"small",`${item.pair.completed_at||item.build.run.started_at} · attempt ${item.pair.id}`);
+        addText(li,"span",statusText(item.pair.status),item.pair.status==="passed"?"good-text":"bad-text");
+      }
+      const artifacts=$("artifacts"); artifacts.replaceChildren();
+      const entries=Object.entries(pair.artifacts);
+      if(entries.length) { addText(artifacts,"p","Displayed result artifacts:"); for(const [key,url] of entries) { addLink(artifacts,name(key),url); addText(artifacts,"span"," · "); } }
+      if(reveal) row.scrollIntoView({block:"start",behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+    }
+    function render() {
+      const all=report.builds.flatMap(build=>build.pairs.map(pair=>({build,pair})));
+      const ocps=[...new Set(report.builds.map(build=>build.run.ocp_version||"Unknown"))].sort(compareVersions).reverse();
+      const ocpId=ocp=>`ocp-${encodeURIComponent(ocp)}`;
+      const configured=new Map();
+      for(const item of all) {
+        const key=pairKey(item); if(!configured.has(key)) configured.set(key,[]); configured.get(key).push(item);
+      }
+      const cells=new Map();
+      for(const item of all.filter(item=>["passed","failed"].includes(item.pair.status))) {
+        const key=pairKey(item); if(!cells.has(key)) cells.set(key,[]); cells.get(key).push(item);
+      }
+      for(const runs of cells.values()) runs.sort((a,b)=>resultTime(b).localeCompare(resultTime(a)) || b.build.run.build_id.localeCompare(a.build.run.build_id));
+      const passed=[...cells.values()].filter(runs=>displayRun(runs).pair.status==="passed").length;
+      const failed=cells.size-passed;
+      $("failure-summary").textContent=failed ? `${failed} combination${failed===1?"":"s"} without a passing run` : cells.size ? "All tested combinations passed" : "No pair results yet";
+      $("failure-summary").className=`summary-pill ${failed?"":"good"}`;
+      const region=$("matrix-region"); region.replaceChildren();
+      if(!all.length) {
+        region.hidden=true; $("empty-state").hidden=false;
+        $("empty-state").textContent=mode==="signed" ? "No signed DOCA/OFED pair artifacts have been recorded yet." : "No configured NNO and DOCA/OFED pairs have been recorded yet.";
+        $("filter-count").textContent="No combinations recorded";
+      } else {
+        region.hidden=false; $("empty-state").hidden=true;
+        $("filters").hidden=false;
+        for(const ocp of ocps) {
+          const keys=[...configured.keys()].filter(key=>JSON.parse(key)[0]===ocp);
+          if(!keys.length) continue;
+          keys.sort((a,b)=>{
+            const aa=JSON.parse(a), bb=JSON.parse(b);
+            return compareVersions(bb[1],aa[1]) || compareVersions(bb[2],aa[2]);
+          });
+          const groupPassed=keys.filter(key=>cells.has(key) && displayRun(cells.get(key)).pair.status==="passed").length;
+          const groupFailed=keys.filter(key=>cells.has(key) && displayRun(cells.get(key)).pair.status==="failed").length;
+          const group=addText(region,"div","","pair-group");
+          group.id=ocpId(ocp); group.dataset.ocp=ocp;
+          group.setAttribute("role","group"); group.setAttribute("aria-label",`OpenShift ${ocp}`);
+          const heading=addText(group,"div","","pair-group-head");
+          addText(heading,"h3",`OpenShift ${ocp}`);
+          const groupSummary=[`${groupPassed} passed`,`${groupFailed} failed`];
+          if(keys.length>groupPassed+groupFailed) groupSummary.push(`${keys.length-groupPassed-groupFailed} no result`);
+          const summary=addText(heading,"p",groupSummary.join(" · "));
+          summary.dataset.original=summary.textContent;
+          const list=addText(group,"div","","pair-list");
+          const columns=addText(list,"div","","pair-columns");
+          for(const title of ["NNO","DOCA","Driver image version","Result"]) addText(columns,"span",title);
+          for(const key of keys) {
+            const [,nno,driver]=JSON.parse(key), runs=cells.get(key), tag=driverTagParts(driver), chosen=runs && displayRun(runs);
+            const doca=configured.get(key)[0].pair.driver_requested.doca_version||tag?.doca||"";
+            const recentFailure=!!runs && chosen!==runs[0] && runs[0].pair.status==="failed";
+            const row=addText(list,runs?"button":"div","",`pair-row${runs?"":" no-result"}`);
+            row.dataset.status=chosen?.pair.status||"none";
+            row.dataset.recentFailure=String(recentFailure);
+            row.dataset.search=[`openshift ${ocp}`,`nno ${nno}`,doca?`doca ${doca}`:"",`driver ${driver}`,tag?.driver||"",row.dataset.status].join(" ").toLowerCase();
+            if(runs) {
+              row.type="button"; row.dataset.key=key; row.setAttribute("aria-expanded","false"); row.setAttribute("aria-controls","selection-detail");
+              const reason=failedCheckSummary(chosen.pair.status==="failed"?chosen.pair:runs[0].pair);
+              row.setAttribute("aria-label",`OpenShift ${ocp}, NNO ${nno}, ${doca?`DOCA ${doca}, `:""}driver image ${driver}, result ${chosen.pair.status}${recentFailure?", newest attempt failed":""}${reason?`, failed check: ${reason}`:""}, ${runs.length} executions. Show details`);
+              row.addEventListener("click",()=>selectedKey===key && !$("selection-detail").hidden ? hideDetails() : showDetails(key,cells,true));
+            }
+            const nnoValue=addText(row,"span",nno); nnoValue.dataset.label="NNO";
+            const docaValue=addText(row,"span",doca); docaValue.dataset.label="DOCA";
+            const driverValue=addText(row,"span",tag?.driver||driver,"driver-tag"); driverValue.dataset.label="Driver image version"; driverValue.title=driver;
+            const status=chosen?.pair.status;
+            const result=addText(row,"span","",`pair-result ${status==="passed"?"good":status==="failed"?"bad":"pending"}`);
+            result.dataset.label="Result";
+            addText(result,"span",status?statusText(status):"No result",`result-main${status==="failed"?" failed-tag":""}`);
+            if(status==="failed") addText(result,"small",failedCheckSummary(chosen.pair)||"Failed check not recorded","failure-reason");
+            if(recentFailure) addText(result,"small",`Newest failed${failedCheckSummary(runs[0].pair)?`: ${failedCheckSummary(runs[0].pair)}`:""}`,"recent-failure");
+            if(runs) addText(result,"small",`${runs.length} run${runs.length===1?"":"s"}`);
+          }
+          renderStability(group,ocp);
+          addText(group,"p","No combinations match these filters for this OpenShift version.","group-empty").hidden=true;
+        }
+      }
+      $("selection-detail").hidden=true;
+      const initial=[...cells.keys()].find(key=>displayRun(cells.get(key)).pair.status==="failed") || cells.keys().next().value;
+      if(initial) showDetails(initial,cells);
+      if(all.length) {
+        const links=$("ocp-links"); links.replaceChildren(); $("ocp-nav").hidden=false;
+        const navLinks=[];
+        let selectedOcp="all";
+        function selectOcp(ocp) {
+          selectedOcp=ocp;
+          for(const link of navLinks) link.setAttribute("aria-current",link.dataset.ocp===ocp?"page":"false");
+          applyFilters();
+        }
+        const allLink=addText(links,"a","All versions"); allLink.href="#matrix-heading"; allLink.dataset.ocp="all"; navLinks.push(allLink);
+        allLink.addEventListener("click",()=>selectOcp("all"));
+        for(const ocp of ocps.filter(value=>document.getElementById(ocpId(value)))) {
+          const link=addText(links,"a",ocp); link.href=`#${ocpId(ocp)}`; link.dataset.ocp=ocp; navLinks.push(link);
+          link.addEventListener("click",()=>selectOcp(ocp));
+        }
+        function applyFilters() {
+          const query=$("version-filter").value.trim().toLowerCase();
+          const status=$("result-filter").value;
+          let visible=0, total=0;
+          for(const group of region.querySelectorAll(".pair-group")) {
+            const inOcp=selectedOcp==="all" || group.dataset.ocp===selectedOcp;
+            let groupVisible=0, groupTotal=0;
+            for(const row of group.querySelectorAll(".pair-row")) {
+              const matches=inOcp && (status==="all" || row.dataset.status===status) && (!query || row.dataset.search.includes(query));
+              row.hidden=!matches; groupTotal++; total++;
+              if(matches) { groupVisible++; visible++; }
+            }
+            group.hidden=!inOcp || (groupVisible===0 && selectedOcp==="all");
+            group.querySelector(".group-empty").hidden=groupVisible>0 || !inOcp;
+            group.querySelector(".pair-group-head p").textContent=query || status!=="all" ? `${groupVisible} of ${groupTotal} combinations` : group.querySelector(".pair-group-head p").dataset.original;
+          }
+          $("filter-count").textContent=`Showing ${visible} of ${total} combinations`;
+          $("filter-empty").hidden=visible>0 || selectedOcp!=="all";
+          $("clear-filters").hidden=selectedOcp==="all" && !query && status==="all";
+          const selected=[...region.querySelectorAll(".pair-row[data-key]")].find(row=>row.dataset.key===selectedKey && !row.hidden && !row.closest(".pair-group").hidden);
+          if(!selected) {
+            const next=[...region.querySelectorAll(".pair-row[data-key]")].find(row=>!row.hidden && !row.closest(".pair-group").hidden);
+            if(next) showDetails(next.dataset.key,cells);
+            else hideDetails();
+          }
+        }
+        $("version-filter").addEventListener("input",applyFilters);
+        $("result-filter").addEventListener("change",applyFilters);
+        $("clear-filters").addEventListener("click",()=>{
+          $("version-filter").value=""; $("result-filter").value="all"; selectOcp("all");
+          if(location.hash) location.hash="matrix-heading";
+        });
+        const ocpFromHash=()=>ocps.find(ocp=>location.hash===`#${ocpId(ocp)}`)||"all";
+        window.addEventListener("hashchange",()=>selectOcp(ocpFromHash()));
+        selectOcp(ocpFromHash());
+      }
+      const unreported=report.builds.filter(build=>!build.pairs.some(pair=>["passed","failed"].includes(pair.status)));
+      $("unreported").hidden=!unreported.length;
+      $("unreported-summary").textContent=`Builds without pair results · ${unreported.length}`;
+      const list=$("unreported-list"); list.replaceChildren();
+      for(const build of unreported) {
+        const p=addText(list,"p",""); addLink(p,`${build.run.kind} build ${build.run.build_id}`,build.run.prow_url);
+        addText(p,"span",` · ${build.run.status} · ${build.pairs.length} configured pair${build.pairs.length===1?"":"s"}`);
+      }
+    }
+    render();
+  </script>
+</body>
+</html>
