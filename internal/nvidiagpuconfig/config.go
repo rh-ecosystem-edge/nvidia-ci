@@ -27,7 +27,11 @@ func NewNvidiaGPUConfig() *NvidiaGPUConfig {
 	log.Info("Creating new NvidiaGPUConfig")
 
 	cfg := &NvidiaGPUConfig{}
-	if err := envconfig.Process("nvidiagpu_", cfg); err != nil {
+	// The struct tags contain the complete public environment variable names.
+	// Passing a prefix here would produce names such as
+	// NVIDIAGPU__NVIDIAGPU_USE_PRECOMPILED_DRIVER, causing the documented
+	// NVIDIAGPU_* variables to be ignored.
+	if err := envconfig.Process("", cfg); err != nil {
 		glog.V(100).Infof("Failed to instantiate NvidiaGPUConfig: %v", err)
 		return nil
 	}
