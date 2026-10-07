@@ -5,12 +5,17 @@
       "jobs": [
         {
           "name": "periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4",
-          "branch": "main"
+          "branch": "main",
+          "step_prefix": "daily-e2e-doca4"
+        },
+        {
+          "name": "periodic-ci-rh-ecosystem-edge-openshift-dpf-release-4.22-biweekly-e2e-doca8",
+          "branch": "release-4.22",
+          "step_prefix": "biweekly-e2e-doca8"
         }
       ]
     }
   },
   "env_step": "dpf-hypervisor-deploy-cluster",
-  "networking_step": "dpf-hypervisor-network-tests",
-  "step_prefix": "daily-e2e-doca4"
+  "networking_step": "dpf-hypervisor-network-tests"
 }

@@ -101,10 +101,10 @@ def build_hcp_provisioner_image(env: Dict[str, str]) -> str:
 
 
 def fetch_build_result(
-    job_name: str, build_id: str, config: Dict[str, Any]
+    job_name: str, build_id: str, config: Dict[str, Any],
+    step_prefix: str,
 ) -> Optional[Dict[str, Any]]:
     base_path = f"logs/{job_name}/{build_id}"
-    step_prefix = config["step_prefix"]
     env_step = config["env_step"]
     networking_step = config["networking_step"]
 
@@ -184,6 +184,7 @@ def fetch_all_results(
 
         for job in ocp_config.get("jobs", []):
             job_name = job["name"]
+            step_prefix = job["step_prefix"]
             logger.info(f"Fetching last {job_limit} runs for {job_name}")
 
             runs = get_job_runs(job_name, job_limit)
@@ -191,7 +192,7 @@ def fetch_all_results(
 
             for run in runs:
                 result = fetch_build_result(
-                    job_name, run["build_id"], config
+                    job_name, run["build_id"], config, step_prefix,
                 )
                 if not result:
                     continue
