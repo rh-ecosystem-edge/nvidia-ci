@@ -78,11 +78,15 @@ var (
 	TsMonAfterPod     int   // minimum number of pods running before monitoring starts
 	MaxTsSlices       int   // max time-slice replicas per GPU (device plugin)
 	LimitForTsSlices  int   // limit for total number of time-slices to be launched by the testcase
+	BurnTimeParam     int
 )
 
 const (
-	defaultMigInstances     int = -1 // parameter not provided
-	defaultSingleMigProfile int = -2 // parameter not provided
+	defaultMigInstances     int = -1  // parameter not provided
+	defaultSingleMigProfile int = -2  // parameter not provided
+	defaultBurnTime         int = 60  // seconds
+	minBurnTime             int = 30  // seconds
+	maxBurnTime             int = 300 // seconds
 )
 
 const (
@@ -105,6 +109,8 @@ func init() {
 	flag.IntVar(&MaxTsSlices, "time.slicing.max-running-slices", DefaultMaxTsSlices, "max time-slice replicas per GPU (device plugin)")
 	flag.IntVar(&LimitForTsSlices, "time.slicing.limit", DefaultLimitForTsSlices, "max total time-slice count launched by the testcase")
 	flag.BoolVar(&NoColor, "no-color", false, "disable color output")
+	flag.IntVar(&BurnTimeParam, "nvidia-ci.burntime", defaultBurnTime,
+		fmt.Sprintf("gpu_burn workload duration in seconds (%d-%d, default %d)", minBurnTime, maxBurnTime, defaultBurnTime))
 }
 
 const (
