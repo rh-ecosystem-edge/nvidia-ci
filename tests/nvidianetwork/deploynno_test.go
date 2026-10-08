@@ -217,7 +217,17 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					"NVIDIANETWORK_OFED_REPOSITORY value '%s'", ofedDriverRepository)
 			}
 
-			if nvidiaNetworkConfig.UsePrecompiledOFED {
+			if nvidiaNetworkConfig.OfedDriverPullSpec != "" {
+				if !nvidiaNetworkConfig.UsePrecompiledOFED {
+					Fail("NVIDIANETWORK_OFED_DRIVER_PULLSPEC requires NVIDIANETWORK_USE_PRECOMPILED_OFED=true")
+				}
+				if nvidiaNetworkConfig.OfedDriverVersion != "" || nvidiaNetworkConfig.OfedDriverRepository != "" {
+					Fail("NVIDIANETWORK_OFED_DRIVER_PULLSPEC cannot be combined with NVIDIANETWORK_OFED_DRIVER_VERSION or NVIDIANETWORK_OFED_REPOSITORY")
+				}
+				glog.V(networkparams.LogLevel).Infof(
+					"Using explicit precompiled DOCA/OFED request %s; catalog selection is bypassed",
+					nvidiaNetworkConfig.OfedDriverPullSpec)
+			} else if nvidiaNetworkConfig.UsePrecompiledOFED {
 				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_USE_PRECOMPILED_OFED" +
 					" is true, will select a kernel-matched precompiled DOCA/OFED image when OFED env vars are unset")
 			}
@@ -575,10 +585,16 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 		})
 
 		It("Deploy NVIDIA Network Operator with DTK", Label("deploy"), func() {
+			var selectedPrecompiledOFED *nvidianetwork.OFEDImage
 			nnoStepChecks["nno_deployment"] = nnoReportStatusRunning
 			nnoStepChecks["nic_cluster_policy_ready"] = nnoReportStatusNotRun
 			if nvidiaNetworkConfig.UsePrecompiledOFED {
 				nnoStepChecks["precompiled_selection"] = nnoReportStatusNotRun
+			}
+			if nvidiaNetworkConfig.OfedDriverPullSpec != "" {
+				nnoStepChecks["requested_driver_tag"] = nnoReportStatusNotRun
+				nnoStepChecks["requested_driver_policy"] = nnoReportStatusNotRun
+				nnoStepChecks["requested_driver_running"] = nnoReportStatusNotRun
 			}
 
 			nfdcheck.CheckNfdInstallation(inittools.APIClient, nfd.OSLabel, nfd.GetAllowedOSLabels(),
@@ -599,15 +615,20 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			if nvidiaNetworkConfig.UsePrecompiledOFED &&
-				ofedDriverVersion == UndefinedValue && ofedDriverRepository == UndefinedValue {
-				By("Select precompiled DOCA/OFED driver image from staging catalog")
-				selected, err := selectPrecompiledOFEDDriver()
-				Expect(err).ToNot(HaveOccurred(),
-					"precompiled DOCA/OFED catalog lookup failed")
+				(nvidiaNetworkConfig.OfedDriverPullSpec != "" ||
+					ofedDriverVersion == UndefinedValue && ofedDriverRepository == UndefinedValue) {
+				if nvidiaNetworkConfig.OfedDriverPullSpec != "" {
+					By("Resolve the explicit precompiled DOCA/OFED driver request")
+				} else {
+					By("Select precompiled DOCA/OFED driver image from staging catalog")
+				}
+				selected, err := selectPrecompiledOFEDDriver(nvidiaNetworkConfig.OfedDriverPullSpec)
+				Expect(err).ToNot(HaveOccurred(), "precompiled DOCA/OFED image resolution failed")
 				if selected == nil {
 					precompiledOFEDSkipped = true
 					Skip(precompiledOFEDSkipReason)
 				}
+				selectedPrecompiledOFED = selected
 				By(fmt.Sprintf("Using precompiled DOCA/OFED image %s", selected.PullSpec()))
 			}
 
@@ -989,6 +1010,21 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					"error copying scoped staging pull-secret into %s: %v", nnoNamespace, err)
 				nicClusterPolicyBuilder.Definition.Spec.OFEDDriver.ImagePullSecrets =
 					[]string{nvidianetwork.StagingPullSecretName}
+				if nvidiaNetworkConfig.OfedDriverPullSpec != "" {
+					nnoStepChecks["requested_driver_tag"] = nnoReportStatusRunning
+					nnoStepChecks["requested_driver_policy"] = nnoReportStatusRunning
+					By("Confirm the exact requested tag is visible with cluster staging credentials")
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+					err = nvidianetwork.CheckPrecompiledOFEDTag(ctx,
+						nvidianetwork.NewStagingCatalogClient(inittools.APIClient), selectedPrecompiledOFED)
+					cancel()
+					if err != nil {
+						nnoStepChecks["requested_driver_tag"] = nnoReportStatusFailed
+						Expect(err).ToNot(HaveOccurred(), "requested staging image preflight failed")
+						return
+					}
+					nnoStepChecks["requested_driver_tag"] = nnoReportStatusPassed
+				}
 			}
 
 			By("Add extra env variables to the ofedDriver in NicClusterPolicy only for amd64 clusters")
@@ -1178,6 +1214,16 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			nnoStepOFEDRepo = readyOFED.Repository
 			nnoStepOFEDImage = readyOFED.Image
 			nnoStepOFEDImageID = observedOFEDImageID(readyOFED.Image, precompiledSelectionPullSpec)
+			if nvidiaNetworkConfig.OfedDriverPullSpec != "" {
+				By("Verify the requested precompiled driver is configured and running")
+				err = verifyExplicitPrecompiledOFEDDriver(selectedPrecompiledOFED)
+				if err != nil {
+					nnoStepChecks["requested_driver_policy"] = nnoReportStatusFailed
+					nnoStepChecks["requested_driver_running"] = nnoReportStatusFailed
+					Expect(err).ToNot(HaveOccurred(), "requested DOCA/OFED driver verification failed")
+					return
+				}
+			}
 
 			ncpReadyJSON, err := json.MarshalIndent(pulledReadyNicClusterPolicy, "", " ")
 
@@ -1369,6 +1415,19 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 		It("Run RDMA connectivity test with ib_write_bw", Label("rdma-shared-dev"), func() {
 			nnoStepChecks["rdma_shared_device"] = nnoReportStatusRunning
+			if nvidiaNetworkConfig.OfedDriverPullSpec != "" {
+				nnoStepChecks["precompiled_selection"] = nnoReportStatusRunning
+				By("Verify the requested driver remained active after GPU Operator installation")
+				selected, err := selectPrecompiledOFEDDriver(nvidiaNetworkConfig.OfedDriverPullSpec)
+				Expect(err).ToNot(HaveOccurred(), "requested DOCA/OFED image no longer matches this cluster")
+				Expect(selected).ToNot(BeNil(), "requested DOCA/OFED image was not resolved")
+				err = verifyExplicitPrecompiledOFEDDriver(selected)
+				if err != nil {
+					nnoStepChecks["requested_driver_running"] = nnoReportStatusFailed
+					Expect(err).ToNot(HaveOccurred(), "requested DOCA/OFED driver is not running for GPUDirect")
+					return
+				}
+			}
 
 			var (
 				rdmaServerPodNamePrefix = "rdma-shared-dev-server-ci"
@@ -1664,7 +1723,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 	})
 })
 
-func selectPrecompiledOFEDDriver() (selected *nvidianetwork.OFEDImage, selectionErr error) {
+func selectPrecompiledOFEDDriver(requestedPullSpec string) (selected *nvidianetwork.OFEDImage, selectionErr error) {
 	precompiledSelectionOutcome = "selection_error"
 	precompiledSelectionError = ""
 	nnoStepChecks["precompiled_selection"] = nnoReportStatusRunning
@@ -1695,6 +1754,14 @@ func selectPrecompiledOFEDDriver() (selected *nvidianetwork.OFEDImage, selection
 	}
 
 	node := workerNodes[0].Object
+	if requestedPullSpec != "" {
+		for _, worker := range workerNodes {
+			if worker.Object.Name == rdmaClientHostname {
+				node = worker.Object
+				break
+			}
+		}
+	}
 	kernelVersion := node.Status.NodeInfo.KernelVersion
 	architecture := node.Status.NodeInfo.Architecture
 	precompiledSelectionKernel = kernelVersion
@@ -1716,14 +1783,33 @@ func selectPrecompiledOFEDDriver() (selected *nvidianetwork.OFEDImage, selection
 		return nil, fmt.Errorf("OpenShift version is empty; cannot match precompiled OFED rhcos tags")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	selected, err = nvidianetwork.SelectPrecompiledOFED(
-		ctx, nvidianetwork.NewStagingCatalogClient(inittools.APIClient),
-		kernelVersion, ocpVersion, architecture, "", "")
+	if requestedPullSpec != "" {
+		for _, workerName := range []string{rdmaClientHostname, rdmaServerHostname} {
+			found := false
+			for _, worker := range workerNodes {
+				if worker.Object.Name != workerName {
+					continue
+				}
+				found = true
+				selected, err = nvidianetwork.ParseExplicitPrecompiledOFEDPullSpec(requestedPullSpec,
+					worker.Object.Status.NodeInfo.KernelVersion, ocpVersion, worker.Object.Status.NodeInfo.Architecture)
+				if err != nil {
+					return nil, fmt.Errorf("requested driver does not match RDMA worker %s: %w", workerName, err)
+				}
+			}
+			if !found {
+				return nil, fmt.Errorf("RDMA worker %s is not a Mellanox worker", workerName)
+			}
+		}
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		selected, err = nvidianetwork.SelectPrecompiledOFED(
+			ctx, nvidianetwork.NewStagingCatalogClient(inittools.APIClient),
+			kernelVersion, ocpVersion, architecture, "", "")
+	}
 	if err != nil {
-		return nil, fmt.Errorf("precompiled OFED catalog lookup failed for kernel %s: %w", kernelVersion, err)
+		return nil, fmt.Errorf("precompiled OFED image resolution failed for kernel %s: %w", kernelVersion, err)
 	}
 	if selected == nil {
 		precompiledSelectionOutcome = "no_match"
