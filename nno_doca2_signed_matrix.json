@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "pairs": [
+    {
+      "id": "ocp-4.22.17-doca-26.07-amd64",
+      "status": "planned",
+      "openshift_version": "4.22.17-multi",
+      "driver_requested": {
+        "image": "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-5.14.0-687.53.1.el9_8.x86_64-rhcos4.22-amd64",
+        "kernel": "5.14.0-687.53.1.el9_8.x86_64",
+        "architecture": "amd64"
+      }
+    }
+  ]
+}
