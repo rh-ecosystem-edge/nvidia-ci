@@ -4,31 +4,16 @@
 import argparse
 import json
 import os
-import re
 import sys
 from pathlib import Path
+
+from signed_images import architecture_re, digest_re, image_re, pair_id_re, tag_re, version_re
 
 
 def fail(message):
     print("signed DOCA2 request error: " + message, file=sys.stderr)
     raise SystemExit(1)
 
-
-version_re = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9][A-Za-z0-9._-]*)?$")
-image_re = re.compile(
-    r"^registry\.stage\.redhat\.io/nvidia/"
-    r"(?P<image>doca-driver-rhel9|doca-driver-rhel10):(?P<tag>[A-Za-z0-9][A-Za-z0-9._-]*)$"
-)
-tag_re = re.compile(
-    r"^(?P<version>[A-Za-z0-9][A-Za-z0-9._-]*)-"
-    r"(?P<kernel>[0-9]+\.[0-9]+\.[0-9]+-[A-Za-z0-9._+-]*\.el[0-9]+_[0-9]+\."
-    r"(?:x86_64|aarch64(?:_64k)?|ppc64le|s390x))-"
-    r"rhcos(?P<rhcos>[0-9]+\.[0-9]+)-"
-    r"(?P<architecture>amd64|arm64|ppc64le|s390x)$"
-)
-pair_id_re = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-architecture_re = re.compile(r"^(?:amd64|arm64|ppc64le|s390x)$")
-digest_re = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 def main():
     parser = argparse.ArgumentParser(description="Validate and publish one manual NNO DOCA2 signed request")
