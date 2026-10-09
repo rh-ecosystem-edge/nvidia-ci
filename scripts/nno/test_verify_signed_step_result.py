@@ -16,7 +16,7 @@ STEP = "network-operator-e2e-signed-gpudirect"
 WORKERS = ["rdma-client", "rdma-server"]
 DIGEST = "sha256:" + "a" * 64
 REPORT = {
-    "step": STEP, "attempt": "this-invocation", "status": "passed", "ocp_version": "4.22.0",
+    "step": STEP, "attempt": "this-invocation", "status": "passed", "ocp_version": "4.22.15",
     "checks": dict.fromkeys(["requested_driver_policy", "requested_driver_running", "rdma_gpudirect"], "passed"),
     "precompiled_selection": {"pull_spec": IMAGE, "kernel_version": KERNEL, "architecture": "amd64"},
     "configured_ofed_driver": {"image_id": IMAGE.split(":")[0] + "@" + DIGEST},

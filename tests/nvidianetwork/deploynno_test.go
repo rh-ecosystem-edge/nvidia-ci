@@ -1766,8 +1766,6 @@ func selectPrecompiledOFEDDriver(requestedPullSpec string) (selected *nvidianetw
 	architecture := node.Status.NodeInfo.Architecture
 	precompiledSelectionKernel = kernelVersion
 	precompiledSelectionArchitecture = architecture
-	glog.V(networkparams.LogLevel).Infof("Worker node kernel version: %s architecture: %s",
-		kernelVersion, architecture)
 	if kernelVersion == "" {
 		return nil, fmt.Errorf("worker node %s has an empty kernel version", node.Name)
 	}
@@ -1779,43 +1777,71 @@ func selectPrecompiledOFEDDriver(requestedPullSpec string) (selected *nvidianetw
 	if err != nil {
 		return nil, fmt.Errorf("failed to read OpenShift version for precompiled OFED matching: %w", err)
 	}
-	if ocpVersion == "" {
-		return nil, fmt.Errorf("OpenShift version is empty; cannot match precompiled OFED rhcos tags")
-	}
 
+	osTag := ""
 	if requestedPullSpec != "" {
+		firstWorkerName := ""
 		for _, workerName := range []string{rdmaClientHostname, rdmaServerHostname} {
-			found := false
+			var workerNode *corev1.Node
 			for _, worker := range workerNodes {
-				if worker.Object.Name != workerName {
-					continue
-				}
-				found = true
-				selected, err = nvidianetwork.ParseExplicitPrecompiledOFEDPullSpec(requestedPullSpec,
-					worker.Object.Status.NodeInfo.KernelVersion, ocpVersion, worker.Object.Status.NodeInfo.Architecture)
-				if err != nil {
-					return nil, fmt.Errorf("requested driver does not match RDMA worker %s: %w", workerName, err)
+				if worker.Object.Name == workerName {
+					workerNode = worker.Object
+					break
 				}
 			}
-			if !found {
+			if workerNode == nil {
 				return nil, fmt.Errorf("RDMA worker %s is not a Mellanox worker", workerName)
 			}
+
+			workerOSTag, err := nvidianetwork.NodeOSTag(workerNode.Labels, ocpVersion)
+			if err != nil {
+				return nil, fmt.Errorf("failed to determine OS tag for RDMA worker %s: %w", workerName, err)
+			}
+			if firstWorkerName != "" && workerOSTag != osTag {
+				return nil, fmt.Errorf("RDMA workers %s and %s have different OS tags %q and %q",
+					firstWorkerName, workerName, osTag, workerOSTag)
+			}
+
+			workerImage, err := nvidianetwork.ParseExplicitPrecompiledOFEDPullSpec(requestedPullSpec,
+				workerNode.Status.NodeInfo.KernelVersion, workerOSTag, workerNode.Status.NodeInfo.Architecture)
+			if err != nil {
+				return nil, fmt.Errorf("requested driver does not match RDMA worker %s OS tag %s: %w",
+					workerName, workerOSTag, err)
+			}
+			if selected == nil {
+				selected = workerImage
+				osTag = workerOSTag
+				firstWorkerName = workerName
+				continue
+			}
+			if selected.PullSpec() != workerImage.PullSpec() || selected.Version != workerImage.Version {
+				return nil, fmt.Errorf("requested driver resolves to different images on RDMA workers %s and %s: %q and %q",
+					firstWorkerName, workerName, selected.PullSpec(), workerImage.PullSpec())
+			}
 		}
+		glog.V(networkparams.LogLevel).Infof("RDMA workers use the same precompiled driver OS tag %s", osTag)
 	} else {
+		osTag, err = nvidianetwork.NodeOSTag(node.Labels, ocpVersion)
+		if err != nil {
+			return nil, fmt.Errorf("failed to determine OS tag for worker %s: %w", node.Name, err)
+		}
+		glog.V(networkparams.LogLevel).Infof("Worker node kernel version: %s architecture: %s OS tag: %s",
+			kernelVersion, architecture, osTag)
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		selected, err = nvidianetwork.SelectPrecompiledOFED(
 			ctx, nvidianetwork.NewStagingCatalogClient(inittools.APIClient),
-			kernelVersion, ocpVersion, architecture, "", "")
+			kernelVersion, osTag, architecture, "", "")
 	}
 	if err != nil {
-		return nil, fmt.Errorf("precompiled OFED image resolution failed for kernel %s: %w", kernelVersion, err)
+		return nil, fmt.Errorf("precompiled OFED image resolution failed for kernel %s and OS tag %s: %w",
+			kernelVersion, osTag, err)
 	}
 	if selected == nil {
 		precompiledSelectionOutcome = "no_match"
 		precompiledOFEDSkipReason = fmt.Sprintf(
-			"no precompiled DOCA/OFED image in staging for kernel %s / OCP %s; skipping precompiled run",
-			kernelVersion, ocpVersion)
+			"no precompiled DOCA/OFED image in staging for kernel %s / OS tag %s; skipping precompiled run",
+			kernelVersion, osTag)
 
 		return nil, nil
 	}

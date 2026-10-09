@@ -11,14 +11,14 @@ import unittest
 
 
 SCRIPT = Path(__file__).with_name("validate-signed-request.py")
-KERNEL = "5.14.0-570.76.1.el9_6.x86_64"
-IMAGE = f"registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-{KERNEL}-rhcos4.22-amd64"
+KERNEL = "5.14.0-687.48.1.el9_8.x86_64"
+IMAGE = f"registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-{KERNEL}-rhel9.8-amd64"
 REQUEST = {
     "schema_version": 1,
     "pairs": [{
-        "id": "ocp-4.22.0-doca-26.07-amd64",
+        "id": "ocp-4.22.15-doca-26.07-amd64",
         "status": "planned",
-        "openshift_version": "4.22.0",
+        "openshift_version": "4.22.15",
         "driver_requested": {"image": IMAGE, "kernel": KERNEL, "architecture": "amd64"},
     }],
 }
@@ -43,10 +43,10 @@ class RequestTests(unittest.TestCase):
             root = Path(directory)
             request = copy.deepcopy(REQUEST)
             request["pairs"].append({"id": "old", "status": "passed"})
-            request["pairs"][0]["openshift_version"] = " 4.22.0 "
+            request["pairs"][0]["openshift_version"] = " 4.22.15 "
             result = self.invoke(root, request)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual((root / "shared/dpf-openshift-version").read_text(), "4.22.0\n")
+            self.assertEqual((root / "shared/dpf-openshift-version").read_text(), "4.22.15\n")
             self.assertEqual((root / "shared/ofed-pullspec").read_text(), IMAGE + "\n")
             normalized = (root / "shared/nno-doca2-signed-request.json").read_text()
             self.assertEqual(normalized, (root / "artifacts/nno-doca2-signed-request.json").read_text())
@@ -66,6 +66,15 @@ class RequestTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             normalized = json.loads((root / "shared/nno-doca2-signed-request.json").read_text())
             self.assertEqual(normalized["pairs"][0]["driver_requested"]["digest"], "sha256:" + "a" * 64)
+
+    def test_legacy_rhcos_tag(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            request = copy.deepcopy(REQUEST)
+            request["pairs"][0]["openshift_version"] = "4.16.0"
+            request["pairs"][0]["driver_requested"]["image"] = IMAGE.replace("rhel9.8", "rhcos4.16")
+            result = self.invoke(root, request)
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_invalid_inputs_write_nothing(self):
         cases = {"missing": None, "not-object": [], "no-schema": {"pairs": REQUEST["pairs"]}}
@@ -91,7 +100,7 @@ class RequestTests(unittest.TestCase):
             ("missing-image", "image", None), ("incomplete-image", "image", "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07"),
             ("production-image", "image", IMAGE.replace("registry.stage.", "registry.")),
             ("digest-only", "image", IMAGE.split(":")[0] + "@sha256:" + "a" * 64),
-            ("ocp-mismatch", "image", IMAGE.replace("rhcos4.22", "rhcos4.21")),
+            ("bad-os-tag", "image", IMAGE.replace("rhel9.8", "bad/os")),
             ("kernel-mismatch", "kernel", "wrong"), ("kernel-type", "kernel", 123),
             ("arch-mismatch", "architecture", "arm64"), ("arch-invalid", "architecture", "x86_64"),
             ("digest-invalid", "digest", "sha256:short"),

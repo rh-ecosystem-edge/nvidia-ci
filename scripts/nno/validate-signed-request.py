@@ -23,7 +23,7 @@ tag_re = re.compile(
     r"^(?P<version>[A-Za-z0-9][A-Za-z0-9._-]*)-"
     r"(?P<kernel>[0-9]+\.[0-9]+\.[0-9]+-[A-Za-z0-9._+-]*\.el[0-9]+_[0-9]+\."
     r"(?:x86_64|aarch64(?:_64k)?|ppc64le|s390x))-"
-    r"rhcos(?P<rhcos>[0-9]+\.[0-9]+)-"
+    r"(?P<os_tag>[A-Za-z0-9][A-Za-z0-9._-]*)-"
     r"(?P<architecture>amd64|arm64|ppc64le|s390x)$"
 )
 pair_id_re = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -67,8 +67,6 @@ def main():
     version = version.strip()
     if version_re.fullmatch(version) is None:
         fail("openshift_version %r is not an exact z-stream version (expected major.minor.patch with an optional installer suffix)" % version)
-    ocp_minor = ".".join(version.split(".")[:2])
-
     driver = pair.get("driver_requested")
     if not isinstance(driver, dict):
         fail("the planned pair must have driver_requested as an object")
@@ -81,11 +79,7 @@ def main():
         fail("driver_requested.image must be a tagged registry.stage.redhat.io/nvidia/doca-driver-rhel9 or doca-driver-rhel10 pull specification")
     tag_match = tag_re.fullmatch(image_match.group("tag"))
     if tag_match is None:
-        fail("driver_requested.image tag is incomplete; it must include the OFED version, kernel, RHCOS minor and architecture")
-    if tag_match.group("rhcos") != ocp_minor:
-        fail("requested image targets RHCOS %s but openshift_version %s targets RHCOS %s" % (
-            tag_match.group("rhcos"), version, ocp_minor
-        ))
+        fail("driver_requested.image tag is incomplete; it must include the OFED version, kernel, NFD os_release-based OS tag and architecture")
 
     expected_kernel = driver.get("kernel", "")
     if expected_kernel is not None and not isinstance(expected_kernel, str):
