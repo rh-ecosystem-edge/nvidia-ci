@@ -3,6 +3,7 @@ package nvidianetwork
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -13,13 +14,19 @@ func TestParseExplicitPrecompiledOFEDPullSpec(t *testing.T) {
 
 	const (
 		kernel       = "5.14.0-570.76.1.el9_6.x86_64"
-		cluster      = "4.22.0"
 		architecture = "amd64"
 		pullSpec     = "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-" +
-			"5.14.0-570.76.1.el9_6.x86_64-rhcos4.22-amd64"
+			"5.14.0-570.76.1.el9_6.x86_64-rhel9.8-amd64"
 	)
 
-	got, err := ParseExplicitPrecompiledOFEDPullSpec(pullSpec, kernel, cluster, architecture)
+	osTag, err := NodeOSTag(map[string]string{
+		nodeOSReleaseIDLabel:        "rhel",
+		nodeOSReleaseVersionIDLabel: "9.8",
+	}, "4.22.15")
+	if err != nil {
+		t.Fatalf("NodeOSTag() error = %v", err)
+	}
+	got, err := ParseExplicitPrecompiledOFEDPullSpec(pullSpec, kernel, osTag, architecture)
 	if err != nil {
 		t.Fatalf("ParseExplicitPrecompiledOFEDPullSpec() error = %v", err)
 	}
@@ -40,30 +47,77 @@ func TestParseExplicitPrecompiledOFEDPullSpec(t *testing.T) {
 func TestParseExplicitPrecompiledOFEDPullSpecRejectsMismatch(t *testing.T) {
 	t.Parallel()
 
-	const pullSpec = "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-" +
-		"5.14.0-570.76.1.el9_6.x86_64-rhcos4.22-amd64"
+	const (
+		kernel       = "5.14.0-570.76.1.el9_6.x86_64"
+		osTag        = "rhel9.8"
+		architecture = "amd64"
+		pullSpec     = "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-" +
+			"5.14.0-570.76.1.el9_6.x86_64-rhel9.8-amd64"
+	)
 	tests := []struct {
-		name, pullSpec, kernel, cluster, architecture string
+		name, pullSpec, kernel, osTag, architecture string
 	}{
-		{name: "empty image", kernel: "5.14.0-570.76.1.el9_6.x86_64", cluster: "4.22.0", architecture: "amd64"},
-		{name: "wrong registry", pullSpec: "registry.example.com/nvidia/doca-driver-rhel9:tag", kernel: "5.14.0-570.76.1.el9_6.x86_64", cluster: "4.22.0", architecture: "amd64"},
-		{name: "missing registry host", pullSpec: "nvidia/doca-driver-rhel9:" + testTag2607Rhcos, kernel: testKernelX86, cluster: testCluster422, architecture: testArchAMD64},
-		{name: "missing registry host rhel10", pullSpec: "nvidia/doca-driver-rhel10:" + testTag2607Rhcos, kernel: testKernelX86, cluster: testCluster422, architecture: testArchAMD64},
-		{name: "wrong kernel", pullSpec: pullSpec, kernel: "5.14.0-570.76.2.el9_6.x86_64", cluster: "4.22.0", architecture: "amd64"},
-		{name: "wrong OCP minor", pullSpec: pullSpec, kernel: "5.14.0-570.76.1.el9_6.x86_64", cluster: "4.23.0", architecture: "amd64"},
-		{name: "wrong architecture", pullSpec: pullSpec, kernel: "5.14.0-570.76.1.el9_6.x86_64", cluster: "4.22.0", architecture: "arm64"},
-		{name: "digest-only reference", pullSpec: "registry.stage.redhat.io/nvidia/doca-driver-rhel9@sha256:deadbeef", kernel: "5.14.0-570.76.1.el9_6.x86_64", cluster: "4.22.0", architecture: "amd64"},
+		{name: "empty image", kernel: kernel, osTag: osTag, architecture: architecture},
+		{name: "wrong registry", pullSpec: "registry.example.com/nvidia/doca-driver-rhel9:tag", kernel: kernel, osTag: osTag, architecture: architecture},
+		{name: "missing registry host", pullSpec: "nvidia/doca-driver-rhel9:" + testTag2607Rhcos, kernel: testKernelX86, osTag: osTag, architecture: architecture},
+		{name: "missing registry host rhel10", pullSpec: "nvidia/doca-driver-rhel10:" + testTag2607Rhcos, kernel: testKernelX86, osTag: osTag, architecture: architecture},
+		{name: "wrong kernel", pullSpec: pullSpec, kernel: "5.14.0-570.76.2.el9_6.x86_64", osTag: osTag, architecture: architecture},
+		{name: "wrong OS tag", pullSpec: pullSpec, kernel: kernel, osTag: "rhel9.7", architecture: architecture},
+		{name: "wrong architecture", pullSpec: pullSpec, kernel: kernel, osTag: osTag, architecture: "arm64"},
+		{name: "legacy OCP-derived suffix", pullSpec: strings.Replace(pullSpec, "rhel9.8", "rhcos4.22", 1), kernel: kernel, osTag: osTag, architecture: architecture},
+		{name: "empty OS tag", pullSpec: pullSpec, kernel: kernel, architecture: architecture},
+		{name: "digest-only reference", pullSpec: "registry.stage.redhat.io/nvidia/doca-driver-rhel9@sha256:deadbeef", kernel: kernel, osTag: osTag, architecture: architecture},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := ParseExplicitPrecompiledOFEDPullSpec(
-				test.pullSpec, test.kernel, test.cluster, test.architecture,
-			); err == nil {
+			_, err := ParseExplicitPrecompiledOFEDPullSpec(
+				test.pullSpec, test.kernel, test.osTag, test.architecture,
+			)
+			if err == nil {
 				t.Fatal("ParseExplicitPrecompiledOFEDPullSpec() error = nil, want mismatch error")
 			}
+			if test.name == "legacy OCP-derived suffix" &&
+				!strings.Contains(err.Error(), "-5.14.0-570.76.1.el9_6.x86_64-rhel9.8-amd64") {
+				t.Errorf("error = %q, want expected worker kernel/OS/architecture suffix", err)
+			}
 		})
+	}
+}
+
+func TestParseExplicitPrecompiledOFEDPullSpecAcceptsLegacyOSTag(t *testing.T) {
+	t.Parallel()
+
+	pullSpec := "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-" +
+		"5.14.0-687.48.1.el9_8.x86_64-rhcos4.16-amd64"
+	osTag, err := NodeOSTag(map[string]string{
+		nodeOSReleaseIDLabel:        "rhcos",
+		nodeOSReleaseVersionIDLabel: "4.16",
+	}, "4.22.15")
+	if err != nil {
+		t.Fatalf("NodeOSTag() error = %v", err)
+	}
+	if _, err := ParseExplicitPrecompiledOFEDPullSpec(
+		pullSpec, "5.14.0-687.48.1.el9_8.x86_64", osTag, "amd64",
+	); err != nil {
+		t.Fatalf("ParseExplicitPrecompiledOFEDPullSpec() error = %v", err)
+	}
+}
+
+func TestParseExplicitPrecompiledOFEDPullSpecUsesFallbackOSTag(t *testing.T) {
+	t.Parallel()
+
+	osTag, err := NodeOSTag(nil, "4.22.15")
+	if err != nil {
+		t.Fatalf("NodeOSTag() error = %v", err)
+	}
+	pullSpec := "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-" +
+		"5.14.0-687.48.1.el9_8.x86_64-rhcos4.22-amd64"
+	if _, err := ParseExplicitPrecompiledOFEDPullSpec(
+		pullSpec, "5.14.0-687.48.1.el9_8.x86_64", osTag, "amd64",
+	); err != nil {
+		t.Fatalf("ParseExplicitPrecompiledOFEDPullSpec() error = %v", err)
 	}
 }
 

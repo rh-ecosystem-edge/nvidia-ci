@@ -7,22 +7,26 @@ import (
 )
 
 const (
-	testKernelX86    = "5.14.0-570.76.1.el9_6.x86_64"
-	testKernelArm    = "5.14.0-570.76.1.el9_6.aarch64"
-	testKernelLabel  = "5.14.0-570.76.1.el9_6"
-	testArchAMD64    = "amd64"
-	testArchARM64    = "arm64"
-	testCluster422   = "4.22.0"
-	testOfed2510     = "25.10-OFED.25.10.2.4.1"
-	testOfed2601     = "26.01-OFED.26.01.1.0.0.0"
-	testOfed2604     = "26.04-0.9.0.0"
-	testOfed2607     = "26.07-0.7.7.0"
-	testTag2601Rhcos = "26.01-OFED.26.01.1.0.0.0-5.14.0-570.76.1.el9_6.x86_64-rhcos4.22-amd64"
-	testTag2604Rhcos = "26.04-0.9.0.0-5.14.0-570.76.1.el9_6.x86_64-rhcos4.22-amd64"
-	testTag2607Rhcos = "26.07-0.7.7.0-5.14.0-570.76.1.el9_6.x86_64-rhcos4.22-amd64"
-	testTag2601Rhel  = "26.01-OFED.26.01.1.0.0.0-5.14.0-570.76.1.el9_6.x86_64-rhel9.6"
-	testTagArm       = "26.01-OFED.26.01.1.0.0.0-5.14.0-570.76.1.el9_6.aarch64-rhcos4.22-arm64"
-	testTagArm64k    = "26.01-OFED.26.01.1.0.0.0-5.14.0-570.76.1.el9_6.aarch64_64k-rhcos4.22-arm64"
+	testKernelX86         = "5.14.0-570.76.1.el9_6.x86_64"
+	testKernelArm         = "5.14.0-570.76.1.el9_6.aarch64"
+	testKernelLabel       = "5.14.0-570.76.1.el9_6"
+	testArchAMD64         = "amd64"
+	testArchARM64         = "arm64"
+	testCluster422        = "4.22.0"
+	testOSTagRHCOS422     = "rhcos4.22"
+	testOSTagRHEL98       = "rhel9.8"
+	testKernelRHEL98      = "5.14.0-687.48.1.el9_8.x86_64"
+	testKernelLabelRHEL98 = "5.14.0-687.48.1.el9_8"
+	testOfed2510          = "25.10-OFED.25.10.2.4.1"
+	testOfed2601          = "26.01-OFED.26.01.1.0.0.0"
+	testOfed2604          = "26.04-0.9.0.0"
+	testOfed2607          = "26.07-0.7.7.0"
+	testTag2601Rhcos      = "26.01-OFED.26.01.1.0.0.0-5.14.0-570.76.1.el9_6.x86_64-rhcos4.22-amd64"
+	testTag2604Rhcos      = "26.04-0.9.0.0-5.14.0-570.76.1.el9_6.x86_64-rhcos4.22-amd64"
+	testTag2607Rhcos      = "26.07-0.7.7.0-5.14.0-570.76.1.el9_6.x86_64-rhcos4.22-amd64"
+	testTag2601Rhel       = "26.01-OFED.26.01.1.0.0.0-5.14.0-570.76.1.el9_6.x86_64-rhel9.6-amd64"
+	testTagArm            = "26.01-OFED.26.01.1.0.0.0-5.14.0-570.76.1.el9_6.aarch64-rhcos4.22-arm64"
+	testTagArm64k         = "26.01-OFED.26.01.1.0.0.0-5.14.0-570.76.1.el9_6.aarch64_64k-rhcos4.22-arm64"
 )
 
 type fakeCatalog struct {
@@ -69,7 +73,7 @@ func TestSelectPrecompiledOFEDMatch(t *testing.T) {
 	}
 
 	got, err := SelectPrecompiledOFED(
-		context.Background(), catalog, testKernelX86, testCluster422, testArchAMD64, "", "")
+		context.Background(), catalog, testKernelX86, testOSTagRHCOS422, testArchAMD64, "", "")
 	if err != nil {
 		t.Fatalf("SelectPrecompiledOFED returned error: %v", err)
 	}
@@ -97,6 +101,60 @@ func TestSelectPrecompiledOFEDMatch(t *testing.T) {
 	}
 }
 
+func TestSelectPrecompiledOFEDUsesRHEL98TagFromNodeLabels(t *testing.T) {
+	t.Parallel()
+
+	const rhelTag = "26.07-0.7.7.0-" + testKernelRHEL98 + "-" + testOSTagRHEL98 + "-amd64"
+	const rhcosTag = "26.07-0.7.7.0-5.14.0-687.48.1.el9_8.x86_64-rhcos4.22-amd64"
+	osTag, err := NodeOSTag(map[string]string{
+		nodeOSReleaseIDLabel:        "rhel",
+		nodeOSReleaseVersionIDLabel: "9.8",
+	}, testCluster422)
+	if err != nil {
+		t.Fatalf("NodeOSTag() error = %v", err)
+	}
+
+	catalog := &fakeCatalog{byRepo: map[string][]CatalogImage{
+		precompiledOFEDRHEL9Repo: catalogImagesFromTags(precompiledOFEDRHEL9Repo, []string{rhcosTag, rhelTag}),
+	}}
+	selected, err := SelectPrecompiledOFED(
+		context.Background(), catalog, testKernelRHEL98, osTag, testArchAMD64, "", "")
+	if err != nil {
+		t.Fatalf("SelectPrecompiledOFED() error = %v", err)
+	}
+	if selected == nil || selected.Tag != rhelTag {
+		t.Fatalf("selected tag = %v, want %q", selected, rhelTag)
+	}
+}
+
+func TestSelectPrecompiledOFEDUsesFallbackOSTag(t *testing.T) {
+	t.Parallel()
+
+	const tag = "26.07-0.7.7.0-" + testKernelRHEL98 + "-rhcos4.22-amd64"
+	osTag, err := NodeOSTag(nil, testCluster422)
+	if err != nil {
+		t.Fatalf("NodeOSTag() error = %v", err)
+	}
+	catalog := &fakeCatalog{byRepo: map[string][]CatalogImage{
+		precompiledOFEDRHEL9Repo: {{
+			Repository: precompiledOFEDRHEL9Repo,
+			Labels: map[string]string{
+				kernelVersionLabel: testKernelLabelRHEL98,
+				ofedVersionLabel:   testOfed2607,
+			},
+			Tags: []string{tag},
+		}},
+	}}
+	selected, err := SelectPrecompiledOFED(
+		context.Background(), catalog, testKernelRHEL98, osTag, testArchAMD64, "", "")
+	if err != nil {
+		t.Fatalf("SelectPrecompiledOFED() error = %v", err)
+	}
+	if selected == nil || selected.Tag != tag {
+		t.Fatalf("selected tag = %v, want %q", selected, tag)
+	}
+}
+
 func TestSelectPrecompiledOFEDNoMatch(t *testing.T) {
 	t.Parallel()
 
@@ -119,7 +177,7 @@ func TestSelectPrecompiledOFEDNoMatch(t *testing.T) {
 	}
 
 	got, err := SelectPrecompiledOFED(
-		context.Background(), catalog, testKernelX86, testCluster422, testArchAMD64, "", "")
+		context.Background(), catalog, testKernelX86, testOSTagRHCOS422, testArchAMD64, "", "")
 	if err != nil {
 		t.Fatalf("SelectPrecompiledOFED returned error: %v", err)
 	}
@@ -151,12 +209,12 @@ func TestSelectPrecompiledOFEDIgnoresFallbackTags(t *testing.T) {
 	}
 
 	got, err := SelectPrecompiledOFED(
-		context.Background(), catalog, testKernelX86, testCluster422, testArchAMD64, "", "")
+		context.Background(), catalog, testKernelX86, testOSTagRHCOS422, testArchAMD64, "", "")
 	if err != nil {
 		t.Fatalf("SelectPrecompiledOFED returned error: %v", err)
 	}
 	if got != nil {
-		t.Fatalf("expected no match without rhcos4.22-amd64 tag, got %+v", got)
+		t.Fatalf("expected no match without the requested OS tag and architecture, got %+v", got)
 	}
 }
 
@@ -189,7 +247,7 @@ func TestSelectPrecompiledOFEDAarch64DoesNotMatch64k(t *testing.T) {
 	}
 
 	got, err := SelectPrecompiledOFED(
-		context.Background(), catalog, testKernelArm, testCluster422, testArchARM64, "", "")
+		context.Background(), catalog, testKernelArm, testOSTagRHCOS422, testArchARM64, "", "")
 	if err != nil {
 		t.Fatalf("SelectPrecompiledOFED returned error: %v", err)
 	}
@@ -230,7 +288,7 @@ func TestSelectPrecompiledOFEDHighestOfedVersion(t *testing.T) {
 	}
 
 	got, err := SelectPrecompiledOFED(
-		context.Background(), catalog, testKernelX86, testCluster422, testArchAMD64, "", "")
+		context.Background(), catalog, testKernelX86, testOSTagRHCOS422, testArchAMD64, "", "")
 	if err != nil {
 		t.Fatalf("SelectPrecompiledOFED returned error: %v", err)
 	}
@@ -273,12 +331,12 @@ func TestSelectPrecompiledOFEDPrefersMatchingOlderStream(t *testing.T) {
 	}
 
 	got, err := SelectPrecompiledOFED(
-		context.Background(), catalog, testKernelX86, testCluster422, testArchAMD64, "", "")
+		context.Background(), catalog, testKernelX86, testOSTagRHCOS422, testArchAMD64, "", "")
 	if err != nil {
 		t.Fatalf("SelectPrecompiledOFED returned error: %v", err)
 	}
 	if got == nil {
-		t.Fatal("expected the older stream that has a rhcos4.22-amd64 tag")
+		t.Fatal("expected the older stream that has the requested OS tag and architecture")
 	}
 	if got.Version != testOfed2604 {
 		t.Errorf("version = %q, want %q", got.Version, testOfed2604)
@@ -305,8 +363,9 @@ func TestParsePrecompiledTag(t *testing.T) {
 		t.Errorf("parsePrecompiledTag(%q) = %q, %q, %v", testTag2601Rhcos, ofed, kernel, ok)
 	}
 
-	if _, _, ok = parsePrecompiledTag(testTag2601Rhel); ok {
-		t.Fatal("rhel tags should not parse as precompiled rhcos tags")
+	ofed, kernel, ok = parsePrecompiledTag(testTag2601Rhel)
+	if !ok || ofed != testOfed2601 || kernel != testKernelX86 {
+		t.Errorf("parsePrecompiledTag(%q) = %q, %q, %v", testTag2601Rhel, ofed, kernel, ok)
 	}
 }
 
@@ -321,7 +380,7 @@ func TestCatalogImagesFromTagsSelectsStrictMatch(t *testing.T) {
 	got, err := SelectPrecompiledOFED(
 		context.Background(), &fakeCatalog{byRepo: map[string][]CatalogImage{
 			precompiledOFEDRHEL9Repo: images,
-		}}, testKernelX86, testCluster422, testArchAMD64, "", "")
+		}}, testKernelX86, testOSTagRHCOS422, testArchAMD64, "", "")
 	if err != nil {
 		t.Fatalf("SelectPrecompiledOFED returned error: %v", err)
 	}
@@ -360,7 +419,7 @@ func TestSelectPrecompiledOFEDExplicitEnvSkipsCatalog(t *testing.T) {
 	catalog := &fakeCatalog{byRepo: map[string][]CatalogImage{}}
 
 	got, err := SelectPrecompiledOFED(
-		context.Background(), catalog, testKernelX86, testCluster422, testArchAMD64, "25.01-0.6.0.0-0", "")
+		context.Background(), catalog, testKernelX86, testOSTagRHCOS422, testArchAMD64, "25.01-0.6.0.0-0", "")
 	if err != nil {
 		t.Fatalf("SelectPrecompiledOFED returned error: %v", err)
 	}
@@ -372,7 +431,7 @@ func TestSelectPrecompiledOFEDExplicitEnvSkipsCatalog(t *testing.T) {
 	}
 
 	got, err = SelectPrecompiledOFED(
-		context.Background(), catalog, testKernelX86, testCluster422, testArchAMD64, "",
+		context.Background(), catalog, testKernelX86, testOSTagRHCOS422, testArchAMD64, "",
 		"registry.stage.redhat.io/nvidia")
 	if err != nil {
 		t.Fatalf("SelectPrecompiledOFED returned error: %v", err)
@@ -391,7 +450,7 @@ func TestSelectPrecompiledOFEDCatalogError(t *testing.T) {
 	catalog := errCatalog{err: errors.New("catalog unavailable")}
 
 	got, err := SelectPrecompiledOFED(
-		context.Background(), catalog, testKernelX86, testCluster422, testArchAMD64, "", "")
+		context.Background(), catalog, testKernelX86, testOSTagRHCOS422, testArchAMD64, "", "")
 	if err == nil {
 		t.Fatal("expected catalog error")
 	}
@@ -400,13 +459,13 @@ func TestSelectPrecompiledOFEDCatalogError(t *testing.T) {
 	}
 }
 
-func TestSelectPrecompiledOFEDInvalidClusterVersion(t *testing.T) {
+func TestSelectPrecompiledOFEDInvalidOSTag(t *testing.T) {
 	t.Parallel()
 
 	got, err := SelectPrecompiledOFED(
 		context.Background(), &fakeCatalog{}, testKernelX86, "", testArchAMD64, "", "")
 	if err == nil {
-		t.Fatal("expected error for empty OpenShift version")
+		t.Fatal("expected error for empty node OS tag")
 	}
 	if got != nil {
 		t.Fatalf("expected nil image, got %+v", got)

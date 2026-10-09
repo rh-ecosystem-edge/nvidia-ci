@@ -9,9 +9,10 @@ The pair requires an `id`, exact `openshift_version` z-stream (including an
 installer suffix when needed), and `driver_requested.image` containing the
 complete tagged `registry.stage.redhat.io/nvidia/doca-driver-rhel9` or
 `doca-driver-rhel10` pullspec. Its tag must encode the DOCA base version, worker
-kernel, RHCOS minor and architecture. Optional `kernel` and `architecture`
-assertions must agree with the tag. Optional `digest` is the platform image
-digest observed on the workers, not a multi-architecture OCI index digest.
+kernel, the NFD `os_release.ID` and `VERSION_ID` OS tag, and architecture.
+Optional `kernel` and `architecture` assertions must agree with the tag. Optional
+`digest` is the platform image digest observed on the workers, not a
+multi-architecture OCI index digest.
 
 For the final OCP comparison, installer architecture suffixes such as `-x86_64`
 or `-multi` are removed. The exact patch and release prerelease identifiers such

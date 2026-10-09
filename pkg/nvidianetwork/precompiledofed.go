@@ -17,8 +17,6 @@ const (
 
 	kernelVersionLabel = "kernel_version"
 	ofedVersionLabel   = "ofed_version"
-
-	rhcosTagPrefix = "-rhcos"
 )
 
 var (
@@ -69,15 +67,15 @@ func (o *OFEDImage) PullSpec() string {
 }
 
 // SelectPrecompiledOFED finds a staging-registry DOCA/OFED driver image whose
-// tag matches kernelVersion, the cluster RHCOS minor, and architecture. If
-// ofedVersion or ofedRepository is already set, it returns (nil, nil) and does
-// not query the registry. No strict tag match also returns (nil, nil). Registry
-// fetch errors and an unusable cluster version or architecture are returned to
-// the caller.
+// tag matches kernelVersion, the worker's NFD os_release-based OS tag, and
+// architecture. If ofedVersion or ofedRepository is already set, it returns
+// (nil, nil) and does not query the registry. No strict tag match also returns
+// (nil, nil). Registry fetch errors and an unusable OS tag or architecture are
+// returned to the caller.
 func SelectPrecompiledOFED(
 	ctx context.Context,
 	client CatalogClient,
-	kernelVersion, clusterVersion, architecture, ofedVersion, ofedRepository string,
+	kernelVersion, osTag, architecture, ofedVersion, ofedRepository string,
 ) (*OFEDImage, error) {
 	if ofedVersion != "" || ofedRepository != "" {
 		glog.V(100).Infof("Skipping precompiled OFED catalog lookup because "+
@@ -93,9 +91,9 @@ func SelectPrecompiledOFED(
 		return nil, nil
 	}
 
-	minor := clusterMinor(clusterVersion)
-	if minor == "" {
-		return nil, fmt.Errorf("invalid OpenShift version %q for precompiled OFED tag matching", clusterVersion)
+	osTag = strings.TrimSpace(osTag)
+	if osTag == "" {
+		return nil, fmt.Errorf("empty node OS tag for precompiled OFED tag matching")
 	}
 	if architecture == "" {
 		return nil, fmt.Errorf("empty node architecture for precompiled OFED tag matching")
@@ -117,10 +115,10 @@ func SelectPrecompiledOFED(
 			continue
 		}
 
-		tag := chooseDriverTag(img.Tags, kernelVersion, minor, architecture)
+		tag := chooseDriverTag(img.Tags, kernelVersion, osTag, architecture)
 		if tag == "" {
-			glog.V(100).Infof("Skipping precompiled OFED image without rhcos%s-%s tag for kernel %s",
-				minor, architecture, kernelVersion)
+			glog.V(100).Infof("Skipping precompiled OFED image without %s-%s tag for kernel %s",
+				osTag, architecture, kernelVersion)
 
 			continue
 		}
@@ -207,9 +205,9 @@ func imageMatchesKernel(img *CatalogImage, kernelVersion, kernelLabel string) bo
 	return false
 }
 
-func chooseDriverTag(tags []string, kernelVersion, clusterMinorVersion, architecture string) string {
+func chooseDriverTag(tags []string, kernelVersion, osTag, architecture string) string {
 	needle := "-" + kernelVersion + "-"
-	suffix := rhcosTagPrefix + clusterMinorVersion + "-" + architecture
+	suffix := "-" + osTag + "-" + architecture
 
 	for _, tag := range tags {
 		if strings.Contains(tag, needle) && strings.HasSuffix(tag, suffix) {

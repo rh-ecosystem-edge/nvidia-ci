@@ -386,23 +386,19 @@ func catalogImagesFromTags(repository string, tags []string) []CatalogImage {
 }
 
 func parsePrecompiledTag(tag string) (ofed, kernel string, ok bool) {
-	rhcosIdx := strings.Index(tag, rhcosTagPrefix)
-	if rhcosIdx <= 0 {
-		return "", "", false
-	}
-
-	left := tag[:rhcosIdx]
-	matches := kernelInTagRegexp.FindAllString(left, -1)
+	matches := kernelInTagRegexp.FindAllString(tag, -1)
 	if len(matches) == 0 {
 		return "", "", false
 	}
 
 	kernel = matches[len(matches)-1]
-	if !strings.HasSuffix(left, kernel) {
+	needle := "-" + kernel + "-"
+	kernelIdx := strings.LastIndex(tag, needle)
+	if kernelIdx <= 0 || kernelIdx+len(needle) >= len(tag) {
 		return "", "", false
 	}
 
-	ofed = strings.TrimSuffix(left, "-"+kernel)
+	ofed = tag[:kernelIdx]
 	if ofed == "" {
 		return "", "", false
 	}
