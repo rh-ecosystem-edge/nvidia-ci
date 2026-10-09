@@ -45,5 +45,6 @@ export NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE=default
 export NVIDIANETWORK_RDMA_GPUDIRECT="${gpudirect}"
 export NNO_STEP_NAME="network-operator-e2e-signed-${1}"
 export NNO_STEP_ATTEMPT="${BUILD_ID:-local}-$(date +%s)-$$"
+python3 scripts/nno/verify-signed-step-result.py --preflight
 make run-tests
 python3 scripts/nno/verify-signed-step-result.py

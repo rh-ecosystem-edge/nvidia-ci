@@ -110,12 +110,44 @@ class SignedInvocationTests(unittest.TestCase):
 
     @unittest.skipUnless(os.environ.get("DOCA2_RELEASE_DIR"), "set DOCA2_RELEASE_DIR to check release callers")
     def test_release_signed_callers(self):
-        registry = Path(os.environ["DOCA2_RELEASE_DIR"]) / "ci-operator/step-registry/nno/doca2"
+        registry = Path(os.environ["DOCA2_RELEASE_DIR"]) / "ci-operator/step-registry/nno"
         for directory in ["install-signed-driver", "test-gpudirect"]:
-            script = registry / directory / f"nno-doca2-{directory}-commands.sh"
+            script = registry / directory / f"nno-{directory}-commands.sh"
             result = subprocess.run(["bash", str(script)], cwd=REPO, env=self.env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_required_discovery_missing_or_no_work_fails_before_make(self):
+        self.env["NNO_DISCOVERY_REQUIRED"] = "true"
+        self.assertNotEqual(self.invoke("deploy").returncode, 0)
+        self.assertFalse(self.capture.exists())
+        (self.root / "shared/nno-discovery-result.json").write_text(json.dumps(
+            {"outcome": "no_work", "selected": None}))
+        self.assertNotEqual(self.invoke("gpudirect").returncode, 0)
+        self.assertFalse(self.capture.exists())
+
+    def test_automatic_stages_check_tag_and_worker_mapping(self):
+        self.env.update(NNO_DISCOVERY_REQUIRED="true", NNO_REGISTRY_AUTH_FILE="auth", MOCK_OC_DIGEST="sha256:" + "a" * 64)
+        oc = self.root / "bin/oc"
+        oc.write_text(f'#!{sys.executable}\n' +
+                      'import json, os\nprint(json.dumps({"digest": os.environ["MOCK_OC_DIGEST"], '
+                      '"config": {"architecture": "amd64", "os": "linux", "created": "2026-10-09T00:00:00Z"}}))\n')
+        oc.chmod(0o755)
+        selected = dict(REQUEST["pairs"][0]["driver_requested"], manifest_digest=self.env["MOCK_OC_DIGEST"],
+                        config_digest="sha256:" + "b" * 64, release={"installer_version": "4.22.0"})
+        path = self.root / "shared/nno-discovery-result.json"
+        path.write_text(json.dumps(dict(outcome="selected", job_name="local", build_id="local", selected=selected)))
+        for stage in ["deploy", "gpudirect"]:
+            result = self.invoke(stage)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.capture.unlink()
+        self.env["MOCK_OC_DIGEST"] = "sha256:" + "c" * 64
+        self.assertNotEqual(self.invoke("deploy").returncode, 0)
+        self.assertFalse(self.capture.exists())
+        selected["manifest_digest"] = self.env["MOCK_OC_DIGEST"]
+        path.write_text(json.dumps(dict(outcome="selected", job_name="local", build_id="local", selected=selected)))
+        result = self.invoke("gpudirect")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("worker runtime digest", result.stderr)
 
 if __name__ == "__main__":
     unittest.main()

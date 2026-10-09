@@ -110,6 +110,15 @@ class ResultTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.invoke(evidence=evidence, request=request)
 
+    def test_reports_and_both_workers_must_agree_without_optional_assertion(self):
+        evidence = copy.deepcopy(EVIDENCE)
+        evidence["workers"][WORKERS[1]] = "sha256:" + "b" * 64
+        with self.assertRaisesRegex(ValueError, "agree"):
+            self.invoke(evidence=evidence)
+        evidence["workers"] = dict.fromkeys(WORKERS, "sha256:" + "b" * 64)
+        with self.assertRaisesRegex(ValueError, "agree"):
+            self.invoke(evidence=evidence)
+
 
 if __name__ == "__main__":
     unittest.main()
