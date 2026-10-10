@@ -618,7 +618,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			By("Get the CSV deployed in NVIDIA GPU Operator namespace")
-			csvBuilderList, err := olm.ListClusterServiceVersion(inittools.APIClient, nvidiagpu.NvidiaGPUNamespace)
+			csvBuilderList, err := olm.ListClusterServiceVersionWithNamePattern(inittools.APIClient, nvidiagpu.Package, nvidiagpu.NvidiaGPUNamespace)
 
 			Expect(err).ToNot(HaveOccurred(), "Error getting list of CSVs in GPU operator "+
 				"namespace: '%v'", err)
