@@ -9,9 +9,10 @@ The pair requires an `id`, exact `openshift_version` z-stream (including an
 installer suffix when needed), and `driver_requested.image` containing the
 complete tagged `registry.stage.redhat.io/nvidia/doca-driver-rhel9` or
 `doca-driver-rhel10` pullspec. Its tag must encode the DOCA base version, worker
-kernel, RHCOS minor and architecture. Optional `kernel` and `architecture`
-assertions must agree with the tag. Optional `digest` is the platform image
-digest observed on the workers, not a multi-architecture OCI index digest.
+kernel, the NFD `os_release.ID` and `VERSION_ID` OS tag, and architecture.
+Optional `kernel` and `architecture` assertions must agree with the tag. Optional
+`digest` is the platform image digest observed on the workers, not a
+multi-architecture OCI index digest.
 
 For the final OCP comparison, installer architecture suffixes such as `-x86_64`
 or `-multi` are removed. The exact patch and release prerelease identifiers such
@@ -31,6 +32,23 @@ steps, and the existing day-2 and RDMA-enabled GPU installation commands.
 `scripts/nno/run-signed-nno.sh deploy|gpudirect` loads the lab profile, applies
 the exact image handoff, and invokes the existing NNO tests with the deployment
 or shared-device GPUDirect label. It only handles signed NNO execution.
+
+The signed flow uses DMA-BUF for GPUDirect. When the GPU suite sees the normalized
+signed request in `SHARED_DIR`, `scripts/test-runner.sh` appends ClusterPolicy
+patches setting `driver.kernelModuleType=open` and `driver.rdma.enabled=false`.
+These override the release step's legacy peer-memory setting before the policy
+is created. Other supplied policy patches are retained. GPU jobs without the
+signed handoff keep their existing policy configuration.
+
+The default amd64 workload image `quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.3`
+was inspected at digest
+`sha256:2752921f228f00b63016c001ed9482b9963125e07e61fbd47b2fa428b9e7d1b6`.
+It installs CUDA Toolkit 12.8, builds perftest with CUDA headers, and already
+passes `--use_cuda=0 --use_cuda_dmabuf` for both server and client when `-c yes`
+is selected. The signed GPUDirect step keeps this CUDA selection enabled.
+A lab-profile override of `NVIDIANETWORK_RDMA_TEST_IMAGE` must also support and
+select DMA-BUF; inspect its entrypoint and CUDA/perftest versions before use.
+Live GPUDirect validation still requires compatible GPU/NIC hardware in the lab.
 
 `NVIDIANETWORK_OFED_DRIVER_PULLSPEC` is the sole new Go configuration input.
 The runner maps it to the existing NicClusterPolicy repository/image/base-version

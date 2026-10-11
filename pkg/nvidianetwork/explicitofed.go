@@ -10,18 +10,15 @@ import (
 
 // ParseExplicitPrecompiledOFEDPullSpec maps a complete staging image reference
 // to NicClusterPolicy fields and confirms that its constructed tag matches the
-// running worker kernel, OCP RHCOS minor, and architecture. The operator builds
-// its final image tag from ImageSpec.Version plus these runtime suffixes.
+// running worker kernel, NFD os_release-based OS tag, and architecture. The
+// operator builds its final image tag from ImageSpec.Version plus these runtime suffixes.
 func ParseExplicitPrecompiledOFEDPullSpec(
-	pullSpec, kernelVersion, clusterVersion, architecture string,
+	pullSpec, kernelVersion, osTag, architecture string,
 ) (*OFEDImage, error) {
 	pullSpec = strings.TrimSpace(pullSpec)
-	if kernelVersion == "" || architecture == "" {
-		return nil, fmt.Errorf("worker kernel and architecture are required")
-	}
-	minor := clusterMinor(clusterVersion)
-	if minor == "" {
-		return nil, fmt.Errorf("invalid OpenShift version %q", clusterVersion)
+	osTag = strings.TrimSpace(osTag)
+	if kernelVersion == "" || osTag == "" || architecture == "" {
+		return nil, fmt.Errorf("worker kernel, OS tag, and architecture are required")
 	}
 	path, tag, found := strings.Cut(pullSpec, ":")
 	repository := strings.TrimPrefix(path, precompiledOFEDRegistry+"/")
@@ -29,9 +26,9 @@ func ParseExplicitPrecompiledOFEDPullSpec(
 		(repository != precompiledOFEDRHEL9Repo && repository != precompiledOFEDRHEL10Repo) {
 		return nil, fmt.Errorf("unsupported tagged staging pull specification %q", pullSpec)
 	}
-	suffix := fmt.Sprintf("-%s%s%s-%s", kernelVersion, rhcosTagPrefix, minor, architecture)
+	suffix := fmt.Sprintf("-%s-%s-%s", kernelVersion, osTag, architecture)
 	if !strings.HasSuffix(tag, suffix) {
-		return nil, fmt.Errorf("requested image tag %q must end with worker kernel/OCP/architecture suffix %q", tag, suffix)
+		return nil, fmt.Errorf("requested image tag %q must end with worker kernel/OS/architecture suffix %q", tag, suffix)
 	}
 	// Reuse the catalog path's repository/image/base-version mapping.
 	selected := mapCatalogImage(CatalogImage{Repository: repository}, tag, kernelVersion)
@@ -62,6 +59,25 @@ func CheckPrecompiledOFEDTag(ctx context.Context, client CatalogClient, selected
 		}
 	}
 	return fmt.Errorf("requested staging image %q is unavailable", selected.PullSpec())
+}
+
+// CheckPrecompiledOFEDWorkerTag checks that the selected repository, image, and
+// version have the exact tag needed by another worker. It never selects another version.
+func CheckPrecompiledOFEDWorkerTag(
+	ctx context.Context, client CatalogClient, selected *OFEDImage,
+	kernelVersion, osTag, architecture string,
+) error {
+	if selected == nil {
+		return fmt.Errorf("selected precompiled OFED image is required")
+	}
+	pullSpec := fmt.Sprintf("%s/%s:%s-%s-%s-%s", selected.Repository, selected.Image,
+		selected.Version, kernelVersion, strings.TrimSpace(osTag), architecture)
+	workerImage, err := ParseExplicitPrecompiledOFEDPullSpec(pullSpec, kernelVersion, osTag, architecture)
+	if err != nil {
+		return err
+	}
+
+	return CheckPrecompiledOFEDTag(ctx, client, workerImage)
 }
 
 // VerifyOFEDDriverPods requires a ready container using the exact requested image
