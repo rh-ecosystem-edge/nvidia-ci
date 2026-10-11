@@ -44,6 +44,25 @@ const (
 	NativeDRAOwnerLabelKey   = "nvidia-ci.rh-ecosystem-edge.io/created-by"
 	NativeDRAOwnerLabelValue = "native-dra-test"
 
+	// MIGDeviceClassName is the DeviceClass (resource.k8s.io) the NVIDIA DRA driver's GPU
+	// kubelet-plugin publishes for MIG-sliced devices, whether the MIG partitions were
+	// created statically (out of band, before the driver starts) or dynamically via the
+	// DynamicMIGFeatureGate.
+	MIGDeviceClassName = "mig.nvidia.com"
+
+	// DynamicMIGFeatureGate is the DRA driver feature gate name (rendered into the
+	// FEATURE_GATES environment variable via GPUCluster.spec.draDriver.featureGates) that
+	// enables on-demand MIG partition creation/teardown per ResourceClaim, using the
+	// Kubernetes Partitionable Devices feature (KEP-4815), instead of requiring MIG
+	// partitions to already exist on the node. Verified Alpha and disabled by default as
+	// of DRA driver v0.5.0 (the version bundled by GPU Operator v26.7.x); mutually
+	// exclusive with the driver's MPSSupport, PassthroughSupport and
+	// NVMLDeviceHealthCheck feature gates.
+	DynamicMIGFeatureGate = "DynamicMIG"
+
+	// MIGCapableLabel marks a node as having at least one MIG-capable GPU; set by NFD/GFD.
+	MIGCapableLabel = "nvidia.com/mig.capable"
+
 	CustomCatalogSourcePublisherName = "Red Hat"
 
 	CustomCatalogSourceDisplayName = "Certified Operators Custom"

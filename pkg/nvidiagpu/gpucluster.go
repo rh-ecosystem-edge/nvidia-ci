@@ -267,6 +267,52 @@ func (builder *GPUClusterBuilder) Create() (*GPUClusterBuilder, error) {
 	return builder, err
 }
 
+// Update applies builder.Definition to the cluster via a full Update call (not a patch),
+// and stores the updated object in the struct. Callers that mutate an existing GPUCluster
+// (e.g. via WithFeatureGate) must first Pull/Get it so that Definition carries the current
+// resourceVersion, or the API server will reject the update as a conflict.
+func (builder *GPUClusterBuilder) Update() (*GPUClusterBuilder, error) {
+	if valid, err := builder.validate(); !valid {
+		return builder, err
+	}
+
+	glog.V(100).Infof("Updating the GPUCluster %s", builder.Definition.GetName())
+
+	updated, err := builder.resourceClient().Update(context.TODO(), builder.Definition, metav1.UpdateOptions{})
+	if err != nil {
+		return builder, fmt.Errorf("cannot update GPUCluster: %w", err)
+	}
+
+	builder.Object = updated
+	builder.Definition = updated
+
+	return builder, nil
+}
+
+// WithFeatureGate sets spec.draDriver.featureGates.<name> = enabled on the GPUCluster
+// definition. It must be called before Create(), or on a builder that was just
+// Pull-ed/Get-ed (so Definition carries the current resourceVersion) before Update().
+// This is the native-DRA equivalent of the deprecated Helm chart's
+// "--set featureGates.<name>=true": GPUClusterSpec.DRADriver.FeatureGates is a generic
+// map[string]bool rendered as the FEATURE_GATES environment variable on the DRA driver
+// containers (see github.com/NVIDIA/gpu-operator api/nvidia/v1alpha1/gpucluster_types.go,
+// DRADriverSpec.FeatureGates), so this helper works for any driver feature gate (e.g.
+// "DynamicMIG", "MPSSupport"), not just MIG-related ones.
+func (builder *GPUClusterBuilder) WithFeatureGate(name string, enabled bool) *GPUClusterBuilder {
+	if valid, _ := builder.validate(); !valid {
+		return builder
+	}
+
+	glog.V(100).Infof("Setting GPUCluster %s feature gate '%s' to %v", builder.Definition.GetName(), name, enabled)
+
+	err := unstructured.SetNestedField(builder.Definition.Object, enabled, "spec", "draDriver", "featureGates", name)
+	if err != nil {
+		builder.errorMsg = fmt.Sprintf("error setting GPUCluster feature gate '%s': %s", name, err.Error())
+	}
+
+	return builder
+}
+
 // State returns the GPUCluster's status.state field ("ready", "notReady", "disabled", or ""
 // if the object or field is not present).
 func (builder *GPUClusterBuilder) State() string {
