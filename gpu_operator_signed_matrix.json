@@ -14,6 +14,14 @@
                 "ocp_full_version": "4.22.17",
                 "gpu_operator_version": "26.7.1(bundle)",
                 "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/738/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-master-signed/2107633716967772160/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1791338787,
+                "driver_branch": "580.173.02, 595.71.05, 610.57.04"
+            },
+            {
+                "ocp_full_version": "4.22.17",
+                "gpu_operator_version": "26.7.1(bundle)",
+                "test_status": "SUCCESS",
                 "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/736/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-master-signed/2107444083956912128/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
                 "job_timestamp": 1791295284,
                 "driver_branch": "580.173.02, 595.71.05, 610.57.04"
@@ -319,6 +327,14 @@
                 "test_status": "SUCCESS",
                 "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/743/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.20-stable-nvidia-gpu-operator-e2e-master-signed/2107995891745951744/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
                 "job_timestamp": 1791428075,
+                "driver_branch": "580.173.02, 595.71.05, 610.57.04"
+            },
+            {
+                "ocp_full_version": "4.20.41",
+                "gpu_operator_version": "26.7.1(bundle)",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/738/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.20-stable-nvidia-gpu-operator-e2e-master-signed/2107633716900663296/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1791339105,
                 "driver_branch": "580.173.02, 595.71.05, 610.57.04"
             },
             {
