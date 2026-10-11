@@ -313,6 +313,52 @@ them in place for inspection (e.g. to manually inspect the rendered DRA driver p
 a failure), set `NVIDIAGPU_CLEANUP=false` (same variable used by the base testcase). See
 [Cleaning up leftover resources](#cleaning-up-leftover-resources) below.
 
+#### Testing dynamic MIG allocation via native DRA (`native-dra-mig`)
+
+The `native-dra-mig` testcase extends `native-dra`: after the GPUCluster is ready, it enables
+the NVIDIA DRA driver's `DynamicMIG` feature gate
+(`GPUCluster.spec.draDriver.featureGates.DynamicMIG = true`) and allocates a MIG device through
+a `ResourceClaimTemplate` (`mig.nvidia.com` DeviceClass), then runs a VectorAdd workload against
+it — proving actual DRA-based MIG scheduling and CDI device injection, not just driver health.
+
+`DynamicMIG` lets the DRA driver create and destroy MIG GPU instances on demand, per
+`ResourceClaim` (Kubernetes "Partitionable Devices", KEP-4815), instead of requiring MIG
+partitions to be pre-sliced on the node out of band (the classic `mig-manager`/`mig-parted`
+path, which `native-dra`'s GPUCluster stack does not install). As of DRA driver `v0.5.0` (the
+version bundled by GPU Operator `v26.7.x`), `DynamicMIG` is still an **Alpha, disabled-by-default**
+feature gate, so this testcase is inherently best-effort and will `Skip()` cleanly rather than
+fail when a prerequisite isn't met:
+
+- Requires Kubernetes **>= 1.34** (Partitionable Devices). On Kubernetes 1.34–1.35 the cluster's
+  own `DRAPartitionableDevices` feature gate must also be enabled on the kube-apiserver/scheduler
+  (not something this test can verify client-side — if the Kubernetes version check passes but
+  that gate isn't actually enabled, the test will instead fail later when the `ResourceClaim`
+  never gets allocated). From Kubernetes 1.36 onward this gate is enabled by default.
+- Requires at least one MIG-capable GPU node (`nvidia.com/mig.capable=true`).
+- On **Ampere**-generation GPUs (e.g. A100), MIG *mode* must already be toggled on at the
+  hardware level before the DRA driver starts — Ampere cannot toggle MIG mode without a GPU
+  reset, and `DynamicMIG` only manages MIG *partitions*, not MIG mode itself. **Hopper and later**
+  architectures enable MIG mode on demand and need no such pre-step.
+- `DynamicMIG` is mutually exclusive with the driver's `MPSSupport`, `PassthroughSupport` and
+  `NVMLDeviceHealthCheck` feature gates.
+
+Must be run together with `native-dra` in the same invocation, since it reuses the GPUCluster
+that testcase creates:
+
+```bash
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DUMP_FAILED_TESTS=true
+$ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-gpu-logs-dir
+$ export TEST_FEATURES="nvidiagpu"
+$ export TEST_LABELS='native-dra,native-dra-mig'
+$ export TEST_TRACE=true
+$ export VERBOSE_LEVEL=100
+$ export NVIDIAGPU_CATALOGSOURCE="certified-operators"
+$ export NVIDIAGPU_SUBSCRIPTION_CHANNEL="v26.7"  # must resolve to GPU Operator >= 26.7.0
+$ export NVIDIAGPU_CLEANUP=false
+$ make run-tests
+```
+
 ### Cleaning up leftover resources
 
 If you ran any `nvidiagpu` testcase with `NVIDIAGPU_CLEANUP=false` (e.g. to chain into MPS/MIG/
