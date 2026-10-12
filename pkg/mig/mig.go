@@ -1933,8 +1933,8 @@ func logPodEvents(podName, namespace string) {
 }
 
 // isRunning checks and waits for the GPU burn pod to reach the Running phase using a two-phase
-// timeout: Phase 1 checks that the pod is scheduled (fast fail if no GPU node), Phase 2 waits
-// for Running (tolerates slow image pulls).
+// timeout: Removing Phase 1, checking for scheduling will cause problem with Pending state pods.
+// Phase 2 waits for Running (tolerates slow image pulls and Pending state).
 // It first checks quickly and if the pod is already Running or Succeeded, it returns immediately.
 // Log validation ensures that the logs are from the pod that was created at the start of the test.
 func isRunning(gpuPod *pod.Builder, namespace string) {
@@ -1950,13 +1950,7 @@ func isRunning(gpuPod *pod.Builder, namespace string) {
 		return
 	}
 
-	// Phase 1: confirm the pod is scheduled within the timeout window.
-	err = gpuPod.WaitUntilScheduled(nvidiagpu.BurnPodScheduledTimeout)
-	Expect(err).ToNot(HaveOccurred(), "gpu-burn MIG pod in namespace '%s' was not scheduled "+
-		"within the timeout (scheduler may be busy or pod may have failed early): %v", namespace, err)
-	glog.V(gpuparams.Gpu10LogLevel).Infof("gpu-burn pod with MIG is scheduled onto a GPU node")
-
-	// Phase 2: wait for Running or Succeeded, tolerating time needed for image pull and fast completions.
+	// wait for Running or Succeeded, tolerating time needed for image pull and fast completions.
 	err = gpuPod.WaitUntilRunningOrSucceeded(nvidiagpu.BurnPodRunningTimeout)
 	if err != nil {
 		// Pull a fresh snapshot for diagnostic logging only.
