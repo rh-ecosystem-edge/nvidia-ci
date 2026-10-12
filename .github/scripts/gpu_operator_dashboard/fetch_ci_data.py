@@ -133,7 +133,7 @@ class TestResult:
 
 
 def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, Any]]:
-    """Fetch files matching a specific glob pattern for a PR."""
+    """Fetch files matching a specific glob pattern for a PR (GCS JSON API only)."""
     logger.info(f"Fetching files matching pattern: {glob_pattern}")
 
     params = {
@@ -168,6 +168,9 @@ def fetch_filtered_files(pr_number: str, glob_pattern: str) -> List[Dict[str, An
 
 def fetch_pr_files(pr_number: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Fetch all required file types for a PR using targeted filtering."""
+    if os.environ.get("PROW_TOKEN"):
+        return _fetch_pr_files_gcsweb(pr_number)
+
     logger.info(f"Fetching files for PR #{pr_number}")
 
     # Fetch the 4 file types we need using glob patterns
@@ -180,6 +183,71 @@ def fetch_pr_files(pr_number: str) -> Tuple[List[Dict[str, Any]], List[Dict[str,
         pr_number, "**/gpu-operator-e2e/artifacts/driver.branches")
 
     return all_finished_files, ocp_version_files, gpu_version_files, driver_branch_files
+
+
+def _fetch_pr_files_gcsweb(pr_number: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Fetch PR files via gcsweb with targeted directory traversal.
+
+    Instead of crawling the entire tree, walks only the directories
+    that contain the files we need: top-level finished.json per build
+    and gpu-operator-e2e step artifacts.
+    """
+    from common.gcs_utils import list_gcsweb_directory
+
+    base = f"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/{pr_number}/"
+
+    finished_files: List[Dict[str, Any]] = []
+    ocp_version_files: List[Dict[str, Any]] = []
+    gpu_version_files: List[Dict[str, Any]] = []
+    driver_branch_files: List[Dict[str, Any]] = []
+
+    job_dirs, _ = list_gcsweb_directory(base)
+
+    for job in job_dirs:
+        if not TEST_RESULT_PATH_REGEX.match(f"{base}{job}/_"):
+            continue
+
+        build_dirs, _ = list_gcsweb_directory(f"{base}{job}/")
+
+        for build in build_dirs:
+            build_path = f"{base}{job}/{build}/"
+            subdirs, files = list_gcsweb_directory(build_path)
+
+            if "finished.json" in files:
+                finished_files.append({"name": f"{build_path}finished.json"})
+
+            if "artifacts" not in subdirs:
+                continue
+
+            containers, _ = list_gcsweb_directory(f"{build_path}artifacts/")
+
+            for container in containers:
+                step_path = f"{build_path}artifacts/{container}/gpu-operator-e2e/"
+                step_subdirs, step_files = list_gcsweb_directory(step_path)
+
+                if not step_subdirs and not step_files:
+                    continue
+
+                if "finished.json" in step_files:
+                    finished_files.append({"name": f"{step_path}finished.json"})
+
+                if "artifacts" in step_subdirs:
+                    _, art_files = list_gcsweb_directory(f"{step_path}artifacts/")
+                    art_path = f"{step_path}artifacts/"
+
+                    if "ocp.version" in art_files:
+                        ocp_version_files.append({"name": f"{art_path}ocp.version"})
+                    if "operator.version" in art_files:
+                        gpu_version_files.append({"name": f"{art_path}operator.version"})
+                    if "driver.branches" in art_files:
+                        driver_branch_files.append({"name": f"{art_path}driver.branches"})
+
+    logger.info(
+        f"PR #{pr_number} via gcsweb: {len(finished_files)} finished.json, "
+        f"{len(ocp_version_files)} ocp.version, {len(gpu_version_files)} operator.version, "
+        f"{len(driver_branch_files)} driver.branches"
+    )
+    return finished_files, ocp_version_files, gpu_version_files, driver_branch_files
 
 
 def extract_build_components(path: str) -> Tuple[str, str, str, str]:
@@ -452,7 +520,7 @@ def process_tests_for_pr(pr_number: str, results_by_ocp: Dict[str, Dict[str, Any
         results_by_ocp.setdefault(ocp_version, {"bundle_tests": [], "release_tests": [], "job_history_links": set()})
 
         # Add job history link for this job name
-        job_history_url = f"https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/{job_name}"
+        job_history_url = f"https://prow.ci.openshift.org/job-history/gs/test-platform-results-public/pr-logs/directory/{job_name}"
         results_by_ocp[ocp_version]["job_history_links"].add(job_history_url)
 
         # Determine if this is a bundle test (job ends with '-master') or release test

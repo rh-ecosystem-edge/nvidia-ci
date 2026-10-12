@@ -3,9 +3,12 @@ package wait
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/dra"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
@@ -13,6 +16,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 	corev1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -212,6 +216,10 @@ func NodeLabelExists(apiClient *clients.Settings, labelKey, labelValue string, n
 	timeout time.Duration) error {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("Waiting for node label '%s'='%s' on nodes with selector: %v", labelKey, labelValue, nodeSelector)
 	// Merge nodeSelector with the target label so the API returns only nodes that match both.
+	// Reject an impossible conjunction instead of overwriting a caller-provided constraint.
+	if existingValue, ok := nodeSelector[labelKey]; ok && existingValue != labelValue {
+		return fmt.Errorf("node selector for label %q has value %q, conflicts with required value %q", labelKey, existingValue, labelValue)
+	}
 	mergedSelector := make(labels.Set, len(nodeSelector)+1)
 	for k, v := range nodeSelector {
 		mergedSelector[k] = v
@@ -306,4 +314,106 @@ func DaemonSetReady(apiClient *clients.Settings, daemonSetName, namespace string
 
 			return false, nil
 		})
+}
+
+// GPUResourceSliceUUIDsMatch waits until the gpu.nvidia.com ResourceSlice for the given
+// node reports exactly the given set of GPU UUIDs. ResourceSlice publication lags
+// DaemonSet readiness (NVML discovery + building attributes + the Create call all take
+// non-zero time after the kubelet-plugin pod flips Ready), so this polls rather than
+// doing a one-shot comparison.
+func GPUResourceSliceUUIDsMatch(apiClient *clients.Settings, nodeName string, expectedUUIDs map[string]bool,
+	pollInterval, timeout time.Duration) error {
+	var lastErr error
+
+	pollErr := wait.PollUntilContextTimeout(context.TODO(), pollInterval, timeout, true,
+		func(ctx context.Context) (bool, error) {
+			reported, err := gpuResourceSliceUUIDs(ctx, apiClient, nodeName)
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("ResourceSlice not ready yet on node '%s': %v", nodeName, err)
+				lastErr = err
+
+				return false, nil
+			}
+
+			if !maps.Equal(reported, expectedUUIDs) {
+				lastErr = fmt.Errorf("ResourceSlice UUIDs %v do not match expected UUIDs %v on node '%s'",
+					slices.Sorted(maps.Keys(reported)), slices.Sorted(maps.Keys(expectedUUIDs)), nodeName)
+
+				return false, nil
+			}
+
+			return true, nil
+		})
+	if pollErr != nil {
+		return fmt.Errorf("ResourceSlice inventory for node '%s' never matched expected UUIDs: %w", nodeName, lastErr)
+	}
+
+	return nil
+}
+
+// gpuResourceSliceUUIDs lists ResourceSlices published by the gpu.nvidia.com driver for
+// the given node and returns the set of UUIDs published in each Device's "uuid"
+// attribute.
+func gpuResourceSliceUUIDs(ctx context.Context, apiClient *clients.Settings, nodeName string) (map[string]bool, error) {
+	fieldSelector := fmt.Sprintf("%s=%s,%s=%s",
+		resourcev1.ResourceSliceSelectorNodeName, nodeName,
+		resourcev1.ResourceSliceSelectorDriver, dra.GPUDriverName)
+
+	slicesList, err := apiClient.K8sClient.ResourceV1().ResourceSlices().List(ctx, metav1.ListOptions{
+		FieldSelector: fieldSelector,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ResourceSlices for node '%s': %w", nodeName, err)
+	}
+
+	if len(slicesList.Items) == 0 {
+		return nil, fmt.Errorf("no ResourceSlice found for driver '%s' on node '%s'", dra.GPUDriverName, nodeName)
+	}
+
+	type poolSlices struct {
+		generation int64
+		count      int64
+		slices     []resourcev1.ResourceSlice
+	}
+
+	currentPools := make(map[string]poolSlices)
+	for _, slice := range slicesList.Items {
+		poolName := slice.Spec.Pool.Name
+		pool, ok := currentPools[poolName]
+		generation := slice.Spec.Pool.Generation
+		if !ok || generation > pool.generation {
+			currentPools[poolName] = poolSlices{
+				generation: generation,
+				count:      slice.Spec.Pool.ResourceSliceCount,
+				slices:     []resourcev1.ResourceSlice{slice},
+			}
+			continue
+		}
+		if generation == pool.generation {
+			pool.slices = append(pool.slices, slice)
+			currentPools[poolName] = pool
+		}
+	}
+
+	uuids := make(map[string]bool)
+	for poolName, pool := range currentPools {
+		if int64(len(pool.slices)) != pool.count {
+			return nil, fmt.Errorf("ResourceSlice pool '%s' generation %d is incomplete: found %d of %d slices",
+				poolName, pool.generation, len(pool.slices), pool.count)
+		}
+
+		for _, slice := range pool.slices {
+			for _, device := range slice.Spec.Devices {
+				attr, ok := device.Attributes[resourcev1.QualifiedName(dra.UUIDAttributeName)]
+				if !ok || attr.StringValue == nil {
+					return nil, fmt.Errorf("device '%s' in ResourceSlice '%s' has no '%s' string attribute",
+						device.Name, slice.Name, dra.UUIDAttributeName)
+				}
+
+				uuids[*attr.StringValue] = true
+			}
+		}
+	}
+
+	return uuids, nil
 }

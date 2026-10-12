@@ -17,6 +17,37 @@ if [[ -z "${TEST_FEATURES}" ]]; then
     exit 1
 fi
 
+# The signed NNO workflow publishes this handoff before its GPU installation step.
+# Its workload uses DMA-BUF, so override the release step's legacy RDMA patch
+# before creating ClusterPolicy and starting the driver build.
+if [[ "${TEST_FEATURES}" == "nvidiagpu" && -n "${SHARED_DIR:-}" &&
+      -s "${SHARED_DIR}/nno-doca2-signed-request.json" ]]; then
+    if ! signed_gpu_patch=$(python3 - <<'PY'
+import json
+import os
+import sys
+
+try:
+    patch = json.loads(os.environ.get("NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH") or "[]")
+    if not isinstance(patch, list):
+        raise ValueError("ClusterPolicy patch must be a JSON array")
+except ValueError as error:
+    print("signed NNO GPU policy error: " + str(error), file=sys.stderr)
+    sys.exit(1)
+
+patch.extend([
+    {"op": "add", "path": "/spec/driver/rdma", "value": {"enabled": False}},
+    {"op": "add", "path": "/spec/driver/kernelModuleType", "value": "open"},
+])
+print(json.dumps(patch))
+PY
+    ); then
+        exit 1
+    fi
+    export NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH="${signed_gpu_patch}"
+    echo "Signed NNO GPU installation uses open kernel modules and DMA-BUF (driver.rdma.enabled=false)"
+fi
+
 # Set feature_dirs to top-level test directory when "all" feature provided
 if [[ "${TEST_FEATURES}" == "all" ]]; then
     feature_dirs=${TEST_DIR}

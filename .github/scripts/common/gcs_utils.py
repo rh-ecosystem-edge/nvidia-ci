@@ -1,21 +1,216 @@
 """
 GCS (Google Cloud Storage) utilities for fetching CI test artifacts.
 Shared across GPU Operator and Network Operator dashboards.
+
+Supports two backends:
+- gcsweb proxy with Bearer token auth (when PROW_TOKEN env var is set)
+- GCS JSON API without auth (legacy fallback for public buckets)
 """
 
+import os
 import re
 import urllib.parse
-from typing import Dict, Any
+from collections import deque
+from typing import Dict, Any, List, Tuple
 
 import requests
 
 from common.utils import logger
 
-# GCS API base URL for test-platform-results bucket
-GCS_API_BASE_URL = "https://storage.googleapis.com/storage/v1/b/test-platform-results/o"
+# Public Prow artifact bucket used for fetching and report links.
+GCS_BUCKET = "test-platform-results-public"
+GCS_API_BASE_URL = f"https://storage.googleapis.com/storage/v1/b/{GCS_BUCKET}/o"
 
 # Maximum number of results per GCS API request for pagination
 GCS_MAX_RESULTS_PER_REQUEST = 1000
+
+# gcsweb auth configuration (from environment)
+_PROW_TOKEN = os.environ.get("PROW_TOKEN", "")
+_GCSWEB_API_URL = os.environ.get(
+    "PROW_GCSWEB_API_URL",
+    "https://gcsweb-test-platform-results-ci.apps.ci.l2s4.p1.openshiftapps.com"
+).rstrip("/")
+if _PROW_TOKEN and not _GCSWEB_API_URL.startswith("https://"):
+    raise ValueError(
+        f"PROW_GCSWEB_API_URL must use HTTPS when PROW_TOKEN is set "
+        f"(got {_GCSWEB_API_URL!r})"
+    )
+_GCS_BUCKET = GCS_BUCKET
+_CURATED_PREFIX = os.environ.get("PROW_CURATED_PREFIX", "curated/")
+
+# Cache for recursive directory traversals (avoids re-crawling the same prefix)
+_files_cache: Dict[str, List[str]] = {}
+
+
+class GCSFileNotFoundError(requests.HTTPError):
+    """A requested file is absent from the curated gcsweb view."""
+
+
+def _matches_gcs_glob(path: str, pattern: str) -> bool:
+    """Match a path against a GCS matchGlob pattern.
+
+    ** matches across directory boundaries, * matches within a single segment.
+    """
+    i = 0
+    parts: list[str] = []
+    while i < len(pattern):
+        if i + 1 < len(pattern) and pattern[i] == "*" and pattern[i + 1] == "*":
+            if (
+                i + 2 < len(pattern)
+                and pattern[i + 2] == "/"
+                and (i == 0 or pattern[i - 1] == "/")
+            ):
+                parts.append("(?:.*/)?")
+                i += 3
+            else:
+                parts.append(".*")
+                i += 2
+        elif pattern[i] == "*":
+            parts.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            parts.append("[^/]")
+            i += 1
+        else:
+            parts.append(re.escape(pattern[i]))
+            i += 1
+    return bool(re.fullmatch("".join(parts), path))
+
+
+def list_gcsweb_directory(dir_path: str) -> Tuple[List[str], List[str]]:
+    """List a single directory via gcsweb proxy.
+
+    Args:
+        dir_path: Path within the bucket (without curated/ prefix).
+
+    Returns:
+        Tuple of (subdirectory_names, file_names). Returns empty lists
+        when the directory does not exist (gcsweb returns 200 with an
+        empty listing). Raises on network/server errors so callers can
+        distinguish "empty" from "failed".
+    """
+    gcsweb_path = f"{_CURATED_PREFIX}{dir_path}"
+    if not gcsweb_path.endswith("/"):
+        gcsweb_path += "/"
+
+    response = requests.get(
+        _gcsweb_url(gcsweb_path), headers=_get_auth_headers(), timeout=30
+    )
+    response.raise_for_status()
+
+    return _parse_gcsweb_listing(response.text, gcsweb_path)
+
+
+def _use_gcsweb() -> bool:
+    return bool(_PROW_TOKEN)
+
+
+def gcsweb_enabled() -> bool:
+    """Whether artifact reads use the authenticated gcsweb proxy."""
+    return _use_gcsweb()
+
+
+def list_gcsweb_objects(prefix: str, glob_pattern: str) -> list[Dict[str, Any]]:
+    """List matching objects below one Prow prefix through the curated view."""
+    if not _use_gcsweb():
+        raise ValueError("PROW_TOKEN is required for gcsweb object listing")
+
+    paths = _gcsweb_list_all_files(f"{_CURATED_PREFIX}{prefix}")
+    return [
+        {"name": path.removeprefix(_CURATED_PREFIX)}
+        for path in paths
+        if _matches_gcs_glob(path.removeprefix(_CURATED_PREFIX), glob_pattern)
+    ]
+
+
+def _get_auth_headers() -> Dict[str, str]:
+    if _PROW_TOKEN:
+        return {"Authorization": f"Bearer {_PROW_TOKEN}"}
+    return {}
+
+
+def _gcsweb_url(path: str) -> str:
+    return f"{_GCSWEB_API_URL}/gcs/{_GCS_BUCKET}/{path}"
+
+
+def _parse_gcsweb_listing(html: str, dir_path: str) -> Tuple[List[str], List[str]]:
+    """Parse gcsweb HTML directory listing into child directory and file names.
+
+    Only considers links whose href is a direct child of dir_path,
+    filtering out navigation/breadcrumb links.
+    """
+    directories: List[str] = []
+    files: List[str] = []
+    seen: set = set()
+
+    if dir_path and not dir_path.endswith("/"):
+        dir_path = dir_path + "/"
+
+    expected_prefix = f"/gcs/{_GCS_BUCKET}/{dir_path}"
+
+    for match in re.finditer(r'href="([^"]*)"', html):
+        href = match.group(1)
+
+        if not href.startswith(expected_prefix):
+            continue
+
+        remainder = href[len(expected_prefix):]
+        remainder_stripped = remainder.rstrip("/")
+        if not remainder_stripped or "/" in remainder_stripped:
+            continue
+
+        name = remainder_stripped
+        if name in seen:
+            continue
+        seen.add(name)
+
+        if remainder.endswith("/"):
+            directories.append(name)
+        else:
+            files.append(name)
+
+    return directories, files
+
+
+def _gcsweb_list_all_files(prefix: str) -> List[str]:
+    """Recursively list all file paths under a gcsweb prefix (BFS).
+
+    Returns full paths within the bucket (including the prefix).
+    Results are cached per prefix to avoid repeated traversals.
+    """
+    if prefix in _files_cache:
+        return _files_cache[prefix]
+
+    all_files: List[str] = []
+    dirs_to_visit: deque = deque([prefix])
+    had_errors = False
+
+    while dirs_to_visit:
+        current = dirs_to_visit.popleft()
+        try:
+            response = requests.get(
+                _gcsweb_url(current), headers=_get_auth_headers(), timeout=30
+            )
+            response.raise_for_status()
+        except Exception as e:
+            logger.warning(f"Failed to list {current}: {e}")
+            had_errors = True
+            continue
+
+        directories, files = _parse_gcsweb_listing(response.text, current)
+
+        for f in files:
+            all_files.append(f"{current}{f}")
+
+        for d in directories:
+            dirs_to_visit.append(f"{current}{d}/")
+
+    if not had_errors:
+        _files_cache[prefix] = all_files
+        logger.info(f"Cached {len(all_files)} files under {prefix}")
+    else:
+        logger.warning(f"Skipping cache for {prefix} due to errors during traversal")
+    return all_files
 
 
 def http_get_json(url: str, params: Dict[str, Any] | None = None, headers: Dict[str, str] | None = None) -> Dict[str, Any]:
@@ -51,6 +246,22 @@ def fetch_gcs_file_content(file_path: str) -> str:
     Raises:
         requests.HTTPError: If the file cannot be fetched
     """
+    if _use_gcsweb():
+        gcsweb_path = f"{_CURATED_PREFIX}{file_path}"
+        logger.info(f"Fetching file content via gcsweb: {file_path}")
+        response = requests.get(
+            _gcsweb_url(gcsweb_path), headers=_get_auth_headers(), timeout=30
+        )
+        response.raise_for_status()
+        # gcsweb returns 200 with HTML directory listing for non-existent files
+        content_type = response.headers.get("Content-Type", "")
+        if "text/html" in content_type and "<title>GCS browser:" in response.text[:1000]:
+            raise GCSFileNotFoundError(
+                f"File not found in curated view: {file_path}",
+                response=response,
+            )
+        return response.text
+
     logger.info(f"Fetching file content for {file_path}")
     response = requests.get(
         url=f"{GCS_API_BASE_URL}/{urllib.parse.quote_plus(file_path)}",
@@ -72,7 +283,9 @@ def build_prow_job_url(finished_json_path: str) -> str:
         Full URL to the Prow job artifacts page
     """
     directory_path = finished_json_path[:-len('/finished.json')]
-    return f"https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/{directory_path}"
+    if _use_gcsweb():
+        return f"{_GCSWEB_API_URL}/gcs/{_GCS_BUCKET}/{_CURATED_PREFIX}{directory_path}"
+    return f"https://prow.ci.openshift.org/view/gs/test-platform-results-public/{directory_path}"
 
 
 def fetch_filtered_files(pr_number: str, glob_pattern: str) -> list[Dict[str, Any]]:
@@ -86,6 +299,9 @@ def fetch_filtered_files(pr_number: str, glob_pattern: str) -> list[Dict[str, An
     Returns:
         List of file metadata dictionaries from GCS API
     """
+    if _use_gcsweb():
+        return _gcsweb_fetch_filtered_files(pr_number, glob_pattern)
+
     all_items = []
 
     # Search in both possible PR locations
@@ -116,6 +332,32 @@ def fetch_filtered_files(pr_number: str, glob_pattern: str) -> list[Dict[str, An
     return all_items
 
 
+def _gcsweb_fetch_filtered_files(pr_number: str, glob_pattern: str) -> list[Dict[str, Any]]:
+    """Fetch files matching a glob pattern using gcsweb recursive traversal.
+
+    Glob patterns like "**/finished.json" are matched by suffix against all
+    discovered files. Results are cached per PR prefix so repeated calls
+    for different patterns reuse the same traversal.
+    """
+    all_items: list[Dict[str, Any]] = []
+
+    for base_prefix in [
+        f"pr-logs/pull/rh-ecosystem-edge_nvidia-ci/{pr_number}/",
+        f"pr-logs/pull/openshift_release/{pr_number}/",
+    ]:
+        gcsweb_prefix = f"{_CURATED_PREFIX}{base_prefix}"
+        all_files = _gcsweb_list_all_files(gcsweb_prefix)
+
+        for file_path in all_files:
+            if _matches_gcs_glob(file_path, glob_pattern):
+                # Strip curated/ prefix so callers see the same paths as before
+                original_path = file_path.removeprefix(_CURATED_PREFIX)
+                all_items.append({"name": original_path})
+
+    logger.info(f"Found {len(all_items)} files matching '{glob_pattern}' for PR #{pr_number} (via gcsweb)")
+    return all_items
+
+
 def build_job_history_url(job_name: str) -> str:
     """
     Build a Prow job history URL for a given job name.
@@ -126,4 +368,4 @@ def build_job_history_url(job_name: str) -> str:
     Returns:
         Full URL to the job history page
     """
-    return f"https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/{job_name}"
+    return f"https://prow.ci.openshift.org/job-history/gs/test-platform-results-public/pr-logs/directory/{job_name}"

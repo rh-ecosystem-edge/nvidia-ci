@@ -60,6 +60,7 @@ Pass ginkgo CLI parameters via `ARGS`: `make run-tests ARGS="-- --single.mig.pro
 - **`internal/`** (other packages): Test helpers for specific features: `deploy/`, `check/`, `get/`, `wait/`, `gpuburn/`, `mps/`, `rdma/`, `timeslicing/`, `dra/`, `helm/`, `testworkloads/`, `reporter/`.
 - **`pkg/`**: Reusable Kubernetes resource wrappers: `clients/`, `pod/`, `namespace/`, `deployment/`, `nodes/`, `machine/`, `configmap/`, `olm/`, `nfd/`, `nvidiagpu/`, `nvidianetwork/`, `mig/`, `operatorconfig/`.
 - **`tests/`**: Ginkgo test suites. Each subdirectory has a `*_suite_test.go` (test runner + reporter setup) and `*_test.go` files. Test suites: `nvidiagpu`, `nvidianetwork`, `mps`, `mig`, `timeslicing`, `dra/` (with `gpuallocation` and `computedomain` sub-suites), `dummy`.
+- **`.github/scripts/dpf_dashboard/`**: Python scripts for generating the Red Hat OpenShift DPF CI dashboard. Fetches periodic job results from GCS, accumulates in `dpf_matrix.json`, and generates `dpf_matrix.html`. Configured via `versions.json`.
 - **`mcp/prow-analyzer/`**: Python MCP server for analyzing Prow CI job results (separate from the Go codebase).
 
 ### Key patterns

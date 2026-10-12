@@ -86,12 +86,16 @@ var (
 	MaxTsSlices       int   // max time-slice replicas per GPU (device plugin)
 	LimitForTsSlices  int   // limit for total number of time-slices to be launched by the testcase
 	MaxGPUParam       int   // --nvidia-ci.max-gpu CLI parameter (raw, before clamping)
+	BurnTimeParam     int   // --nvidia-ci.burntime CLI parameter (raw, before clamping
 )
 
 const (
-	defaultMigInstances     int = -1 // parameter not provided
-	defaultSingleMigProfile int = -2 // parameter not provided
-	defaultMaxGPU           int = -1 // parameter not provided; defaults to 1 at runtime
+	defaultMigInstances     int = -1  // parameter not provided
+	defaultSingleMigProfile int = -2  // parameter not provided
+	defaultMaxGPU           int = -1  // parameter not provided; defaults to 1 at runtime
+	defaultBurnTime         int = 60  // seconds
+	minBurnTime             int = 30  // seconds
+	maxBurnTime             int = 300 // seconds
 )
 
 const (
@@ -115,6 +119,8 @@ func init() {
 	flag.IntVar(&LimitForTsSlices, "time.slicing.limit", DefaultLimitForTsSlices, "max total time-slice count launched by the testcase")
 	flag.IntVar(&MaxGPUParam, "nvidia-ci.max-gpu", defaultMaxGPU, "max nvidia.com/gpu to request per gpu-burn pod (1..node GPU count); defaults to 1")
 	flag.BoolVar(&NoColor, "no-color", false, "disable color output")
+	flag.IntVar(&BurnTimeParam, "nvidia-ci.burntime", defaultBurnTime,
+		fmt.Sprintf("gpu_burn workload duration in seconds (%d-%d, default %d)", minBurnTime, maxBurnTime, defaultBurnTime))
 }
 
 const (

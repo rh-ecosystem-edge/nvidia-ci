@@ -273,7 +273,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			nfd.EnsureNFDIsInstalled(inittools.APIClient, nfdInstance, ocpVersion, gpuparams.GpuLogLevel)
 
-			if mig.AnyLabelInFilter("single-mig", "mixed-mig", "time-slicing") {
+			// Parsing and logging the parameters for MIG testcases and nvidia-ci parameters
+			if mig.AnyLabelInFilter("single-mig", "mixed-mig", "time-slicing") || mig.IsFlagProvided("nvidia-ci.burntime") {
 				mig.ParseCLIParameters()
 				mig.LogCLIParameterValues()
 			}
@@ -620,7 +621,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			By("Get the CSV deployed in NVIDIA GPU Operator namespace")
-			csvBuilderList, err := olm.ListClusterServiceVersion(inittools.APIClient, nvidiagpu.NvidiaGPUNamespace)
+			csvBuilderList, err := olm.ListClusterServiceVersionWithNamePattern(inittools.APIClient, nvidiagpu.Package, nvidiagpu.NvidiaGPUNamespace)
 
 			Expect(err).ToNot(HaveOccurred(), "Error getting list of CSVs in GPU operator "+
 				"namespace: '%v'", err)
@@ -886,7 +887,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Deploy GPU Burn configmap in test-gpu-burn namespace")
 			gpuBurnConfigMap, err := gpuburn.CreateGPUBurnConfigMap(inittools.APIClient, burn.ConfigMapName,
-				burn.Namespace)
+				burn.Namespace, mig.ReadBurnTime())
 			Expect(err).ToNot(HaveOccurred(), "Error Creating gpu burn configmap: %v", err)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("The created gpuBurnConfigMap has name: %s",

@@ -23,17 +23,11 @@ The framework in this repository is designed to test NVIDIA's operators on a pre
 - Public Clouds Cluster (AWS, GCP and Azure) - For GPU Operator Only
 - On Premise Cluster
 
-
-
 ### General environment variables
-
-
 
 #### Mandatory:
 
 - `KUBECONFIG` - Path to kubeconfig file.
-
-
 
 #### Optional:
 
@@ -45,11 +39,9 @@ We use glog library for logging. In order to enable verbose logging the followin
 
 import ( . "github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools" )
 
-1. Need to export the following SHELL variable:
+2. Need to export the following SHELL variable:
 
 > export VERBOSE_LEVEL=100
-
-
 
 ##### Notes:
 
@@ -119,6 +111,7 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - *required when deploying fallback custom NFD catalogsource*
 - `NVIDIANETWORK_OFED_DRIVER_VERSION`: OFED Driver Version.  If not specified, the default driver version is used - *optional*
 - `NVIDIANETWORK_OFED_REPOSITORY`:  OFED Driver Repository.   If not specified, the default repository is used - *optional*
+- `NVIDIANETWORK_USE_PRECOMPILED_OFED`: boolean flag to select a kernel-matched precompiled DOCA/OFED driver from the Red Hat staging catalog (`nvidia/doca-driver-rhel9` or `nvidia/doca-driver-rhel10`). Matching lists tags from `registry.stage.redhat.io` using `openshift-config/pull-secret` (not the unauthenticated `catalog.stage.redhat.com` API). NicClusterPolicy is then set to staging pull fields: `ofedDriver.repository=registry.stage.redhat.io/nvidia`, `ofedDriver.image=doca-driver-rhel9|rhel10`, `ofedDriver.version` as the OFED stream only (for example `26.07-0.7.7.0`, not the full kernel tag), `forcePrecompiled=true`, and `imagePullSecrets=[ofed-staging-pull-secret]` after copying only `registry.stage.redhat.io` credentials from `openshift-config/pull-secret` into the `nvidia-network-operator` namespace (add `registry.stage.redhat.io` to the cluster pull secret). Ignored when `NVIDIANETWORK_OFED_DRIVER_VERSION` or `NVIDIANETWORK_OFED_REPOSITORY` is set. If no catalog image matches, the precompiled deploy and later RDMA tests in the suite are skipped and the existing NicClusterPolicy is left in place. Catalog or cluster lookup errors still fail the test. When this flag is true and a match is found, an existing `nic-cluster-policy` is deleted before recreate so a prior non-precompiled deploy can be replaced. Default is `false` - *optional*
 - `NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE`:  RDMA workload pod namespace - *required*
 - `NVIDIANETWORK_RDMA_LINK_TYPE` Layer 2 link type, Infinband or Ethernet - *required*
 - `NVIDIANETWORK_RDMA_MLX_DEVICE`: mlx5 device ID corresponding to the interface port connected to Spectrum or Infiniband switch - *required*
@@ -138,10 +131,11 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 
 CLI parameters for the script are controlled by the following ginkgo parameters which are delivered as `ARGS="-- [{parameter}...]"` for the `make run-tests` (check the examples):
 
-- `--nvidia-ci.max-gpu=n`, where n is a value of int type between 1 and maximum number of GPU's available. The parameter is used to choose how many GPU's nvidia-ci consumes.  Requesting for less than 1 or more than available GPU's are limited to respective limits. Parameter is used for single-mig and mixed-mig testcases also.  If not specified, value 1 is used.  - *optional*
+- `--nvidia-ci.max-gpu=n`, where n is a value of int type between 1 and maximum number of GPU's available. The parameter is used to choose how many GPU's nvidia-ci consumes.  Requesting for less than 1 or more than available GPU's are limited to respective limits. Parameter is used for single-mig, mixed-mig and time-slicing testcases also.  If not specified, value 1 is used.  - *optional*
+- `--nvidia-ci.burntime=n`. Default is 60. Controls the gpu_burn workload duration in seconds (30-300). Values outside the valid range are clamped to the closest limit. Increase this parameter value when gpu-burn pod does not show the periodic results of the burn and also the final 100% measurement is missing. Parameter is used for single-mig, mixed-mig and time-slicing testcases also. _optional_
 - `--single.mig.profile=n`, where n is typically a value of int type between 0-5. The parameter is used to choose the MIG profile from list of available MIG profiles (e.g. 1g.5gb is usually referenced with index 0).  If not specified, a valid random number is used. Typically values 0-5. - *optional*
 - `--mixed.mig.instances=xxx`, where xxx is a comma-separated string inside quotation marks (e.g. "2,0,1,1,0,0") The list of numbers represent how many instances are to be used for each profile when creating a pod. The first number indicates how many instances are to be used for the first profile etc. The instances of different profiles consume GPU slices in a different way. The name of the profile (e.g. 2g.10gb) describes the consumption of each instance (each instance would consume 2 slices and 10gb of memory). *optional*
-- `--mixed.mig.pod-delay=n`, where n is a number in range 0 - 75 (seconds). In mixed MIG testcase there are usually more than 1 pod launched (depends on available GPU and mixed.mig.instances parameter). Since GPU workload is 60 seconds, this parameter can be used to control the delay between the pod launches so that the pods are running completely simultaneously, mostly overlapping (e.g. 15-40), slightly overlapping (e.g. 40-60 seconds), or non-overlapping (over 60 seconds). Values outside valid range are reset to closest limit (either 0 or 75). *optional*
+- `--mixed.mig.pod-delay=n`, where n is a number in range 0 to burntime+15 (seconds). In mixed MIG testcase there are usually more than 1 pod launched (depends on available GPU and mixed.mig.instances parameter). This parameter controls the delay between the pod launches so that the pods are running completely simultaneously, mostly overlapping, slightly overlapping, or non-overlapping (over burntime seconds). Values outside valid range are reset to closest limit. _optional_
 - `--time.slicing.instances=xxx`, where xxx is a comma-separated string inside quotation marks (e.g. "1,2,3,4,5,6,7,8"). Default is "8". Any single value in the list must be at least 1 and up to max-running-slices. The list of numbers represent how many timeslices for each pod is to be reserved. In the previous example the first pod would get 1 time-slice, second one would get 2, etc. They may run simultaneously as long as they don't exceed the maximum value (e.g. 8) that can run simultaneously. Any pods that is not getting the resources will stay in pending state until the requested resources become available. Any pod with requested max-running-slices time-slices will run alone. Parameter time.slicing.limit restricts the sum of the values (to e.g. default 100). *** Note that multiple GPU's allow using multiples of max-running-slices (e.g. with 2 available GPU's and max-running-slices=8, you can use value of 16 in the list, like "9,10,11,12,13,14,15,16", as the timeslices are per GPU). *optional*
 - `--time.slicing.mon-after-pod=n`. Default is 0, meaning that process monitoring will start immediately. If there are 5 instances and mon-after-pod=4, the process monitoring would only start after 4th pod. There may be previous pods still running depending on how many time-slices they have been allocated. Any number exceeding the number of instances will prevent the process monitoring. *optional*
 - `--time.slicing.max-running-slices=n`. Minimum value is 2. Default is 8, meaning that there can be total of 8 slices running at any same time. *optional*
@@ -172,7 +166,7 @@ $ export NVIDIAGPU_CLEANUP=false  # Important: don't clean up after deployment
 $ make run-tests
 ```
 
-1. After the GPU Operator deployment completes successfully, run the MPS tests:
+2. After the GPU Operator deployment completes successfully, run the MPS tests:
 
 ```bash
 $ export TEST_FEATURES="mps"
@@ -207,7 +201,7 @@ It is recommended to execute the runner script through the `make run-tests` make
 
 #### Steps to run MIG tests:
 
-1. Run mig testcases (single-mig, mixed-mig and time-slicing) after nvidia-ci on any cluster, while selecting single.mig.profile=1 and 2 time-slicing pods, which do not run at the same time because their sum would exceed the maximum number of simultaneous time-slices (8). Without any mixed-mig arguments, it will run as default. As an example, limit and max-running-slices are set to non default values. In this case 2 pods are launched, first one with 3 timeslices run and consume 3 out of 9 timeslices, blocking the second pod from running because it requires all 9 timeslices. The second pod gets into running state only after the first pod has been completed.
+1. Run mig testcases (single-mig, mixed-mig and time-slicing) after nvidia-ci on any cluster, while selecting single.mig.profile=1 and 2 time-slicing pods, which do not run at the same time because their sum would exceed the maximum number of simultaneous time-slices (8). Without any mixed-mig arguments, it will run as default. As an example, limit and max-running-slices are set to non default values. In this case 2 pods are launched, first one with 3 timeslices run and consume 3 out of 9 timeslices, blocking the second pod from running because it requires all 9 timeslices. The second pod gets into running state only after the first pod has been completed. nvidia-ci.burntime controls the workload duration. nvidia-ci.max-gpu controls the amount of GPU's the testcase can utilize and how the logging success criteria is defined.
 
 ```bash
 $ export KUBECONFIG=/path/to/kubeconfig
@@ -218,10 +212,10 @@ $ export TEST_LABELS='nvidia-ci,gpu,single-mig,mixed-mig,time-slicing'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
-$ make run-tests ARGS="-- --single.mig.profile=1 --time.slicing.limit=15 --time.slicing.max-running-slices=9 --time.slicing.instances=3,9"
+$ make run-tests ARGS="-- --single.mig.profile=1 --time.slicing.limit=15 --time.slicing.max-running-slices=9 --time.slicing.instances=3,9" --nvidia-ci.burntime=120 --nvidia-ci.max-gpu=1
 ```
 
-1. Running only MIG testcases (make run-mig-tests) on an existing cluster which has GPU operator installed,
+2. Running only MIG testcases (make run-mig-tests) on an existing cluster which has GPU operator installed,
 
 e.g. after executing step 1. MIG testcase(s) can be used from either nvidiagpu or
 mig package. MIG is used in this example. In the other case, use `TEST_FEATURES="nvidiagpu"`
@@ -447,3 +441,84 @@ Executing nvidiagpu test-runner script
 scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="deploy || rdma-legacy-sriov" ./tests/nvidianetwork
 ```
+## Applying day-2 manifests to an existing cluster
+
+Separate from the Ginkgo test suites above, [`scripts/apply-manifests.sh`](scripts/apply-manifests.sh)
+applies (or deletes) a directory of plain YAML manifests against an already-installed OpenShift
+cluster, via the `make apply-manifests` / `make delete-manifests` targets. This is intended for
+one-off, day-2 cluster configuration (e.g. worker `MachineConfig`s, `ServiceAccount`s) that isn't
+part of a Ginkgo test flow.
+
+### Environment variables
+
+- `KUBECONFIG` - Path to kubeconfig file - _required_ (same variable used everywhere else in this repo)
+- `MANIFEST_DIR` - Directory containing the `*.yaml`/`*.yml` files to apply/delete - Defaults to `manifests/nno` - _optional_
+- `MANIFEST_VARS` - Space-separated list of `$VAR` tokens (`envsubst`'s own filter syntax) restricting variable substitution to only those variables. If unset, every variable present in the environment is eligible for substitution in every manifest - _optional_
+- `WAIT_FOR_WORKER_MCP` - `{true|false}` - When `true` and the action is `apply`, waits for the worker `MachineConfigPool` to finish rolling out after each manifest is applied, before moving on to the next one. `make apply-manifests` defaults this to `true` (since the default `MANIFEST_DIR=manifests/nno` contains `MachineConfig`s that reboot workers); the underlying script itself defaults to `false` - _optional_
+- `WORKER_MCP_NAME` - Name of the `MachineConfigPool` to wait on when `WAIT_FOR_WORKER_MCP=true` - Defaults to `worker` - _optional_
+- `WORKER_MCP_ROLLOUT_START_TIMEOUT` - How long to wait for the pool to *start* updating before giving up and moving on (tolerant: a manifest that doesn't touch worker `MachineConfig`s, like a `ServiceAccount`, never makes the pool start updating, so this timeout is expected to elapse harmlessly for those files) - Defaults to `2m` - _optional_
+- `WORKER_MCP_ROLLOUT_TIMEOUT` - How long to wait for the pool to *finish* updating once it starts (fatal: the whole run aborts if this elapses) - Defaults to `40m` - _optional_
+
+### Manifest file conventions
+
+- **Ordering**: files are applied in lexical filename order (reverse order on delete), so prefix
+  files with numbers (`00-`, `10-`, `20-`, ...) to control ordering when one manifest depends on
+  another (e.g. a namespace before objects created in it).
+- **Templating**: manifests may contain `${VAR}` / `$VAR` placeholders, substituted from the
+  current environment via `envsubst` before being applied.
+- **Required variables** (`<name>.env-required`): if a sibling file with the same base name and
+  a `.env-required` extension exists next to a manifest (e.g. `10-foo.yaml` ->
+  `10-foo.env-required`, one variable name per line, blank lines and `#`-comments ignored), the
+  script verifies every listed variable is set and non-empty before rendering that manifest,
+  failing fast instead of letting `envsubst` silently substitute an empty string for a variable
+  nobody remembered to export.
+- **Post-apply hooks** (`<name>.sh`): if a sibling file with the same base name and a `.sh`
+  extension exists next to a manifest (e.g. `20-foo.yaml` -> `20-foo.sh`), it is executed
+  immediately after that manifest is applied (and after any `WAIT_FOR_WORKER_MCP` wait
+  completes). This is how manifest-specific follow-up commands are attached without hardcoding
+  them into the generic script.
+
+### Manifests in `manifests/nno/`
+
+- `00-doca1-99-machine-config-blacklist-irdma.yaml` - `MachineConfig` (role `worker`) that
+  blacklists the `irdma` kernel module.
+- `10-doca1-99-machine-config-udev-network.yaml` - `MachineConfig` (role `worker`) that installs
+  a udev rules file mapping specific NIC MAC addresses to interface names (`ib_rdma0`/
+  `eth_rdma0`). The rules content is parameterized as base64 in `contents.source`, so
+  `DOCA1_UDEV_NETWORK_RULES_BASE64` **must be exported** before running `make apply-manifests`
+  (enforced by the sibling `10-doca1-99-machine-config-udev-network.env-required` file) - _required_
+- `20-doca1-rdma-service-account-default-namespace.yaml` - `ServiceAccount` named `rdma` in the
+  `default` namespace.
+- `21-doca1-rdma-privileged-scc.yaml` - `RoleBinding` in the `default` namespace that lets that
+  ServiceAccount `use` the `privileged` SCC. It references ClusterRole
+  `system:openshift:scc:privileged` and is applied after the ServiceAccount. It is a separate
+  binding from the shared `system:openshift:scc:privileged` RoleBinding, so deleting it removes
+  only this grant.
+
+### Example: apply all DOCA manifests
+
+```bash
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DOCA1_UDEV_NETWORK_RULES_BASE64="$(base64 <<'EOF' | tr -d '\n'
+SUBSYSTEM=="net",ACTION=="add",ATTR{address}=="<mac>",ATTR{type}=="1",NAME="ib_rdma0"
+SUBSYSTEM=="net",ACTION=="add",ATTR{address}=="<mac>",ATTR{type}=="1",NAME="eth_rdma0"
+EOF
+)"
+$ make apply-manifests
+```
+
+The two `MachineConfig` files each trigger a worker `MachineConfigPool` rollout (cordon/drain/
+reboot/uncordon per node); with the default `WAIT_FOR_WORKER_MCP=true`, `make apply-manifests`
+waits for that to finish after each one before moving on. The `rdma` ServiceAccount is applied
+next, then `21-doca1-rdma-privileged-scc.yaml` grants it the `privileged` SCC.
+
+To remove everything again:
+
+```bash
+$ export KUBECONFIG=/path/to/kubeconfig
+$ make delete-manifests
+```
+
+`delete-manifests` does not wait on the `MachineConfigPool` or run any hooks. It removes the
+manifests/nno files themselves, in reverse order, so the privileged SCC `RoleBinding` is deleted
+before the `rdma` ServiceAccount.

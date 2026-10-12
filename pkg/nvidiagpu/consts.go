@@ -9,6 +9,7 @@ const (
 	GPUPresentLabel                  = "nvidia.com/gpu.present"
 	GPUCapacityKey                   = "nvidia.com/gpu"
 	DevicePluginLabel                = "app=nvidia-device-plugin-daemonset"
+	DriverComponentLabelSelector     = "app.kubernetes.io/component=nvidia-driver"
 	OperatorGroupName                = "gpu-og"
 	OperatorDeployment               = "gpu-operator"
 	SubscriptionName                 = "gpu-subscription"

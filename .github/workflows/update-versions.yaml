@@ -45,6 +45,24 @@ jobs:
           SETTINGS_FILE_PATH: ".github/scripts/gpu_operator_versions/settings.json"
           TEST_TO_TRIGGER_FILE_PATH: ".github/scripts/generated-files/tests_to_trigger.txt"
           CHECK_CATALOG_AVAILABILITY: "true"
+      - name: Detect new GPU operator channels
+        id: new_gpu_channels
+        env:
+          VERSIONS_FILE: .github/scripts/gpu_operator_versions/versions.json
+        run: |
+          old_channels=$(git show HEAD:"${VERSIONS_FILE}" | jq -r '."gpu-operator" | keys[]')
+          new_channels=$(jq -r '."gpu-operator" | keys[]' "${VERSIONS_FILE}")
+          new_gpu=$(comm -23 <(echo "${new_channels}") <(echo "${old_channels}"))
+
+          if [ -z "${new_gpu}" ]; then
+            echo "No new GPU operator channels detected."
+            echo "channels=" >> "$GITHUB_OUTPUT"
+          else
+            echo "New GPU operator channels detected:"
+            echo "${new_gpu}"
+            echo "channels=$(echo "${new_gpu}" | paste -sd, -)" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Update Signed Versions
         id: read_signed_tests
         run: |
@@ -106,6 +124,145 @@ jobs:
             exit 0
           fi
           gh pr comment "${PR_NUMBER}" --body "${ALL_TRIGGERS}"
+
+      - name: Create issues for new GPU operator channels
+        if: steps.new_gpu_channels.outputs.channels != ''
+        uses: actions/github-script@v7
+        env:
+          NEW_CHANNELS: ${{ steps.new_gpu_channels.outputs.channels }}
+        with:
+          script: |
+            const channels = process.env.NEW_CHANNELS.split(',');
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'operator-available'
+            });
+
+            for (const channel of channels) {
+              const issueTitle = `New GPU operator channel available: v${channel}`;
+              const existingIssue = issues.find(issue => issue.title === issueTitle);
+
+              if (!existingIssue) {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: issueTitle,
+                  body: `A new GPU operator channel **v${channel}** has been detected.\n\n## Tasks\n\n- [ ] Ensure Prow jobs exist for this channel\n- [ ] Confirm the version appears in \`versions.json\` after the PR is merged\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                  labels: ['operator-available']
+                });
+                console.log(`Created issue for channel v${channel}`);
+              } else {
+                console.log(`Issue already exists for channel v${channel}: #${existingIssue.number}`);
+              }
+            }
+
+      - name: Monday catch-up for weekend-skipped signed tests
+        env:
+          GH_TOKEN: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
+          CURRENT_PR: ${{ steps.create-pr.outputs.pull-request-number }}
+        run: |
+          DAY_OF_WEEK=$(date +%u)
+          if [ "${DAY_OF_WEEK}" -ne 1 ]; then
+            exit 0
+          fi
+
+          echo "Monday catch-up: looking for weekend PRs missing signed tests..."
+          CUTOFF=$(date -d '3 days ago' +%Y-%m-%d)
+          SEARCH="in:title \"[Automatic] Update versions\" created:>=${CUTOFF}"
+
+          # Collect triggers already posted on today's PR (if any) for deduplication
+          MONDAY_TRIGGERS=""
+          if [ -n "${CURRENT_PR}" ]; then
+            MONDAY_TRIGGERS=$(gh pr view "${CURRENT_PR}" --json comments --jq '.comments[].body' 2>/dev/null || true)
+          fi
+
+          for STATE in open merged; do
+            PRS=$(gh pr list --search "${SEARCH}" --state "${STATE}" --json number --jq '.[].number')
+
+            for PR in ${PRS}; do
+              if [ -n "${CURRENT_PR}" ] && [ "${PR}" = "${CURRENT_PR}" ]; then
+                continue
+              fi
+
+              # Extract signed /test commands from the PR description
+              TRIGGERS=$(gh pr view "${PR}" --json body --jq '.body' | grep -oE '/test [^ ]*-signed' || true)
+              if [ -z "${TRIGGERS}" ]; then
+                continue
+              fi
+
+              # Remove triggers already posted as comments on this PR
+              PR_COMMENTS=$(gh pr view "${PR}" --json comments --jq '.comments[].body')
+              TRIGGERS=$(echo "${TRIGGERS}" | while read -r line; do
+                [ -z "${line}" ] && continue
+                echo "${PR_COMMENTS}" | grep -qF "${line}" || echo "${line}"
+              done)
+              if [ -z "${TRIGGERS}" ]; then
+                echo "PR #${PR}: all signed triggers already posted."
+                continue
+              fi
+
+              # Remove triggers already covered by today's Monday PR
+              if [ -n "${MONDAY_TRIGGERS}" ]; then
+                TRIGGERS=$(echo "${TRIGGERS}" | while read -r line; do
+                  [ -z "${line}" ] && continue
+                  echo "${MONDAY_TRIGGERS}" | grep -qF "${line}" || echo "${line}"
+                done)
+              fi
+              if [ -z "${TRIGGERS}" ]; then
+                echo "PR #${PR}: all signed triggers already covered by today's PR #${CURRENT_PR}."
+                continue
+              fi
+
+              if [ "${STATE}" = "open" ]; then
+                echo "Posting signed triggers on open weekend PR #${PR}"
+                gh pr comment "${PR}" --body "${TRIGGERS}"
+              else
+                echo "Creating catch-up PR for merged weekend PR #${PR}"
+                BRANCH="update-versions/${{ github.run_id }}-${PR}-signed-monday"
+
+                # Reuse existing catch-up PR if one already exists (e.g., workflow re-run)
+                CATCHUP_NUMBER=$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number' 2>/dev/null || true)
+
+                if [ -z "${CATCHUP_NUMBER}" ]; then
+                  MAIN_SHA=$(gh api repos/{owner}/{repo}/git/ref/heads/main --jq '.object.sha')
+
+                  if ! gh api repos/{owner}/{repo}/git/ref/heads/"${BRANCH}" > /dev/null 2>&1; then
+                    # Branch doesn't exist: create commit then branch
+                    TREE_SHA=$(gh api repos/{owner}/{repo}/git/commits/"${MAIN_SHA}" --jq '.tree.sha')
+                    COMMIT_SHA=$(gh api repos/{owner}/{repo}/git/commits -X POST \
+                      -f message="Signed test catch-up for weekend PR #${PR}" \
+                      -f "tree=${TREE_SHA}" -f "parents[]=${MAIN_SHA}" --jq '.sha')
+                    gh api repos/{owner}/{repo}/git/refs -X POST \
+                      -f ref="refs/heads/${BRANCH}" -f sha="${COMMIT_SHA}"
+                  else
+                    # Branch exists without a PR (partial failure): add commit only if needed
+                    BRANCH_SHA=$(gh api repos/{owner}/{repo}/git/ref/heads/"${BRANCH}" --jq '.object.sha')
+                    if [ "${BRANCH_SHA}" = "${MAIN_SHA}" ]; then
+                      TREE_SHA=$(gh api repos/{owner}/{repo}/git/commits/"${MAIN_SHA}" --jq '.tree.sha')
+                      COMMIT_SHA=$(gh api repos/{owner}/{repo}/git/commits -X POST \
+                        -f message="Signed test catch-up for weekend PR #${PR}" \
+                        -f "tree=${TREE_SHA}" -f "parents[]=${MAIN_SHA}" --jq '.sha')
+                      gh api repos/{owner}/{repo}/git/refs/heads/"${BRANCH}" -X PATCH \
+                        -f sha="${COMMIT_SHA}"
+                    fi
+                  fi
+
+                  PR_BODY=$(printf 'Catch-up PR for signed tests skipped on weekend PR #%s.\n\nSigned triggers:\n```\n%s\n```' "${PR}" "${TRIGGERS}")
+                  CATCHUP_URL=$(gh pr create \
+                    --title "[Automatic] Update versions, run ID: ${{ github.run_id }} - #${PR} / signed_monday" \
+                    --body "${PR_BODY}" \
+                    --base main --head "${BRANCH}")
+                  CATCHUP_NUMBER=$(echo "${CATCHUP_URL}" | grep -oE '[0-9]+$')
+                fi
+
+                echo "Posting signed triggers on catch-up PR #${CATCHUP_NUMBER}"
+                gh pr comment "${CATCHUP_NUMBER}" --body "${TRIGGERS}"
+              fi
+            done
+          done
 
       - name: Notify on failure
         if: failure()

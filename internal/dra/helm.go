@@ -63,6 +63,20 @@ func NewDriver() (*Driver, error) {
 					"enabled": true,
 				},
 			},
+			"controller": map[string]interface{}{
+				"tolerations": []map[string]interface{}{
+					{
+						"key":      "node-role.kubernetes.io/master",
+						"operator": "Exists",
+						"effect":   "NoSchedule",
+					},
+					{
+						"key":      "node-role.kubernetes.io/control-plane",
+						"operator": "Exists",
+						"effect":   "NoSchedule",
+					},
+				},
+			},
 		},
 	}
 	if temp.ChartVersion != "" {
