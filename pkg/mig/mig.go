@@ -316,22 +316,6 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	err = CheckMigConfigState(workerNodeSelector)
 	Expect(err).ToNot(HaveOccurred(), "Could not find at least one node with label 'nvidia.com/mig.config.state' set to 'success'")
 
-	if migDefaults == nil {
-		By("Read MIG defaults from node labels (CLI parameter was not provided)")
-		var migErr error
-		migDefaults, migErr = ReadMIGDefaultsFromNode(workerNodeSelector)
-		Expect(migErr).ToNot(HaveOccurred(), "error reading MIG defaults from node labels")
-		nodeGPUCount, gpuErr := GPUCountFromNode(inittools.APIClient, workerNodeSelector)
-		Expect(gpuErr).ToNot(HaveOccurred(), "error getting GPU count from GPU nodes: %v", gpuErr)
-		SumOfMixedCnt = UpdateMIGCapabilities(migCapabilities, migDefaults, migStrategy, ClampMaxGPU(nodeGPUCount))
-		glog.V(gpuparams.Gpu10LogLevel).Infof("Updated MigCapabilities from node defaults: %v", migCapabilities)
-		if SumOfMixedCnt == 0 {
-			glog.V(gpuparams.Gpu10LogLevel).Infof("%s strategy=%s count=%d", colorLog(colorGreen+colorBold,
-				"Dry run, no pod creation because of node defaults:"),
-				migStrategy, SumOfMixedCnt)
-		}
-	}
-
 	defer func() {
 		var wait bool
 		defer GinkgoRecover()
