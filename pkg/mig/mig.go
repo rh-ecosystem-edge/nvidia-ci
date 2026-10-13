@@ -71,6 +71,12 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	By("Cleanup if necessary")
 	CleanupWorkloadResources(burn)
 
+	// Get the actual GPU count from the nodes and apply the nvidia-ci.max-gpu parameter
+	By("Get GPU count and apply nvidia-ci.max-gpu parameter")
+	singleGPUCount, err := GPUCountFromNode(inittools.APIClient, workerNodeSelector)
+	Expect(err).ToNot(HaveOccurred(), "error getting GPU count from GPU nodes: %v", err)
+	effectiveGPUCount := ClampMaxGPU(singleGPUCount)
+
 	// Read MIG parameter from CLI parameter, returns -1 for random selection
 	// Select MIG profile and index to be used later
 	By("Read single.mig.profile parameter and select MIG profile")
@@ -167,12 +173,6 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 			Expect(err).ToNot(HaveOccurred(), "Error waiting for gpu-burn configmap to be deleted: %v", err)
 		}
 	}()
-
-	// Deploy GPU Burn pod with MIG single strategy configuration
-	By("Get GPU count and apply nvidia-ci.max-gpu parameter")
-	singleGPUCount, err := GPUCountFromNode(inittools.APIClient, workerNodeSelector)
-	Expect(err).ToNot(HaveOccurred(), "error getting GPU count from GPU nodes: %v", err)
-	effectiveGPUCount := ClampMaxGPU(singleGPUCount)
 
 	By("Deploy gpu-burn pod with MIG configuration in test-gpu-burn namespace")
 	// Each GPU provides Total instances of the selected profile; scale by the number of GPUs consumed.
