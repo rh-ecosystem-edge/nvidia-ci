@@ -320,6 +320,21 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 	err = CheckMigConfigState(workerNodeSelector)
 	Expect(err).ToNot(HaveOccurred(), "Could not find at least one node with label 'nvidia.com/mig.config.state' set to 'success'")
 
+	defer func() {
+		var wait bool
+		defer GinkgoRecover()
+		glog.V(gpuparams.Gpu100LogLevel).Infof("defer1 (set MIG labels to non-mig on GPU nodes)")
+		// Check if test has already failed - if so, skip expensive ClusterPolicy wait
+		specReport := CurrentSpecReport()
+		if specReport.Failed() {
+			glog.V(gpuparams.GpuLogLevel).Infof("Test has already failed, skipping ClusterPolicy wait in cleanup")
+			wait = false
+		} else {
+			wait = true
+		}
+		ResetMIGLabelsToDisabled(workerNodeSelector, wait)
+	}()
+
 	if migDefaults == nil {
 		By("Read MIG defaults from node labels (CLI parameter was not provided)")
 		var migErr error
@@ -335,21 +350,6 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 				migStrategy, SumOfMixedCnt)
 		}
 	}
-
-	defer func() {
-		var wait bool
-		defer GinkgoRecover()
-		glog.V(gpuparams.Gpu100LogLevel).Infof("defer1 (set MIG labels to non-mig on GPU nodes)")
-		// Check if test has already failed - if so, skip expensive ClusterPolicy wait
-		specReport := CurrentSpecReport()
-		if specReport.Failed() {
-			glog.V(gpuparams.GpuLogLevel).Infof("Test has already failed, skipping ClusterPolicy wait in cleanup")
-			wait = false
-		} else {
-			wait = true
-		}
-		ResetMIGLabelsToDisabled(workerNodeSelector, wait)
-	}()
 
 	// Check and create test-gpu-burn namespace if it is missing
 	By("Create test-gpu-burn namespace")
