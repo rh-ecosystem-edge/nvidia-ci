@@ -322,7 +322,9 @@ func TestMixedMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, b
 
 	if migDefaults == nil {
 		By("Read MIG defaults from node labels (CLI parameter was not provided)")
-		migDefaults = ReadMIGDefaultsFromNode(workerNodeSelector)
+		var migErr error
+		migDefaults, migErr = ReadMIGDefaultsFromNode(workerNodeSelector)
+		Expect(migErr).ToNot(HaveOccurred(), "error reading MIG defaults from node labels")
 		nodeGPUCount, gpuErr := GPUCountFromNode(inittools.APIClient, workerNodeSelector)
 		Expect(gpuErr).ToNot(HaveOccurred(), "error getting GPU count from GPU nodes: %v", gpuErr)
 		SumOfMixedCnt = UpdateMIGCapabilities(migCapabilities, migDefaults, migStrategy, ClampMaxGPU(nodeGPUCount))
@@ -461,9 +463,10 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 	burnImageName map[string]string, workerNodeSelector map[string]string, cleanupAfterTest bool) {
 
 	By("Check GPU count on GPU nodes")
-	gpuCount, err := GPUCountFromNode(inittools.APIClient, workerNodeSelector)
+	nodeGPUCount, err := GPUCountFromNode(inittools.APIClient, workerNodeSelector)
 	Expect(err).ToNot(HaveOccurred(), "error getting GPU count from GPU nodes: %v", err)
-	glog.V(gpuparams.Gpu10LogLevel).Infof("GPU count from node description: %d", gpuCount)
+	gpuCount := ClampMaxGPU(nodeGPUCount)
+	glog.V(gpuparams.Gpu10LogLevel).Infof("GPU count from node: %d, effective (clamped): %d", nodeGPUCount, gpuCount)
 
 	By("Read and validate time.slicing.instances")
 	_ = ReadTimeSlicingParameters(gpuCount)
@@ -909,20 +912,19 @@ func MigDefaultsFromCounts(counts []int, migCapabilities []MIGProfileInfo) []Mig
 // ReadMIGDefaultsFromNode reads MIG instance count defaults from the GPU node's GFD labels
 // (nvidia.com/mig-<profile>.count) and returns them as []MigDefaultInfo with profile names.
 // Call this after MIG strategy is configured and ClusterPolicy is ready so that labels exist.
-func ReadMIGDefaultsFromNode(workerNodeSelector map[string]string) []MigDefaultInfo {
+func ReadMIGDefaultsFromNode(workerNodeSelector map[string]string) ([]MigDefaultInfo, error) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "ReadMIGDefaultsFromNode"))
 
 	migDefaults, err := GetDefaultsForMixedStrategy(inittools.APIClient, workerNodeSelector)
 	if err != nil {
-		glog.V(gpuparams.GpuLogLevel).Infof("Could not read MIG defaults from node labels: %v", err)
-		return nil
+		return nil, fmt.Errorf("could not read MIG defaults from node labels: %w", err)
 	}
 
 	for i, d := range migDefaults {
 		glog.V(gpuparams.GpuLogLevel).Infof("MIG default [%d]: profile=%s count=%d", i, d.MigName, d.Count)
 	}
 	glog.V(gpuparams.GpuLogLevel).Infof("Using MIG defaults from node labels: %v", migDefaults)
-	return migDefaults
+	return migDefaults, nil
 }
 
 // ReadBurnTime returns the effective gpu_burn duration in seconds from --nvidia-ci.burntime.
@@ -983,7 +985,8 @@ func ReadTimeSlicingParameters(gpuCount int) []int {
 		Expect(v).To(BeNumerically(">=", 0),
 			"time.slicing.instances value at index %d must be non-negative (got %d)", i, v)
 		Expect(v).To(BeNumerically("<=", MaxTsSlices*gpuCount),
-			"time.slicing.instances value at index %d is %d; must not exceed time.slicing.max-running-slices (%d)", i, v, MaxTsSlices)
+			"time.slicing.instances value at index %d is %d; must not exceed max-running-slices (%d) * GPU count (%d) = %d",
+			i, v, MaxTsSlices, gpuCount, MaxTsSlices*gpuCount)
 		sum += v
 	}
 	Expect(sum).To(BeNumerically("<=", LimitForTsSlices*gpuCount),
@@ -2068,8 +2071,6 @@ func GetGPUBurnPodLogs(gpuMigPodPulled *pod.Builder, multiplier int) string {
 // CheckGPUBurnPodLogs parses the GPU burn pod logs and validates that the execution
 // was successful. It checks for "GPU X: OK" messages for each MIG instance and verifies
 // that the processing completed successfully (100.0% proc'd).
-// RISK: If not using the max amount of GPU'sthe allocated GPU's may not be the lowest numbered GPU's, so the check may fail.
-// To avoid this, the testcase may request the max amount of GPU's with the nvidia-ci.max-gpu parameter.
 func CheckGPUBurnPodLogs(gpuBurnMigLogs string, migInstanceCount int) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Parse and validate GPU burn pod logs with MIG configuration"))
 	for i := 0; i < migInstanceCount; i++ {

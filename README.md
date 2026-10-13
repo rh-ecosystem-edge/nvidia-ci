@@ -139,7 +139,7 @@ CLI parameters for the script are controlled by the following ginkgo parameters 
 - `--time.slicing.instances=xxx`, where xxx is a comma-separated string inside quotation marks (e.g. "1,2,3,4,5,6,7,8"). Default is "8". Any single value in the list must be at least 1 and up to max-running-slices. The list of numbers represent how many timeslices for each pod is to be reserved. In the previous example the first pod would get 1 time-slice, second one would get 2, etc. They may run simultaneously as long as they don't exceed the maximum value (e.g. 8) that can run simultaneously. Any pods that is not getting the resources will stay in pending state until the requested resources become available. Any pod with requested max-running-slices time-slices will run alone. Parameter time.slicing.limit restricts the sum of the values (to e.g. default 100). *** Note that multiple GPU's allow using multiples of max-running-slices (e.g. with 2 available GPU's and max-running-slices=8, you can use value of 16 in the list, like "9,10,11,12,13,14,15,16", as the timeslices are per GPU). *optional*
 - `--time.slicing.mon-after-pod=n`. Default is 0, meaning that process monitoring will start immediately. If there are 5 instances and mon-after-pod=4, the process monitoring would only start after 4th pod. There may be previous pods still running depending on how many time-slices they have been allocated. Any number exceeding the number of instances will prevent the process monitoring. *optional*
 - `--time.slicing.max-running-slices=n`. Minimum value is 2. Default is 8, meaning that there can be total of 8 slices running at any same time. *optional*
-- `--time.slicing.limit=n`. Minimum value is 2. Default is 100, meaning that there can be up to e.g. 100 slices launched in total by the testcase. *** Note that GPU amount  *optional*
+- `--time.slicing.limit=n`. Minimum value is 2. Default is 100, meaning that there can be up to e.g. 100 slices launched in total by the testcase. *** Note that the limit applies per GPU; the total limit is multiplied by the GPU count. *optional*
 
 ### Testing MPS with GPU Operator
 
@@ -201,7 +201,7 @@ It is recommended to execute the runner script through the `make run-tests` make
 
 #### Steps to run MIG tests:
 
-1. Run mig testcases (single-mig, mixed-mig and time-slicing) after nvidia-ci on any cluster, while selecting single.mig.profile=1 and 2 time-slicing pods, which do not run at the same time because their sum would exceed the maximum number of simultaneous time-slices (8). Without any mixed-mig arguments, it will run as default. As an example, limit and max-running-slices are set to non default values. In this case 2 pods are launched, first one with 3 timeslices run and consume 3 out of 9 timeslices, blocking the second pod from running because it requires all 9 timeslices. The second pod gets into running state only after the first pod has been completed. nvidia-ci.burntime controls the workload duration. nvidia-ci.max-gpu controls the amount of GPU's the testcase can utilize and how the logging success criteria is defined.
+1. Run mig testcases (single-mig, mixed-mig and time-slicing) after nvidia-ci on any cluster, while selecting single.mig.profile=1 and 2 time-slicing pods, which do not run at the same time because their sum would exceed the maximum number of simultaneous time-slices (8). Without any mixed-mig arguments, it will run as default. As an example, limit and max-running-slices are set to non default values. In this case 2 pods are launched, first one with 3 timeslices run and consume 3 out of 9 timeslices, blocking the second pod from running because it requires all 9 timeslices. The second pod gets into running state only after the first pod has been completed. time.slicing.limit would restrict the total number of slices to 15, allowing only 3 more slices to be used. It is relevant in cases where more than default limit timeslices are requested. nvidia-ci.burntime controls the workload duration. nvidia-ci.max-gpu controls the amount of GPU's the testcase can request and how the logging success criteria is defined. In this case 2 GPU's are requested, so relevant per GPU resource requests (both "instances" parameters) and limitations (max-running-slices and limit) are also multiplied by 2, if there really are 2 GPU's that can be utilized.
 
 ```bash
 $ export KUBECONFIG=/path/to/kubeconfig
@@ -212,7 +212,7 @@ $ export TEST_LABELS='nvidia-ci,gpu,single-mig,mixed-mig,time-slicing'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
-$ make run-tests ARGS="-- --single.mig.profile=1 --time.slicing.limit=15 --time.slicing.max-running-slices=9 --time.slicing.instances=3,9" --nvidia-ci.burntime=120 --nvidia-ci.max-gpu=1
+$ make run-tests ARGS="-- --single.mig.profile=1 --time.slicing.limit=15 --time.slicing.max-running-slices=9 --time.slicing.instances=3,9 --nvidia-ci.burntime=120 --nvidia-ci.max-gpu=2"
 ```
 
 2. Running only MIG testcases (make run-mig-tests) on an existing cluster which has GPU operator installed,
