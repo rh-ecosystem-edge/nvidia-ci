@@ -201,7 +201,7 @@ It is recommended to execute the runner script through the `make run-tests` make
 
 #### Steps to run MIG tests:
 
-1. Run mig testcases (single-mig, mixed-mig and time-slicing) after nvidia-ci on any cluster, while selecting single.mig.profile=1 and 2 time-slicing pods, which do not run at the same time because their sum would exceed the maximum number of simultaneous time-slices (8). Without any mixed-mig arguments, it will run as default. As an example, limit and max-running-slices are set to non default values. In this case 2 pods are launched, first one with 3 timeslices run and consume 3 out of 9 timeslices, blocking the second pod from running because it requires all 9 timeslices. The second pod gets into running state only after the first pod has been completed. time.slicing.limit would restrict the total number of slices to 15, allowing only 3 more slices to be used. It is relevant in cases where more than default limit timeslices are requested. nvidia-ci.burntime controls the workload duration. nvidia-ci.max-gpu controls the amount of GPU's the testcase can request and how the logging success criteria is defined. In this case 2 GPU's are requested, so relevant per GPU resource requests (both "instances" parameters) and limitations (max-running-slices and limit) are also multiplied by 2, if there really are 2 GPU's that can be utilized.
+1. Run mig testcases (single-mig, mixed-mig and time-slicing) after nvidia-ci on any cluster, while selecting single.mig.profile=1 and 2 time-slicing pods, which do not run at the same time because their sum would exceed the maximum number of simultaneous time-slices (9). Without any mixed-mig arguments, it will run as default. As an example, limit and max-running-slices are set to non default values. In this case 2 pods are launched, first one with 3 timeslices run and consume 3 out of 9 timeslices, blocking the second pod from running because it requires all 9 timeslices. The second pod gets into running state only after the first pod has been completed. time.slicing.limit would restrict the total number of slices to 15, allowing only 3 more slices to be used. It is relevant in cases where more than default limit timeslices are requested. nvidia-ci.burntime controls the workload duration. nvidia-ci.max-gpu controls the amount of GPU's the testcase can request and how the logging success criteria is defined. If more than 1 GPU's are requested, the total pool of GPU resources are multiplied by the GPU amount, and allowing use of more than max-running-slices in the time.slicing.instances parameter.
 
 ```bash
 $ export KUBECONFIG=/path/to/kubeconfig
@@ -212,7 +212,7 @@ $ export TEST_LABELS='nvidia-ci,gpu,single-mig,mixed-mig,time-slicing'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_CLEANUP=false
-$ make run-tests ARGS="-- --single.mig.profile=1 --time.slicing.limit=15 --time.slicing.max-running-slices=9 --time.slicing.instances=3,9 --nvidia-ci.burntime=120 --nvidia-ci.max-gpu=2"
+$ make run-tests ARGS="-- --single.mig.profile=1 --time.slicing.limit=15 --time.slicing.max-running-slices=9 --time.slicing.instances=3,9 --nvidia-ci.burntime=120 --nvidia-ci.max-gpu=1"
 ```
 
 2. Running only MIG testcases (make run-mig-tests) on an existing cluster which has GPU operator installed,
