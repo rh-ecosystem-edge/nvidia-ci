@@ -71,7 +71,6 @@ func TestSingleMIGGPUWorkload(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUConfig, 
 	By("Cleanup if necessary")
 	CleanupWorkloadResources(burn)
 
-
 	// Get the actual GPU count from the nodes and apply the nvidia-ci.max-gpu parameter
 	By("Get GPU count and apply nvidia-ci.max-gpu parameter")
 	effectiveGPUCount := EffectiveGPUCount(workerNodeSelector)
