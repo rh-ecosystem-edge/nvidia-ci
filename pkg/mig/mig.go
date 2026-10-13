@@ -479,14 +479,6 @@ func TestGPUWorkloadWithTimeslicing(nvidiaGPUConfig *nvidiagpuconfig.NvidiaGPUCo
 	By("Read and validate time.slicing.instances")
 	_ = ReadTimeSlicingParameters(gpuCount)
 
-	By("Check GPU count on GPU nodes")
-	gpuCount, err := GPUCountFromNode(inittools.APIClient, workerNodeSelector)
-	Expect(err).ToNot(HaveOccurred(), "error getting GPU count from GPU nodes: %v", err)
-	glog.V(gpuparams.Gpu10LogLevel).Infof("GPU count from node description: %d", gpuCount)
-
-	By("Read and validate time.slicing.instances")
-	_ = ReadTimeSlicingParameters(gpuCount)
-
 	// ***** Cleaning up previous GPU Burn resources
 	By("Cleanup if necessary")
 	CleanupWorkloadResources(burn)
@@ -1000,10 +992,10 @@ func ReadTimeSlicingParameters(gpuCount int) []int {
 	for i, v := range out {
 		Expect(v).To(BeNumerically(">=", 0),
 			"time.slicing.instances value at index %d must be non-negative (got %d)", i, v)
-			Expect(v).To(BeNumerically("<=", MaxTsSlices*gpuCount),
+		Expect(v).To(BeNumerically("<=", MaxTsSlices*gpuCount),
 			"time.slicing.instances value at index %d is %d; must not exceed max-running-slices (%d) * GPU count (%d) = %d",
 			i, v, MaxTsSlices, gpuCount, MaxTsSlices*gpuCount)
-			sum += v
+		sum += v
 	}
 	Expect(sum).To(BeNumerically("<=", LimitForTsSlices*gpuCount),
 		"sum of time-slicing instance counts %v is %d; must not exceed time.slicing.limit (%d) * GPU count (%d)", out, sum, LimitForTsSlices, gpuCount)
@@ -2097,8 +2089,6 @@ func GetGPUBurnPodLogs(gpuMigPodPulled *pod.Builder, multiplier int) string {
 // CheckGPUBurnPodLogs parses the GPU burn pod logs and validates that the execution
 // was successful. It checks for "GPU X: OK" messages for each MIG or GPU instance and verifies
 // that the processing completed successfully (100.0% proc'd).
-// RISK: If not using the max amount of GPU'sthe allocated GPU's may not be the lowest numbered GPU's, so the check may fail.
-// To avoid this, the testcase may request the max amount of GPU's with the nvidia-ci.max-gpu parameter.
 func CheckGPUBurnPodLogs(gpuBurnMigLogs string, migInstanceCount int) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Parse and validate GPU burn pod logs"))
 	for i := 0; i < migInstanceCount; i++ {
