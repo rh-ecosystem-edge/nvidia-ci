@@ -7,6 +7,8 @@ FROM quay.io/openshift/origin-cli:${OC_VERSION} as oc-cli
 
 FROM quay.io/operator-framework/operator-sdk:${OPERATOR_SDK_VERSION} as operator-sdk
 
+FROM ghcr.io/regclient/regctl:v0.11.6@sha256:db2e5f3a5de80b24d53fea5af9edf7021a53f2689f1e166ef2f0e200dad4fb3a as regctl
+
 FROM registry.access.redhat.com/ubi9/go-toolset:${GO_TOOLSET_VERSION} as ginkgo-builder
 
 USER 1001
@@ -42,9 +44,10 @@ USER root
 # Copying binaries
 COPY --from=oc-cli /usr/bin/oc /usr/bin/oc
 COPY --from=operator-sdk /usr/local/bin/operator-sdk /usr/local/bin/operator-sdk
+COPY --from=regctl /regctl /usr/local/bin/regctl
 
 # Install dependencies combined into single layer to reduce image size
-RUN dnf install -y jq gettext && \
+RUN dnf install -y jq gettext skopeo && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum
 

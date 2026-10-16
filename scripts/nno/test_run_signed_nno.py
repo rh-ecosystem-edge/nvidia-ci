@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from textwrap import dedent
 import unittest
 
 from test_validate_signed_request import IMAGE, REQUEST, SCRIPT as VALIDATOR
@@ -110,12 +111,60 @@ class SignedInvocationTests(unittest.TestCase):
 
     @unittest.skipUnless(os.environ.get("DOCA2_RELEASE_DIR"), "set DOCA2_RELEASE_DIR to check release callers")
     def test_release_signed_callers(self):
-        registry = Path(os.environ["DOCA2_RELEASE_DIR"]) / "ci-operator/step-registry/nno/doca2"
+        registry = Path(os.environ["DOCA2_RELEASE_DIR"]) / "ci-operator/step-registry/nno"
         for directory in ["install-signed-driver", "test-gpudirect"]:
-            script = registry / directory / f"nno-doca2-{directory}-commands.sh"
+            script = registry / directory / f"nno-{directory}-commands.sh"
             result = subprocess.run(["bash", str(script)], cwd=REPO, env=self.env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_generic_marker_skips_signed_stages_before_profile_or_tests(self):
+        (self.root / "shared/skip-work-steps").touch()
+        (self.profile / "nno-e2e-env").unlink()
+        for stage in ["deploy", "gpudirect"]:
+            result = self.invoke(stage)
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("Skipping work step", result.stdout)
+        self.assertFalse(self.capture.exists())
+
+    def test_failed_discovery_cannot_run_signed_stages(self):
+        (self.root / "shared/nno-discovery-result.json").write_text(json.dumps(
+            {"outcome": "failed", "selected": None}))
+        for stage in ["deploy", "gpudirect"]:
+            self.assertNotEqual(self.invoke(stage).returncode, 0)
+        self.assertFalse(self.capture.exists())
+
+    def test_automatic_stages_verify_worker_mapping_without_registry_access(self):
+        oc_called = self.root / "oc-called"
+        self.env["OC_CALLED"] = str(oc_called)
+        oc = self.root / "bin/oc"
+        oc.write_text(dedent(f"""\
+            #!{sys.executable}
+            import os
+            import sys
+            from pathlib import Path
+
+            Path(os.environ["OC_CALLED"]).touch()
+            sys.exit(1)
+        """))
+        oc.chmod(0o755)
+        selected = dict(REQUEST["pairs"][0]["driver_requested"], manifest_digest="sha256:" + "a" * 64,
+                        config_digest="sha256:" + "b" * 64, release={"installer_version": "4.22.15"})
+        path = self.root / "shared/nno-discovery-result.json"
+        path.write_text(json.dumps(dict(outcome="selected", job_name="local", build_id="local", selected=selected)))
+
+        # Matching worker evidence lets both signed stages pass.
+        for stage in ["deploy", "gpudirect"]:
+            result = self.invoke(stage)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+        # A different selected digest must fail verification.
+        selected["manifest_digest"] = "sha256:" + "c" * 64
+        path.write_text(json.dumps(dict(outcome="selected", job_name="local", build_id="local", selected=selected)))
+        for stage in ["deploy", "gpudirect"]:
+            result = self.invoke(stage)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("worker runtime digest", result.stderr)
+        self.assertFalse(oc_called.exists())
 
 if __name__ == "__main__":
     unittest.main()
