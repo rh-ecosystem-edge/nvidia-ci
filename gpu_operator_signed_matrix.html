@@ -6,6 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift (precompiled/signed)</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    .failed-branch {
+      color: #f44336;
+      font-weight: bold;
+    }
+  </style>
 </head>
 
 <body>
@@ -419,6 +425,12 @@
       <tbody>
         
         <tr>
+          <td class="version-cell">4.20.43</td>
+          <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/769/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.20-stable-nvidia-gpu-operator-e2e-26-7-x-signed/2111082720879710208/artifacts/nvidia-gpu-operator-e2e-26-7-x-signed/gpu-operator-e2e" target="_blank" class="success-link">26.7.2</a></td>
+          <td>580.173.02, 595.71.05, 610.57.04, <span class="failed-branch">615.71.09</span></td>
+        </tr>
+        
+        <tr>
           <td class="version-cell">4.20.41</td>
           <td><a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/732/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.20-stable-nvidia-gpu-operator-e2e-26-7-x-signed/2107045797051764736/artifacts/nvidia-gpu-operator-e2e-26-7-x-signed/gpu-operator-e2e" target="_blank" class="success-link">26.7.1</a>, <a href="https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/732/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.20-stable-nvidia-gpu-operator-e2e-26-3-x-signed/2107045797009821696/artifacts/nvidia-gpu-operator-e2e-26-3-x-signed/gpu-operator-e2e" target="_blank" class="success-link">26.3.3</a></td>
           <td>580.173.02, 595.71.05, 610.57.04</td>
@@ -668,7 +680,7 @@
     </div>
         </div>
   </div>  <div class="last-updated">
-    Last updated: 2026-10-11 07:16:22 UTC
+    Last updated: 2026-10-17 09:31:05 UTC
   </div>
 </body>
 </html>
