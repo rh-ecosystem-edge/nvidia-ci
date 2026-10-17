@@ -7,6 +7,11 @@ case "${1:-}" in
   *) echo "Usage: $0 deploy | gpudirect" >&2; exit 1 ;;
 esac
 
+if [[ -f "${SHARED_DIR}/skip-work-steps" ]]; then
+  echo "Skipping work step: skip-work-steps marker is present."
+  exit 0
+fi
+
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 profile="${CLUSTER_PROFILE_DIR}/nno-e2e-env"
 if [[ ! -f "${profile}" ]]; then
@@ -14,6 +19,7 @@ if [[ ! -f "${profile}" ]]; then
   exit 1
 fi
 set -o allexport
+# shellcheck disable=SC1090
 source "${profile}"
 set +o allexport
 
@@ -28,7 +34,8 @@ if [[ -z "$(tr -d '\n' < "${SHARED_DIR}/dpf-openshift-version")" ]]; then
   echo "Signed request has an empty dpf-openshift-version" >&2
   exit 1
 fi
-export NVIDIANETWORK_OFED_DRIVER_PULLSPEC="$(tr -d '\n' < "${SHARED_DIR}/ofed-pullspec")"
+NVIDIANETWORK_OFED_DRIVER_PULLSPEC="$(tr -d '\n' < "${SHARED_DIR}/ofed-pullspec")"
+export NVIDIANETWORK_OFED_DRIVER_PULLSPEC
 if [[ -z "${NVIDIANETWORK_OFED_DRIVER_PULLSPEC}" ]]; then
   echo "Signed request has an empty ofed-pullspec" >&2
   exit 1
@@ -44,6 +51,8 @@ export NVIDIANETWORK_RDMA_NETWORK_TYPE=shared-device
 export NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE=default
 export NVIDIANETWORK_RDMA_GPUDIRECT="${gpudirect}"
 export NNO_STEP_NAME="network-operator-e2e-signed-${1}"
-export NNO_STEP_ATTEMPT="${BUILD_ID:-local}-$(date +%s)-$$"
+NNO_STEP_ATTEMPT="${BUILD_ID:-local}-$(date +%s)-$$"
+export NNO_STEP_ATTEMPT
+python3 scripts/nno/verify-signed-step-result.py --preflight
 make run-tests
 python3 scripts/nno/verify-signed-step-result.py
