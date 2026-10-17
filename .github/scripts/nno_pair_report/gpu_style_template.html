@@ -38,19 +38,42 @@
     .pair-link.failed-link { border:1px solid #ffcdd2; background:var(--red-soft); color:var(--red); font-weight:bold; }
     .pair-empty { border:1px dashed #b7c2c5; color:var(--muted); }
     .newer-failure { margin-left:4px; color:#b52623; font-size:12px; }
+    [hidden] { display:none!important; }
     .row-details { margin-top:8px; border-top:1px solid #e7ebec; font-size:13px; }
-    .row-details summary { width:max-content; max-width:100%; padding:6px 0 0; color:#526268; cursor:pointer; }
-    .detail-list { margin:8px 0 0; padding:0; list-style:none; }
-    .detail-item { padding:10px 0; border-top:1px solid #e7ebec; }
-    .detail-item:first-child { border-top:0; }
-    .detail-title { display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; }
-    .detail-title strong { font-size:13px; }
+    .row-details summary { width:max-content; max-width:100%; color:#526268; cursor:pointer; }
+    .row-details > summary { padding:10px 0 3px; }
+    .row-details[open] > summary { color:#00796b; }
+    .detail-list { margin:10px 0 0; padding:0; list-style:none; }
+    .detail-item { margin-bottom:12px; padding:18px; border:1px solid #dce4e8; border-radius:4px; background:#f1f5f6; color:#17242d; }
+    .detail-item:first-child { border-top:1px solid #dce4e8; }
+    .detail-item:last-child { margin-bottom:4px; }
+    .detail-title { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:flex-start; gap:8px 14px; }
+    .detail-title strong { font-size:14px; font-weight:600; }
     .status-passed { color:#00796b; } .status-failed { color:#c62828; }
-    .checks { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:5px; }
-    .evidence { margin:5px 0 0; color:#526268; overflow-wrap:anywhere; }
-    .history { display:flex; flex-wrap:wrap; gap:4px 10px; margin-top:6px; }
-    .history a { font-size:12px; }
-    .history .failure { color:#c62828; }
+    .detail-status { flex:none; padding:2px 9px; border-radius:3px; background:#e0f2eb; font-size:12px; }
+    .detail-status.status-failed { background:#ffebee; }
+    .detail-source { margin:8px 0 0; color:#52636e; font-size:12px; }
+    .detail-recency { margin:8px 0 0; color:#b52623; font-size:12px; }
+    .detail-grid { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(0,1fr); gap:28px; margin-top:22px; }
+    .detail-grid h3 { margin:0 0 9px; font-size:13px; font-weight:400; }
+    .validation-check { display:flex; justify-content:space-between; gap:16px; padding:9px 0; border-bottom:1px solid #d7e2e6; }
+    .validation-check span:last-child { flex:none; }
+    .measurements { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px 16px; margin:0; }
+    .measurements dt { margin:0 0 3px; color:#52636e; font-size:11px; }
+    .measurements dd { margin:0; font-size:18px; font-variant-numeric:tabular-nums; overflow-wrap:normal; }
+    .measurements small { color:#52636e; font-size:11px; }
+    .metric-note { margin:16px 0 0; color:#52636e; font-size:11px; }
+    .detail-disclosures { margin-top:22px; border-top:1px solid #d7e2e6; }
+    .detail-disclosures details { border-bottom:1px solid #d7e2e6; }
+    .detail-disclosures summary { width:auto; padding:11px 0; color:#52636e; }
+    .image-evidence { margin:0 0 12px; }
+    .image-evidence > div { display:grid; grid-template-columns:minmax(120px,1fr) minmax(0,2fr); gap:12px; padding:6px 0; }
+    .image-evidence dt { color:#52636e; }
+    .image-evidence dd { margin:0; overflow-wrap:anywhere; }
+    .execution-list { margin:0 0 12px; padding:0; list-style:none; }
+    .execution-list li { display:flex; justify-content:space-between; gap:16px; padding:8px 0; }
+    .execution-list small { display:block; margin-top:3px; color:#52636e; }
+    .artifact-links { display:flex; flex-wrap:wrap; gap:6px 16px; padding-bottom:12px; }
     .legend { display:flex; flex-wrap:wrap; gap:6px 16px; color:#526268; font-size:12px; }
     .legend span { display:inline-flex; align-items:center; gap:5px; }
     .legend i { display:inline-block; width:11px; height:11px; border-radius:2px; }
@@ -72,6 +95,8 @@
     .empty { padding:22px; text-align:center; color:var(--muted); }
     .footer { margin:20px 0 30px; color:#67757b; font-size:12px; }
     @media (max-width:700px) { body{padding:10px;} .toc,.ocp-version-container{padding:14px;} table{width:100%;} th,td{padding:8px;} th:first-child,td:first-child{width:31%;} th{font-size:15px;} .ocp-version-header{font-size:19px;} }
+    @media (max-width:850px) { .detail-grid { grid-template-columns:1fr; gap:22px; } }
+    @media (max-width:550px) { .detail-item{padding:12px;} th:first-child,td:first-child{width:21%;} .image-evidence > div{grid-template-columns:1fr;gap:3px;} .measurements{gap:18px 12px;} .measurements dd{font-size:16px;} }
   </style>
 </head>
 <body>
@@ -86,7 +111,7 @@
   <script>
     const report = __REPORT_DATA__;
     const $ = id => document.getElementById(id);
-    const names = {nno_csv:"NNO CSV",nno_deployment:"NNO deployment",nic_cluster_policy_ready:"NIC cluster policy ready",rdma_shared_device:"Standard RDMA",rdma_gpudirect:"GPUDirect RDMA",driver_image:"DOCA/OFED image",shared_device_policy:"Shared-device policy",gpudirect_rdma_write:"GPUDirect RDMA write"};
+    const names = {ocp_version:"OCP version",precompiled_selection:"Precompiled image selection",nno_csv:"NNO CSV",nno_deployment:"NNO deployment",nic_cluster_policy_ready:"NIC cluster policy ready",rdma_shared_device:"Standard RDMA",rdma_gpudirect:"GPUDirect RDMA",driver_image:"DOCA/OFED image",shared_device_policy:"Shared-device policy",gpudirect_rdma_write:"GPUDirect RDMA write"};
     const checkName = key => names[key] || key.replaceAll("_"," ");
     const safeUrl = url => typeof url === "string" && /^https:\/\//.test(url) ? url : null;
     const resultTime = item => item.pair.completed_at || item.build.run.started_at;
@@ -138,22 +163,82 @@
       const head=add(item,"div","","detail-title");
       add(head,"strong",pairLabel(pair));
       if(!pair.chosen) { add(head,"span","No pair result recorded"); return; }
-      const chosen=pair.chosen.pair;
-      add(head,"span",chosen.status==="passed"?"Passed":"Failed",`status-${chosen.status}`);
-      const checks=add(item,"div","","checks");
-      for(const [key,value] of Object.entries(chosen.checks||{})) add(checks,"span",`${checkName(key)}: ${value}`,value==="failed"?"status-failed":"");
+      const chosen=pair.chosen.pair,run=pair.chosen.build.run,latest=pair.runs[0];
+      const titleCase=value=>String(value).replaceAll("_"," ").replace(/\b\w/g,char=>char.toUpperCase());
+      add(head,"span",titleCase(chosen.status),`detail-status status-${chosen.status}`);
+      const source=add(item,"p","Result from ","detail-source");
+      link(source,`${run.kind} build ${run.build_id}`,run.prow_url);
+      add(source,"span",` · ${resultTime(pair.chosen).replace("T"," ").replace("Z"," UTC")} · ${pair.runs.length} execution${pair.runs.length===1?"":"s"}`);
+      if(latest!==pair.chosen && latest.pair.status==="failed") {
+        const recent=add(item,"p","Newest attempt failed: ","detail-recency");
+        link(recent,`build ${latest.build.run.build_id}`,latest.build.run.prow_url);
+        add(recent,"span",` · ${resultTime(latest)}`);
+      }
+      const grid=add(item,"div","","detail-grid");
+      const validation=add(grid,"div","");
+      add(validation,"h3","What was validated");
+      for(const [key,value] of Object.entries(chosen.checks||{})) {
+        const check=add(validation,"div","","validation-check");
+        add(check,"span",checkName(key));
+        add(check,"span",titleCase(value),value==="passed"?"status-passed":value==="failed"?"status-failed":"");
+      }
+      if(!Object.keys(chosen.checks||{}).length) add(validation,"p","No structured checks recorded.","detail-source");
       const metrics=chosen.metrics||{};
-      const metricParts=[];
-      if(metrics.standard_bandwidth_gbps!=null) metricParts.push(`Standard RDMA ${metrics.standard_bandwidth_gbps} Gb/s`);
-      if(metrics.standard_message_rate_mpps!=null) metricParts.push(`Standard RDMA ${metrics.standard_message_rate_mpps} Mpps`);
-      if(metrics.bandwidth_gbps!=null) metricParts.push(`GPUDirect ${metrics.bandwidth_gbps} Gb/s${metrics.min_bandwidth_gbps!=null?` (min ${metrics.min_bandwidth_gbps})`:""}`);
-      if(metrics.message_rate_mpps!=null) metricParts.push(`GPUDirect ${metrics.message_rate_mpps} Mpps${metrics.min_message_rate_mpps!=null?` (min ${metrics.min_message_rate_mpps})`:""}`);
-      const observed=chosen.driver_observed||{};
-      add(item,"p",`Installed OFED: ${observed.ofed_version||"not recorded"}${metricParts.length?` · ${metricParts.join(" · ")}`:""}`,"evidence");
-      const history=add(item,"div","","history");
-      for(const run of pair.runs) {
-        const label=`${run.build.run.kind} build ${run.build.run.build_id}: ${run.pair.status}`;
-        link(history,label,run.build.run.prow_url,run.pair.status==="failed"?"failure":"");
+      const results=add(grid,"div","");
+      add(results,"h3","RDMA write results");
+      const measurements=add(results,"dl","","measurements");
+      let missingMeasurement=false;
+      for(const [label,key,unit,minKey] of [
+        ["Standard bandwidth","standard_bandwidth_gbps","Gb/s"],
+        ["Standard message rate","standard_message_rate_mpps","Mpps"],
+        ["GPUDirect bandwidth","bandwidth_gbps","Gb/s","min_bandwidth_gbps"],
+        ["GPUDirect message rate","message_rate_mpps","Mpps","min_message_rate_mpps"]
+      ]) {
+        const measurement=add(measurements,"div","");
+        add(measurement,"dt",label);
+        const value=add(measurement,"dd",metrics[key]==null?"—":`${metrics[key]} ${unit}`);
+        if(metrics[key]==null) { missingMeasurement=true; value.title="Not recorded in this execution"; value.setAttribute("aria-label",`${label}: not recorded in this execution`); }
+        if(minKey && metrics[minKey]!=null) add(measurement,"small",`Minimum ${metrics[minKey]} ${unit}`);
+      }
+      if(chosen.validation==="precompiled" || chosen.id.startsWith("doca2-precompiled-")) {
+        add(results,"p","This step validates precompiled image selection and deployment; RDMA and signature checks are outside its scope.","metric-note");
+      } else if(missingMeasurement) {
+        add(results,"p","— Not recorded in this execution.","metric-note");
+      }
+      const disclosures=add(item,"div","","detail-disclosures");
+      const versions=add(disclosures,"details","");
+      add(versions,"summary","Versions and image evidence");
+      const evidence=add(versions,"dl","","image-evidence");
+      const observed=chosen.driver_observed||{},requested=chosen.driver_requested||{};
+      for(const [label,value] of [
+        ["OpenShift",run.ocp_version],
+        ["Requested NNO",chosen.nno_requested],
+        ["Observed NNO CSV",chosen.nno_observed],
+        ["Requested driver version",requested.version],
+        ["Observed driver version",observed.version],
+        ["Installed OFED",observed.ofed_version],
+        ["Requested image",requested.image],
+        ["Observed image",observed.image],
+        ["Observed digest",observed.digest]
+      ]) {
+        const entry=add(evidence,"div","");
+        add(entry,"dt",label); add(entry,"dd",value||"Not recorded");
+      }
+      const history=add(disclosures,"details","");
+      add(history,"summary",`Run history and artifacts · ${pair.runs.length} execution${pair.runs.length===1?"":"s"}`);
+      const executions=add(history,"ul","","execution-list");
+      for(const execution of pair.runs) {
+        const row=add(executions,"li","");
+        const context=add(row,"div","");
+        link(context,`${execution.build.run.kind} build ${execution.build.run.build_id}`,execution.build.run.prow_url);
+        add(context,"small",`${resultTime(execution)}${execution===pair.chosen?" · Displayed result":""}`);
+        add(row,"span",titleCase(execution.pair.status),`status-${execution.pair.status}`);
+      }
+      const entries=Object.entries(chosen.artifacts||{});
+      if(entries.length) {
+        add(history,"p","Artifacts for the displayed result","detail-source");
+        const artifacts=add(history,"div","","artifact-links");
+        for(const [label,url] of entries) link(artifacts,label,url);
       }
     }
     function stability(parent,patches) {
