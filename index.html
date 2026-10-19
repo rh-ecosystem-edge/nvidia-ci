@@ -1,26 +1,348 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NVIDIA CI on Red Hat OpenShift: Home Page</title>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NVIDIA CI on Red Hat OpenShift</title>
+  <style>
+    :root { --teal:#009688; --teal-soft:#e0f2f1; --teal-dark:#00796b; --ink:#333; --muted:#68777d; --line:#d9dfe1; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:20px; background:#f4f7f7; color:var(--ink); font:16px/1.5 Arial,sans-serif; }
+    .page { max-width:1100px; margin:0 auto; }
+    h1 { color:var(--teal); font-size:26px; margin:0 0 6px; }
+    .subtitle { color:var(--muted); font-size:14px; margin-bottom:32px; }
+    .section { margin-bottom:32px; }
+    .section-header { display:flex; align-items:center; gap:10px; margin-bottom:14px; padding-bottom:8px; border-bottom:2px solid var(--line); }
+    .section-header h2 { margin:0; font-size:18px; color:var(--ink); font-weight:600; }
+    .dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    .dot-green { background:#4caf50; }
+    .dot-amber { background:#ff9800; }
+    .dot-blue { background:#2196f3; }
+    .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:14px; }
+    .columns-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+    .column { display:flex; flex-direction:column; gap:14px; }
+    .card { display:block; padding:16px 18px; background:#fff; border:1px solid var(--line); border-radius:8px; text-decoration:none; color:var(--ink); transition:box-shadow .15s, border-color .15s, transform .15s; }
+    .card:hover { border-color:var(--teal); box-shadow:0 4px 12px rgba(0,150,136,.15); transform:translateY(-1px); }
+    .card:focus-visible { outline:2px solid #1565c0; outline-offset:2px; }
+    .card-top { display:flex; align-items:center; gap:14px; }
+    .status-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; background:#d9dfe1; transition:background .3s; }
+    .status-dot.green { background:#4caf50; }
+    .status-dot.yellow { background:#ffc107; }
+    .status-dot.red { background:#f44336; }
+    .card-icon { font-size:28px; flex-shrink:0; width:40px; text-align:center; }
+    .card-body { min-width:0; flex:1; }
+    .card-title { font-size:14px; font-weight:600; color:var(--teal-dark); line-height:1.3; }
+    .card-desc { font-size:12px; color:var(--muted); margin-top:2px; }
+    .history-bar { display:flex; flex-wrap:wrap; gap:3px; margin-top:10px; padding-top:8px; border-top:1px solid #eef1f2; }
+    .history-sq { display:inline-block; width:14px; height:14px; border-radius:2px; background:#d9dfe1; position:relative; }
+    .history-sq.success { background:#4db6ac; }
+    .history-sq.failure { background:#ef7676; }
+    .history-sq.aborted { background:#ffcf56; }
+    .history-sq:hover { outline:2px solid #455a64; outline-offset:1px; z-index:1; }
+    .history-sq-tip { display:none; position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:#333; color:#fff; font-size:11px; padding:3px 7px; border-radius:4px; white-space:nowrap; z-index:10; pointer-events:none; }
+    .history-sq:hover .history-sq-tip { display:block; }
+    .badge { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; font-weight:600; vertical-align:middle; margin-left:6px; }
+    .badge-signed { background:#e8eaf6; color:#283593; border:1px solid #9fa8da; }
+    .badge-vpn { background:#fff3e0; color:#e65100; border:1px solid #ffcc80; }
+    .footer { margin-top:40px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+    @media (max-width:900px) { .columns-3 { grid-template-columns:1fr; } }
+    @media (max-width:700px) { .cards { grid-template-columns:1fr; } body { padding:14px; } }
+  </style>
 </head>
-
 <body>
-    <h1>Job Reports</h1>
-    <div>
-        <ul>
-            <li><a href="gpu_operator_matrix.html">Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift</a></li>
-            <li><a href="gpu_operator_signed_matrix.html">Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift (precompiled/signed)</a></li>
-            <li><a href="dpf_matrix.html">Test Matrix: Red Hat OpenShift DPF</a></li>
-            <li><a href="microshift.html">Test Matrix: NVIDIA Device Plugin on Red Hat Device Edge (MicroShift)</a></li>
-            <li><a href="nno_doca2_matrix.html">Test Matrix: NNO and DOCA/OFED on Red Hat OpenShift</a></li>
-            <li><a href="nno_doca2_signed_matrix.html">Test Matrix: NNO and signed DOCA/OFED on Red Hat OpenShift</a></li>
-            <li><a href="nno_doca2_explorer.html">Compatibility Explorer: NNO and DOCA/OFED on Red Hat OpenShift</a></li>
-            <li><a href="nno_doca2_signed_explorer.html">Compatibility Explorer: NNO and signed DOCA/OFED on Red Hat OpenShift</a></li>
-        </ul>
+  <div class="page">
+    <h1>NVIDIA CI on Red Hat OpenShift</h1>
+    <p class="subtitle">Test matrices, compatibility reports, and driver delivery dashboards</p>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="dot dot-green"></span>
+        <h2>E2E Test Matrices</h2>
+      </div>
+      <div class="columns-3">
+        <div class="column">
+          <a class="card" href="gpu_operator_matrix.html">
+            <div class="card-top">
+              <span class="status-dot" id="status-gpu"></span>
+              <div class="card-body">
+                <div class="card-title">GPU Operator on OpenShift</div>
+                <div class="card-desc">Standard operator catalog results</div>
+              </div>
+            </div>
+            <div class="history-bar" id="history-gpu"></div>
+          </a>
+          <a class="card" href="gpu_operator_signed_matrix.html">
+            <div class="card-top">
+              <span class="status-dot" id="status-gpu-signed"></span>
+              <div class="card-body">
+                <div class="card-title">GPU Operator on OpenShift <span class="badge badge-signed">signed</span></div>
+                <div class="card-desc">Precompiled/signed driver results</div>
+              </div>
+            </div>
+            <div class="history-bar" id="history-gpu-signed"></div>
+          </a>
+        </div>
+        <div class="column">
+          <a class="card" href="nno_doca2_matrix.html">
+            <div class="card-top">
+              <span class="status-dot" id="status-nno"></span>
+              <div class="card-body">
+                <div class="card-title">NNO and DOCA/OFED on OpenShift</div>
+                <div class="card-desc">Network Operator standard driver pairs</div>
+              </div>
+            </div>
+            <div class="history-bar" id="history-nno"></div>
+          </a>
+          <a class="card" href="nno_doca2_signed_matrix.html">
+            <div class="card-top">
+              <span class="status-dot" id="status-nno-signed"></span>
+              <div class="card-body">
+                <div class="card-title">NNO and DOCA/OFED on OpenShift <span class="badge badge-signed">signed</span></div>
+                <div class="card-desc">Signed/precompiled DOCA driver pairs</div>
+              </div>
+            </div>
+            <div class="history-bar" id="history-nno-signed"></div>
+          </a>
+        </div>
+        <div class="column">
+          <a class="card" href="dpf_matrix.html">
+            <div class="card-top">
+              <span class="status-dot" id="status-dpf"></span>
+              <div class="card-body">
+                <div class="card-title">Red Hat OpenShift DPF</div>
+                <div class="card-desc">Data Processing Framework networking tests</div>
+              </div>
+            </div>
+            <div class="history-bar" id="history-dpf"></div>
+          </a>
+          <a class="card" href="microshift.html">
+            <div class="card-top">
+              <span class="status-dot" id="status-microshift"></span>
+              <div class="card-body">
+                <div class="card-title">NVIDIA Device Plugin on MicroShift</div>
+                <div class="card-desc">Red Hat Device Edge integration</div>
+              </div>
+            </div>
+            <div class="history-bar" id="history-microshift"></div>
+          </a>
+        </div>
+      </div>
     </div>
 
+    <div class="section">
+      <div class="section-header">
+        <span class="dot dot-blue"></span>
+        <h2>Compatibility Explorers</h2>
+      </div>
+      <div class="cards">
+        <a class="card" href="nno_doca2_explorer.html">
+          <div class="card-top">
+            <span class="card-icon">🔍</span>
+            <div class="card-body">
+              <div class="card-title">NNO and DOCA/OFED Compatibility</div>
+              <div class="card-desc">Interactive explorer with checks and run history</div>
+            </div>
+          </div>
+        </a>
+        <a class="card" href="nno_doca2_signed_explorer.html">
+          <div class="card-top">
+            <span class="card-icon">🔍</span>
+            <div class="card-body">
+              <div class="card-title">NNO and signed DOCA/OFED Compatibility</div>
+              <div class="card-desc">Signed/precompiled compatibility explorer</div>
+            </div>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="dot dot-amber"></span>
+        <h2>Build &amp; Sign</h2>
+      </div>
+      <div class="cards">
+        <a class="card" href="https://drivers.okoyl.xyz/groups/nvidia-gpu">
+          <div class="card-top">
+            <span class="card-icon">📦</span>
+            <div class="card-body">
+              <div class="card-title">GPU Driver Delivery <span class="badge badge-vpn">VPN</span></div>
+              <div class="card-desc">NVIDIA GPU driver build and signing status</div>
+            </div>
+          </div>
+        </a>
+        <a class="card" href="https://drivers.okoyl.xyz/groups/nvidia-doca-ofed">
+          <div class="card-top">
+            <span class="card-icon">📦</span>
+            <div class="card-body">
+              <div class="card-title">DOCA/OFED Driver Delivery <span class="badge badge-vpn">VPN</span></div>
+              <div class="card-desc">NVIDIA DOCA/OFED driver build and signing status</div>
+            </div>
+          </div>
+        </a>
+        <a class="card" href="https://drivers.okoyl.xyz/groups/nvidia-bluefield-soc">
+          <div class="card-top">
+            <span class="card-icon">📦</span>
+            <div class="card-body">
+              <div class="card-title">BlueField SOC Driver Delivery <span class="badge badge-vpn">VPN</span></div>
+              <div class="card-desc">NVIDIA BlueField SOC driver build and signing status</div>
+            </div>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="dot dot-green"></span>
+        <h2>NVIDIA Lab</h2>
+      </div>
+      <div class="cards">
+        <a class="card" href="https://nvidia-lab.okoyl.xyz/overview">
+          <div class="card-top">
+            <span class="card-icon">🖥️</span>
+            <div class="card-body">
+              <div class="card-title">Lab Overview</div>
+              <div class="card-desc">General lab status and resource summary</div>
+            </div>
+          </div>
+        </a>
+        <a class="card" href="https://nvidia-lab.okoyl.xyz/machines">
+          <div class="card-top">
+            <span class="card-icon">⚙️</span>
+            <div class="card-body">
+              <div class="card-title">Machines</div>
+              <div class="card-desc">Bare metal hosts and hardware inventory</div>
+            </div>
+          </div>
+        </a>
+        <a class="card" href="https://nvidia-lab.okoyl.xyz/clusters">
+          <div class="card-top">
+            <span class="card-icon">☸️</span>
+            <div class="card-body">
+              <div class="card-title">OCP Clusters</div>
+              <div class="card-desc">OpenShift cluster deployments and status</div>
+            </div>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <div class="footer">NVIDIA CI Dashboard &middot; rh-ecosystem-edge/nvidia-ci</div>
+  </div>
+
+  <script>
+    function setStatus(id, ratio) {
+      var dot = document.getElementById(id);
+      if (!dot) return;
+      if (ratio >= 0.8) dot.className = 'status-dot green';
+      else if (ratio >= 0.5) dot.className = 'status-dot yellow';
+      else dot.className = 'status-dot red';
+    }
+
+    function fmtDate(ts) {
+      var d = new Date(ts * 1000);
+      return d.toISOString().replace('T', ' ').replace(/\.\d+Z/, ' UTC');
+    }
+
+    function renderHistory(containerId, runs) {
+      var el = document.getElementById(containerId);
+      if (!el || !runs.length) return;
+      runs.forEach(function(run) {
+        var sq = document.createElement('span');
+        var cls = run.status === 'SUCCESS' || run.status === 'passed' ? 'success'
+                : run.status === 'FAILURE' || run.status === 'failed' ? 'failure' : 'aborted';
+        sq.className = 'history-sq ' + cls;
+        var tip = document.createElement('span');
+        tip.className = 'history-sq-tip';
+        tip.textContent = run.status + ' — ' + run.date;
+        sq.appendChild(tip);
+        if (run.url) {
+          sq.style.cursor = 'pointer';
+          sq.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            window.open(run.url, '_blank');
+          });
+        }
+        el.appendChild(sq);
+      });
+    }
+
+    function passRatio(statuses, passValue) {
+      if (!statuses.length) return -1;
+      var passed = statuses.filter(function(s) { return s === passValue; }).length;
+      return passed / statuses.length;
+    }
+
+    // GPU Operator dashboards
+    function loadGpuDashboard(jsonFile, dotId, historyId) {
+      fetch(jsonFile).then(function(r) { return r.json(); }).then(function(data) {
+        var all = [];
+        for (var ocp in data) {
+          all = all.concat(data[ocp].release_tests || []);
+        }
+        all.sort(function(a, b) { return parseInt(b.job_timestamp || 0) - parseInt(a.job_timestamp || 0); });
+        var latest = all.slice(0, 30);
+        var ratio = passRatio(latest.map(function(r) { return r.test_status; }), 'SUCCESS');
+        if (ratio >= 0) setStatus(dotId, ratio);
+        renderHistory(historyId, latest.map(function(r) {
+          return { status: r.test_status, date: fmtDate(r.job_timestamp), url: r.prow_job_url };
+        }));
+      }).catch(function() {});
+    }
+    loadGpuDashboard('gpu_operator_matrix.json', 'status-gpu', 'history-gpu');
+    loadGpuDashboard('gpu_operator_signed_matrix.json', 'status-gpu-signed', 'history-gpu-signed');
+
+    // DPF dashboard
+    fetch('dpf_matrix.json').then(function(r) { return r.json(); }).then(function(data) {
+      var all = [];
+      for (var ocp in data) { all = all.concat(data[ocp].results || []); }
+      all.sort(function(a, b) { return parseInt(b.job_timestamp || 0) - parseInt(a.job_timestamp || 0); });
+      var latest = all.slice(0, 30);
+      var ratio = passRatio(latest.map(function(r) { return r.networking_status; }), 'SUCCESS');
+      if (ratio >= 0) setStatus('status-dpf', ratio);
+      renderHistory('history-dpf', latest.map(function(r) {
+        return { status: r.networking_status, date: fmtDate(r.job_timestamp), url: r.prow_job_url };
+      }));
+    }).catch(function() {});
+
+    // MicroShift dashboard
+    fetch('microshift_results.json').then(function(r) { return r.json(); }).then(function(data) {
+      var all = [];
+      for (var ocp in data) { if (Array.isArray(data[ocp])) all = all.concat(data[ocp]); }
+      all.sort(function(a, b) { return parseInt(b.timestamp || 0) - parseInt(a.timestamp || 0); });
+      var latest = all.slice(0, 30);
+      var ratio = passRatio(latest.map(function(r) { return r.status; }), 'SUCCESS');
+      if (ratio >= 0) setStatus('status-microshift', ratio);
+      renderHistory('history-microshift', latest.map(function(r) {
+        return { status: r.status, date: fmtDate(r.timestamp), url: r.url };
+      }));
+    }).catch(function() {});
+
+    // NNO pair report dashboards
+    function loadNnoPairDashboard(jsonFile, dotId, historyId) {
+      fetch(jsonFile).then(function(r) { return r.json(); }).then(function(data) {
+        var builds = (data.builds || []).slice().sort(function(a, b) {
+          return (b.run.started_at || '').localeCompare(a.run.started_at || '');
+        });
+        var runs = [];
+        builds.forEach(function(build) {
+          var pairs = build.pairs || [];
+          if (!pairs.length) return;
+          var passed = pairs.filter(function(p) { return p.status === 'passed'; }).length;
+          var failed = pairs.filter(function(p) { return p.status === 'failed'; }).length;
+          var status = failed > 0 ? 'failed' : (passed > 0 ? 'passed' : 'unknown');
+          runs.push({ status: status, date: (build.run.started_at || '').replace('T', ' ').replace('Z', ' UTC'), url: build.run.prow_url });
+        });
+        var latest = runs.slice(0, 30);
+        var ratio = passRatio(latest.map(function(r) { return r.status; }), 'passed');
+        if (ratio >= 0) setStatus(dotId, ratio);
+        renderHistory(historyId, latest);
+      }).catch(function() {});
+    }
+    loadNnoPairDashboard('nno_doca2_matrix.json', 'status-nno', 'history-nno');
+    loadNnoPairDashboard('nno_doca2_signed_matrix.json', 'status-nno-signed', 'history-nno-signed');
+  </script>
+</body>
 </html>
