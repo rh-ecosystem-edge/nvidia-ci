@@ -1298,6 +1298,83 @@
         "status": "success"
       },
       "source_path": "pr-logs/pull/rh-ecosystem-edge_nvidia-ci/747/pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed/2109258277547151360/artifacts/nno-signed/dpf-hypervisor-deploy-cluster/finished.json"
+    },
+    {
+      "build_path": "pr-logs/pull/rh-ecosystem-edge_nvidia-ci/779/pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed/2112539362355843072",
+      "pairs": [
+        {
+          "artifacts": {
+            "nno-signed/nno-read-signed-target/artifacts/nno-doca2-signed-request.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/779/pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed/2112539362355843072/artifacts/nno-signed/nno-read-signed-target/artifacts/nno-doca2-signed-request.json"
+          },
+          "checks": {
+            "deploy_result": "blocked",
+            "deploy_step": "blocked",
+            "gpu_step": "blocked",
+            "gpudirect_result": "blocked",
+            "gpudirect_step": "blocked"
+          },
+          "completed_at": "",
+          "driver_observed": {
+            "digest": "",
+            "doca_version": "",
+            "image": "",
+            "ofed_version": "",
+            "version": ""
+          },
+          "driver_requested": {
+            "architecture": "amd64",
+            "digest": "",
+            "doca_version": "",
+            "image": "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.04-1.1.0.0-5.14.0-687.35.1.el9_8.x86_64-rhel9.8-amd64",
+            "kernel": "5.14.0-687.35.1.el9_8.x86_64",
+            "ofed_version": "",
+            "version": "26.04-1.1.0.0"
+          },
+          "id": "doca2-signed-ocp-4.22.9-doca-26.04-amd64",
+          "image_target": "rhel9.8 / amd64",
+          "metrics": {},
+          "mode": "signed",
+          "nno_observed": "",
+          "nno_requested": "",
+          "note": "deploy: expected one coherent invocation, found 0; gpudirect: expected one coherent invocation, found 0",
+          "stages": {
+            "deploy": {
+              "attempts": [],
+              "status": "blocked"
+            },
+            "gpudirect": {
+              "attempts": [],
+              "status": "blocked"
+            }
+          },
+          "status": "blocked",
+          "validation": "signed"
+        }
+      ],
+      "run": {
+        "build_id": "2112539362355843072",
+        "discovery": {},
+        "environment": "",
+        "gpu_operator_version": "",
+        "job_name": "pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed",
+        "kind": "presubmit",
+        "ocp_version": "4.22.9",
+        "planned_modes": [
+          "signed"
+        ],
+        "provenance": {
+          "build_id": "2112539362355843072",
+          "job_name": "pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed",
+          "pull_number": "779",
+          "pull_refs": "main:83c30ad850de70df5629df8b774f3ea7359b7583,779:28e595069adda4b8c165186c86d1e7244ffdefd8",
+          "pull_sha": "28e595069adda4b8c165186c86d1e7244ffdefd8"
+        },
+        "prow_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/779/pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed/2112539362355843072",
+        "source": "manual",
+        "started_at": "2026-10-20T13:40:14Z",
+        "status": "unknown"
+      },
+      "source_path": "pr-logs/pull/rh-ecosystem-edge_nvidia-ci/779/pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed/2112539362355843072/artifacts/nno-signed/dpf-hypervisor-deploy-cluster/finished.json"
     }
   ],
   "mode": "signed",
