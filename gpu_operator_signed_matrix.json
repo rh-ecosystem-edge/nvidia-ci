@@ -293,18 +293,18 @@
         "release_tests": [
             {
                 "ocp_full_version": "4.22.19",
-                "gpu_operator_version": "26.3.3",
+                "gpu_operator_version": "26.7.2",
                 "test_status": "SUCCESS",
-                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/767/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-3-x-signed/2111483876898508800/artifacts/nvidia-gpu-operator-e2e-26-3-x-signed/gpu-operator-e2e",
-                "job_timestamp": 1792257843,
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/776/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-7-x-signed/2112343032635330560/artifacts/nvidia-gpu-operator-e2e-26-7-x-signed/gpu-operator-e2e",
+                "job_timestamp": 1792463530,
                 "driver_branch": "580.173.02, 595.71.05, 610.57.04, 615.71.09:failed"
             },
             {
                 "ocp_full_version": "4.22.19",
-                "gpu_operator_version": "26.7.2",
+                "gpu_operator_version": "26.3.3",
                 "test_status": "SUCCESS",
-                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/767/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-7-x-signed/2111483876936257536/artifacts/nvidia-gpu-operator-e2e-26-7-x-signed/gpu-operator-e2e",
-                "job_timestamp": 1792257670,
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/776/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-26-3-x-signed/2112343032605970432/artifacts/nvidia-gpu-operator-e2e-26-3-x-signed/gpu-operator-e2e",
+                "job_timestamp": 1792463407,
                 "driver_branch": "580.173.02, 595.71.05, 610.57.04, 615.71.09:failed"
             },
             {
@@ -812,8 +812,16 @@
                 "ocp_full_version": "4.21.39",
                 "gpu_operator_version": "26.7.2",
                 "test_status": "SUCCESS",
-                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/767/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.21-stable-nvidia-gpu-operator-e2e-26-7-x-signed/2111483876869148672/artifacts/nvidia-gpu-operator-e2e-26-7-x-signed/gpu-operator-e2e",
-                "job_timestamp": 1792258397,
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/776/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.21-stable-nvidia-gpu-operator-e2e-26-7-x-signed/2112343032572416000/artifacts/nvidia-gpu-operator-e2e-26-7-x-signed/gpu-operator-e2e",
+                "job_timestamp": 1792464403,
+                "driver_branch": "580.173.02, 595.71.05, 610.57.04, 615.71.09:failed"
+            },
+            {
+                "ocp_full_version": "4.21.39",
+                "gpu_operator_version": "26.3.3",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/776/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.21-stable-nvidia-gpu-operator-e2e-26-3-x-signed/2112343032526278656/artifacts/nvidia-gpu-operator-e2e-26-3-x-signed/gpu-operator-e2e",
+                "job_timestamp": 1792463605,
                 "driver_branch": "580.173.02, 595.71.05, 610.57.04, 615.71.09:failed"
             },
             {
