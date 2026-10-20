@@ -885,10 +885,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			By("Check GPU count on GPU nodes and apply --nvidia-ci.max-gpu")
-			nodeGPUCount, err := mig.GPUCountFromNode(inittools.APIClient, WorkerNodeSelector)
-			Expect(err).ToNot(HaveOccurred(), "error getting GPU count from GPU nodes: %v", err)
-			gpuCount = mig.ClampMaxGPU(nodeGPUCount)
-			glog.V(gpuparams.GpuLogLevel).Infof("GPU count: node=%d, effective=%d", nodeGPUCount, gpuCount)
+			gpuCount = mig.EffectiveGPUCount(WorkerNodeSelector)
 
 			By("Create GPU Burn namespace 'test-gpu-burn'")
 			gpuBurnNsBuilder := namespace.NewBuilder(inittools.APIClient, burn.Namespace)
@@ -1528,6 +1525,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("Re-deployed gpu-burn pod image name is: '%s', in "+
 				"namespace '%s'", BurnImageName[clusterArchitecture], burn.Namespace)
 
+			By("Check GPU count on GPU nodes and apply --nvidia-ci.max-gpu")
+			gpuCount = mig.EffectiveGPUCount(WorkerNodeSelector)
+
 			By("Get Cluster Architecture from first GPU enabled worker node")
 			glog.V(gpuparams.GpuLogLevel).Infof("Getting cluster architecture from nodes with "+
 				"WorkerNodeSelector: %v", WorkerNodeSelector)
@@ -2047,8 +2047,10 @@ func testPrecompiledBranch(nextBranch string, branchIndex int,
 
 	glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn pod logs for branch %s:\n%s", nextBranch, branchLogs)
 
-	mig.CheckGPUBurnPodLogs(branchLogs, gpuCount)
-	glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn successful for driver branch %s", nextBranch)
+	status := mig.CheckGPUBurnPodLogsAndReturnStatus(branchLogs, gpuCount)
+	if !status {
+		return fmt.Errorf("gpu-burn execution FAILED for driver branch %s", nextBranch)
+	}
 
 	return nil
 }
