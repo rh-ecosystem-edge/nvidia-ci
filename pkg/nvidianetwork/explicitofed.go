@@ -26,7 +26,7 @@ func ParseExplicitPrecompiledOFEDPullSpec(
 		(repository != precompiledOFEDRHEL9Repo && repository != precompiledOFEDRHEL10Repo) {
 		return nil, fmt.Errorf("unsupported tagged staging pull specification %q", pullSpec)
 	}
-	suffix := fmt.Sprintf("-%s-%s-%s", kernelVersion, osTag, architecture)
+	suffix := (OFEDWorker{KernelVersion: kernelVersion, OSTag: osTag, Architecture: architecture}).tag("")
 	if !strings.HasSuffix(tag, suffix) {
 		return nil, fmt.Errorf("requested image tag %q must end with worker kernel/OS/architecture suffix %q", tag, suffix)
 	}
@@ -35,7 +35,7 @@ func ParseExplicitPrecompiledOFEDPullSpec(
 	if selected != nil {
 		selected.Version = strings.TrimSuffix(tag, suffix)
 	}
-	if selected == nil || strings.HasSuffix(selected.Version, "-") {
+	if selected == nil || !driverVersionRegexp.MatchString(selected.Version) {
 		return nil, fmt.Errorf("requested image tag %q has no valid OFED base version", tag)
 	}
 	return selected, nil
@@ -59,25 +59,6 @@ func CheckPrecompiledOFEDTag(ctx context.Context, client CatalogClient, selected
 		}
 	}
 	return fmt.Errorf("requested staging image %q is unavailable", selected.PullSpec())
-}
-
-// CheckPrecompiledOFEDWorkerTag checks that the selected repository, image, and
-// version have the exact tag needed by another worker. It never selects another version.
-func CheckPrecompiledOFEDWorkerTag(
-	ctx context.Context, client CatalogClient, selected *OFEDImage,
-	kernelVersion, osTag, architecture string,
-) error {
-	if selected == nil {
-		return fmt.Errorf("selected precompiled OFED image is required")
-	}
-	pullSpec := fmt.Sprintf("%s/%s:%s-%s-%s-%s", selected.Repository, selected.Image,
-		selected.Version, kernelVersion, strings.TrimSpace(osTag), architecture)
-	workerImage, err := ParseExplicitPrecompiledOFEDPullSpec(pullSpec, kernelVersion, osTag, architecture)
-	if err != nil {
-		return err
-	}
-
-	return CheckPrecompiledOFEDTag(ctx, client, workerImage)
 }
 
 // VerifyOFEDDriverPods requires a ready container using the exact requested image

@@ -17,6 +17,14 @@ if [[ -z "${TEST_FEATURES}" ]]; then
     exit 1
 fi
 
+# Resolve the daily stream before starting Go, following the signed workflow's explicit-channel pattern.
+if [[ "${NVIDIANETWORK_SUBSCRIPTION_CHANNEL:-}" == "latest-ga" ]]; then
+    if ! nno_channel=$(PYTHONPATH=scripts/nno python3 -c 'from signed_images import resolve_nno_channel; print(resolve_nno_channel())'); then
+        exit 1
+    fi
+    export NVIDIANETWORK_SUBSCRIPTION_CHANNEL="${nno_channel}"
+fi
+
 # The signed NNO workflow publishes this handoff before its GPU installation step.
 # Its workload uses DMA-BUF, so override the release step's legacy RDMA patch
 # before creating ClusterPolicy and starting the driver build.

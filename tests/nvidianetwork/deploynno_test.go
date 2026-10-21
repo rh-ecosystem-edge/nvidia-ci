@@ -3,7 +3,11 @@ package nvidianetwork
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
@@ -54,7 +59,6 @@ var (
 	SubscriptionChannel                   = UndefinedValue
 	InstallPlanApproval v1alpha1.Approval = "Automatic"
 
-	DefaultSubscriptionChannel           = UndefinedValue
 	networkOperatorUpgradeToChannel      = UndefinedValue
 	cleanupAfterTest                bool = true
 	deployFromBundle                bool = false
@@ -91,6 +95,7 @@ var (
 	ofedDriverRepository = UndefinedValue
 	ofedDriverImage      = UndefinedValue
 
+	nnoDeploymentSkipReason   string
 	precompiledOFEDSkipped    bool
 	precompiledOFEDSkipReason string
 
@@ -569,10 +574,47 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			if precompiledOFEDSkipped {
 				Skip(precompiledOFEDSkipReason)
 			}
+			for _, label := range CurrentSpecReport().LeafNodeLabels {
+				if label != "rdma-shared-dev" && label != "rdma-legacy-sriov" {
+					continue
+				}
+				if nnoDeploymentSkipReason != "" {
+					Skip(nnoDeploymentSkipReason)
+				}
+				found, err := check.NodeWithLabel(inittools.APIClient, nvidiaNetworkLabel, inittools.GeneralConfig.WorkerLabelMap)
+				Expect(err).ToNot(HaveOccurred(), "cannot inspect Mellanox worker labels")
+				if !found {
+					Skip("No Nvidia Network labeled worker nodes in this cluster")
+				}
+				Eventually(func() error {
+					csv, err := nnoCSV(true)
+					if err != nil {
+						return err
+					}
+					if csv == nil {
+						return fmt.Errorf("NNO is not installed")
+					}
+					if !deployFromBundle {
+						if err := verifyNNOFamily(SubscriptionChannel, csv.Spec.Version.String()); err != nil {
+							return err
+						}
+					}
+					currentNNOCSVVersion = csv.Spec.Version.String()
+					return nil
+				}, time.Minute, 5*time.Second).Should(Succeed(), "cannot verify installed NNO before RDMA")
+				break
+			}
 		})
 
 		AfterEach(func() {
-
+			report := CurrentSpecReport()
+			if report.State.String() == nnoReportStatusSkipped {
+				for _, label := range report.LeafNodeLabels {
+					if label == "deploy" {
+						nnoDeploymentSkipReason = report.Failure.Message
+					}
+				}
+			}
 		})
 
 		AfterAll(func() {
@@ -586,6 +628,11 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 		It("Deploy NVIDIA Network Operator with DTK", Label("deploy"), func() {
 			var selectedPrecompiledOFED *nvidianetwork.OFEDImage
+			var bundleCSV *v1alpha1.ClusterServiceVersion
+			requestedNNOVersion := ""
+			discoverPrecompiled := nvidiaNetworkConfig.UsePrecompiledOFED &&
+				(nvidiaNetworkConfig.OfedDriverPullSpec != "" ||
+					nvidiaNetworkConfig.OfedDriverVersion == "" && nvidiaNetworkConfig.OfedDriverRepository == "")
 			nnoStepChecks["nno_deployment"] = nnoReportStatusRunning
 			nnoStepChecks["nic_cluster_policy_ready"] = nnoReportStatusNotRun
 			if nvidiaNetworkConfig.UsePrecompiledOFED {
@@ -614,317 +661,218 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 			}
 
-			if nvidiaNetworkConfig.UsePrecompiledOFED &&
-				(nvidiaNetworkConfig.OfedDriverPullSpec != "" ||
-					ofedDriverVersion == UndefinedValue && ofedDriverRepository == UndefinedValue) {
-				if nvidiaNetworkConfig.OfedDriverPullSpec != "" {
-					By("Resolve the explicit precompiled DOCA/OFED driver request")
-				} else {
-					By("Select precompiled DOCA/OFED driver image from staging catalog")
-				}
-				selected, err := selectPrecompiledOFEDDriver(nvidiaNetworkConfig.OfedDriverPullSpec)
-				Expect(err).ToNot(HaveOccurred(), "precompiled DOCA/OFED image resolution failed")
-				if selected == nil {
-					precompiledOFEDSkipped = true
-					Skip(precompiledOFEDSkipReason)
-				}
-				selectedPrecompiledOFED = selected
-				By(fmt.Sprintf("Using precompiled DOCA/OFED image %s", selected.PullSpec()))
-			}
-
-			By("Delete /opt/mofed-container/inventory RPMs directory on worker nodes")
-			// Delete the "/opt/mofed-container/inventory" dir on each worker node
-			// func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, nodeName string) (string, error)
-			rdmaWorkerNodes := []string{rdmaClientHostname, rdmaServerHostname}
-
-			for i, workerNode := range rdmaWorkerNodes {
-				glog.V(networkparams.LogLevel).Infof("Deleting MOFED RPMS dir on worker node '%d' named '%s'",
-					i, workerNode)
-				debugPodName := fmt.Sprintf("delete-rpm-pod-%d", i) // ensure unique name
-				deleteMofedRPMDirOutput, err := rdmatest.DeleteMofedRpmDir(inittools.APIClient, debugPodName,
-					"default", clusterArchitecture, workerNode)
-				Expect(err).ToNot(HaveOccurred(), "Error deleting MOFED RPMs dir on worker node"+
-					" '%s':   %v", workerNode, err)
-				glog.V(networkparams.LogLevel).Infof("Output from deleting MOFED RPMS dir on worker node '%s'"+
-					" : \n%s", workerNode, deleteMofedRPMDirOutput)
-			}
-
 			By("Check if Network Operator Deployment is from Bundle")
 			if deployFromBundle {
-				glog.V(networkparams.LogLevel).Infof("Deploying Network operator from bundle")
-				// This returns the Deploy interface object initialized with the API client
-				deployBundle = deploy.NewDeploy(inittools.APIClient)
-				deployBundleConfig.BundleImage = networkOperatorBundleImage
 				glog.V(networkparams.LogLevel).Infof("Deploying Network operator from bundle image '%s'",
-					deployBundleConfig.BundleImage)
-
-			} else {
-				glog.V(networkparams.LogLevel).Infof("Deploying Network Operator from catalogsource")
-
-				By("Check if 'nvidia-network-operator' packagemanifest exists in certified-operators catalog")
-				glog.V(networkparams.LogLevel).Infof("Using NNO catalogsource '%s'", CatalogSource)
-
-				nnoPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-					nnoPackage, nnoCatalogSourceNamespace, nnoCatalogSourceDefault)
-
-				if err != nil {
-					glog.V(networkparams.LogLevel).Infof("Error trying to pull NNO packagemanifest"+
-						" '%s' from default catalog '%s': '%v'", nnoPackage, nnoCatalogSourceDefault, err.Error())
-				}
-
-				if nnoPkgManifestBuilderByCatalog == nil {
-					glog.V(networkparams.LogLevel).Infof("The NNO packagemanifest '%s' was not "+
-						"found in the default '%s' catalog", nnoPackage, nnoCatalogSourceDefault)
-
-					if createNNOCustomCatalogsource {
-						glog.V(networkparams.LogLevel).Infof("Creating custom catalogsource '%s' for Network "+
-							"Operator, with index image '%s'", CustomCatalogSource, CustomCatalogsourceIndexImage)
-
-						glog.V(networkparams.LogLevel).Infof("Deploying a custom NNO catalogsource '%s' with '%s' "+
-							"index image", CustomCatalogSource, CustomCatalogsourceIndexImage)
-
-						nnoCustomCatalogSourceBuilder := olm.NewCatalogSourceBuilderWithIndexImage(inittools.APIClient,
-							CustomCatalogSource, nnoCatalogSourceNamespace, CustomCatalogsourceIndexImage,
-							nnoCustomCatalogSourceDisplayName, nnoCustomCatalogSourcePublisherName)
-
-						Expect(nnoCustomCatalogSourceBuilder).NotTo(BeNil(), "Failed to Initialize "+
-							"CatalogSourceBuilder for custom NNO catalogsource '%s'", CustomCatalogSource)
-
-						createdNNOCustomCatalogSourceBuilder, err := nnoCustomCatalogSourceBuilder.Create()
-						glog.V(networkparams.LogLevel).Infof("Creating custom NNO Catalogsource builder object "+
-							"'%s'", createdNNOCustomCatalogSourceBuilder.Definition.Name)
-						Expect(err).ToNot(HaveOccurred(), "error creating custom NNO catalogsource "+
-							"builder Object name %s:  %v", CustomCatalogSource, err)
-
-						By("Sleep for 60 seconds to allow the NNO custom catalogsource to be created")
-						time.Sleep(60 * time.Second)
-
-						glog.V(networkparams.LogLevel).Infof("Wait up to 4 mins for custom NNO catalogsource " +
-							"to be ready")
-
-						Expect(createdNNOCustomCatalogSourceBuilder.IsReady(4 * time.Minute)).NotTo(BeFalse())
-
-						CatalogSource = createdNNOCustomCatalogSourceBuilder.Definition.Name
-
-						glog.V(networkparams.LogLevel).Infof("Custom NNO catalogsource '%s' is now ready",
-							createdNNOCustomCatalogSourceBuilder.Definition.Name)
-
-						nnoPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-							nnoPackage, nnoCatalogSourceNamespace, CustomCatalogSource)
-
-						Expect(err).ToNot(HaveOccurred(), "error getting NNO packagemanifest '%s' "+
-							"from custom catalog '%s':  %v", nnoPackage, CustomCatalogSource, err)
-
-						By("Get the Network Operator Default Channel from Packagemanifest")
-						DefaultSubscriptionChannel = nnoPkgManifestBuilderByCustomCatalog.Object.Status.DefaultChannel
-						glog.V(networkparams.LogLevel).Infof("NNO channel '%s' retrieved from packagemanifest "+
-							"of custom catalogsource '%s'", DefaultSubscriptionChannel, CustomCatalogSource)
-
-					} else {
-						Skip("nvidia-network-operator packagemanifest not found in default 'certified-operators'" +
-							"catalogsource, and flag to deploy custom NNO catalogsource is false")
-					}
-
-				} else {
-					glog.V(networkparams.LogLevel).Infof("NNO packagemanifest '%s' was found in the default"+
-						" catalog '%s'", nnoPkgManifestBuilderByCatalog.Object.Name, nnoCatalogSourceDefault)
-
-					CatalogSource = nnoCatalogSourceDefault
-
-					By("Get the Network Operator Default Channel from Packagemanifest")
-					DefaultSubscriptionChannel = nnoPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
-					glog.V(networkparams.LogLevel).Infof("NNO channel '%s' was retrieved from NNO "+
-						"packagemanifest", DefaultSubscriptionChannel)
-				}
-
-			}
-
-			By("Check if NVIDIA Network Operator namespace exists, otherwise created it and label it")
-			nsBuilder := namespace.NewBuilder(inittools.APIClient, nnoNamespace)
-			if nsBuilder.Exists() {
-				glog.V(networkparams.LogLevel).Infof("The namespace '%s' already exists",
-					nsBuilder.Object.Name)
-			} else {
-				glog.V(networkparams.LogLevel).Infof("Creating the namespace:  %v", nnoNamespace)
-				createdNsBuilder, err := nsBuilder.Create()
-				Expect(err).ToNot(HaveOccurred(), "error creating namespace '%s' :  %v ",
-					nsBuilder.Definition.Name, err)
-
-				glog.V(networkparams.LogLevel).Infof("Successfully created namespace '%s'",
-					createdNsBuilder.Object.Name)
-
-				glog.V(networkparams.LogLevel).Infof("Labeling the newly created namespace '%s'",
-					nsBuilder.Object.Name)
-
-				labeledNsBuilder := createdNsBuilder.WithMultipleLabels(map[string]string{
-					"openshift.io/cluster-monitoring":    "true",
-					"pod-security.kubernetes.io/enforce": "privileged",
-				})
-
-				newLabeledNsBuilder, err := labeledNsBuilder.Update()
-				Expect(err).ToNot(HaveOccurred(), "error labeling namespace %v :  %v ",
-					newLabeledNsBuilder.Definition.Name, err)
-
-				glog.V(networkparams.LogLevel).Infof("The nvidia-network-operator labeled namespace has "+
-					"labels:  %v", newLabeledNsBuilder.Object.Labels)
-			}
-
-			defer func() {
-				if cleanupAfterTest {
-					err := nsBuilder.Delete()
-					Expect(err).ToNot(HaveOccurred())
-				}
-			}()
-
-			// NNO Namespace should be created at this point
-			if deployFromBundle {
-				glog.V(networkparams.LogLevel).Infof("Initializing the kube API Client before deploying bundle")
+					networkOperatorBundleImage)
 				deployBundle = deploy.NewDeploy(inittools.APIClient)
-
 				deployBundleConfig.BundleImage = networkOperatorBundleImage
-
-				glog.V(networkparams.LogLevel).Infof("Deploy the Network Operator bundle image '%s'",
-					deployBundleConfig.BundleImage)
-
-				err := deployBundle.DeployBundle(networkparams.LogLevel, &deployBundleConfig, nnoNamespace,
-					5*time.Minute)
-				Expect(err).ToNot(HaveOccurred(), "error from deploy.DeployBundle():  '%v' ", err)
-
-				glog.V(networkparams.LogLevel).Infof("Network Operator bundle image '%s' deployed successfully "+
-					"in namespace '%s", deployBundleConfig.BundleImage, nnoNamespace)
-
+				var err error
+				bundleCSV, err = readBundleCSV(networkOperatorBundleImage)
+				Expect(err).ToNot(HaveOccurred(), "cannot read bundle NNO version before deployment")
+				requestedNNOVersion = bundleCSV.Spec.Version.String()
 			} else {
-				By("Create OperatorGroup in NVIDIA Network Operator Namespace")
-				ogBuilder := olm.NewOperatorGroupBuilder(inittools.APIClient, nnoOperatorGroupName, nnoNamespace)
-
-				if ogBuilder.Exists() {
-					glog.V(networkparams.LogLevel).Infof("The ogBuilder that exists has name:  %v",
-						ogBuilder.Object.Name)
-				} else {
-					glog.V(networkparams.LogLevel).Infof("Create a new operatorgroup with name:  %v",
-						ogBuilder.Object.Name)
-
-					ogBuilderCreated, err := ogBuilder.Create()
-					Expect(err).ToNot(HaveOccurred(), "error creating operatorgroup %v :  %v ",
-						ogBuilderCreated.Definition.Name, err)
+				By("Read the NVIDIA Network Operator package from the selected catalog")
+				glog.V(networkparams.LogLevel).Infof("Using NNO catalogsource '%s'", CatalogSource)
+				manifest, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
+					nnoPackage, nnoCatalogSourceNamespace, CatalogSource)
+				if nvidiaNetworkConfig.CatalogSource != "" ||
+					(err != nil && !errors.Is(err, olm.ErrPackageManifestNotFound)) {
+					Expect(err).ToNot(HaveOccurred(), "cannot read NNO package from catalog %s", CatalogSource)
 				}
-
-				defer func() {
-					if cleanupAfterTest {
-						err := ogBuilder.Delete()
-						Expect(err).ToNot(HaveOccurred())
+				if manifest == nil {
+					if !createNNOCustomCatalogsource {
+						Skip(fmt.Sprintf("NNO package not found in catalog %s and no fallback index is configured: %v",
+							CatalogSource, err))
 					}
-				}()
-
-				By("Create Subscription in NVIDIA Network Operator Namespace")
-				subBuilder := olm.NewSubscriptionBuilder(inittools.APIClient, nnoSubscriptionName,
-					nnoSubscriptionNamespace, CatalogSource, nnoCatalogSourceNamespace, nnoPackage)
-
-				if SubscriptionChannel != UndefinedValue {
-					glog.V(networkparams.LogLevel).Infof("Setting the NNO subscription channel to: '%s'",
-						SubscriptionChannel)
-					subBuilder.WithChannel(SubscriptionChannel)
-				} else {
-					glog.V(networkparams.LogLevel).Infof("Setting the NNO subscription channel to "+
-						"default channel: '%s'", DefaultSubscriptionChannel)
-					subBuilder.WithChannel(DefaultSubscriptionChannel)
+					By("Create the fallback NVIDIA Network Operator catalogsource")
+					nnoCustomCatalogSourceBuilder := olm.NewCatalogSourceBuilderWithIndexImage(inittools.APIClient,
+						CustomCatalogSource, nnoCatalogSourceNamespace, CustomCatalogsourceIndexImage,
+						nnoCustomCatalogSourceDisplayName, nnoCustomCatalogSourcePublisherName)
+					Expect(nnoCustomCatalogSourceBuilder).NotTo(BeNil(), "cannot initialize fallback NNO catalogsource")
+					createdCatalog, createErr := nnoCustomCatalogSourceBuilder.Create()
+					Expect(createErr).ToNot(HaveOccurred(), "cannot create fallback NNO catalogsource")
+					time.Sleep(60 * time.Second)
+					Expect(createdCatalog.IsReady(4*time.Minute)).To(BeTrue(), "fallback NNO catalogsource is not ready")
+					CatalogSource = createdCatalog.Definition.Name
+					manifest, err = olm.PullPackageManifestByCatalog(inittools.APIClient,
+						nnoPackage, nnoCatalogSourceNamespace, CatalogSource)
 				}
-
-				subBuilder.WithInstallPlanApproval(InstallPlanApproval)
-
-				glog.V(networkparams.LogLevel).Infof("Creating the subscription, i.e Deploy the Network operator")
-				createdSub, err := subBuilder.Create()
-
-				Expect(err).ToNot(HaveOccurred(), "error creating subscription %v :  %v ",
-					createdSub.Definition.Name, err)
-
-				glog.V(networkparams.LogLevel).Infof("Newly created subscription: %s was successfully created",
-					createdSub.Object.Name)
-
-				if createdSub.Exists() {
-					glog.V(networkparams.LogLevel).Infof("The newly created NNO subscription '%s' in "+
-						"namespace '%v' has current CSV  '%v'", createdSub.Object.Name, createdSub.Object.Namespace,
-						createdSub.Object.Status.CurrentCSV)
+				Expect(err).ToNot(HaveOccurred(), "cannot read NNO catalog before driver discovery")
+				Expect(manifest).NotTo(BeNil())
+				if SubscriptionChannel == UndefinedValue {
+					SubscriptionChannel = manifest.Object.Status.DefaultChannel
 				}
-
-				defer func() {
-					if cleanupAfterTest {
-						err := createdSub.Delete()
-						Expect(err).ToNot(HaveOccurred())
+				for _, channel := range manifest.Object.Status.Channels {
+					if channel.Name == SubscriptionChannel {
+						requestedNNOVersion = channel.CurrentCSVDesc.Version.String()
 					}
-				}()
-
+				}
+				Expect(requestedNNOVersion).ToNot(BeEmpty(), "requested NNO channel is absent from catalog")
+			}
+			if discoverPrecompiled {
+				selectedPrecompiledOFED = resolveRequestedPrecompiledDriver(requestedNNOVersion)
+			} else if nvidiaNetworkConfig.UsePrecompiledOFED && ofedDriverVersion != UndefinedValue {
+				Expect(nvidianetwork.VerifyOFEDReleaseFamily(requestedNNOVersion, ofedDriverVersion)).To(Succeed())
+			}
+			if nvidiaNetworkConfig.ReuseNNO {
+				csv, err := nnoCSV(true)
+				Expect(err).ToNot(HaveOccurred(), "cannot inspect NNO for reuse")
+				Expect(csv).NotTo(BeNil(), "NNO is missing; reuse requires the earlier successful deployment")
 			}
 
-			By("Sleep for 2 minutes to allow the Network Operator deployment to be created")
-			glog.V(networkparams.LogLevel).Infof("Sleep for 2 minutes to allow the Network Operator deployment" +
-				" to be created")
-			time.Sleep(2 * time.Minute)
+			subscriptionCreated := false
+			bundleCSVCreated := false
+			if !nvidiaNetworkConfig.ReuseNNO {
+				By("Check if NVIDIA Network Operator namespace exists, otherwise created it and label it")
+				nsBuilder := namespace.NewBuilder(inittools.APIClient, nnoNamespace)
+				_, namespaceErr := inittools.APIClient.Namespaces().Get(context.Background(), nnoNamespace, metav1.GetOptions{})
+				namespaceCreated := k8serrors.IsNotFound(namespaceErr)
+				if !namespaceCreated {
+					Expect(namespaceErr).ToNot(HaveOccurred(), "cannot inspect NNO namespace")
+				} else {
+					glog.V(networkparams.LogLevel).Infof("Creating the namespace:  %v", nnoNamespace)
+					createdNsBuilder, err := nsBuilder.Create()
+					Expect(err).ToNot(HaveOccurred(), "error creating namespace '%s' :  %v ",
+						nsBuilder.Definition.Name, err)
 
-			By("Wait for up to 4 minutes for Network Operator deployment to be created")
-			nnoDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, nnoDeployment, nnoNamespace,
-				30*time.Second, 4*time.Minute)
-			Expect(nnoDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy "+
-				"Network operator")
+					glog.V(networkparams.LogLevel).Infof("Successfully created namespace '%s'",
+						createdNsBuilder.Object.Name)
 
-			By("Check if the Network operator deployment is ready")
-			nnoOperatorDeployment, err := deployment.Pull(inittools.APIClient, nnoDeployment, nnoNamespace)
+					glog.V(networkparams.LogLevel).Infof("Labeling the newly created namespace '%s'",
+						nsBuilder.Object.Name)
 
-			Expect(err).ToNot(HaveOccurred(), "Error trying to pull Network operator "+
-				"deployment is: %v", err)
+					labeledNsBuilder := createdNsBuilder.WithMultipleLabels(map[string]string{
+						"openshift.io/cluster-monitoring":    "true",
+						"pod-security.kubernetes.io/enforce": "privileged",
+					})
 
-			glog.V(networkparams.LogLevel).Infof("Pulled Network operator deployment is:  %v ",
-				nnoOperatorDeployment.Definition.Name)
+					newLabeledNsBuilder, err := labeledNsBuilder.Update()
+					Expect(err).ToNot(HaveOccurred(), "error labeling namespace %v :  %v ",
+						newLabeledNsBuilder.Definition.Name, err)
 
-			if nnoOperatorDeployment.IsReady(4 * time.Minute) {
-				glog.V(networkparams.LogLevel).Infof("Pulled Network operator deployment '%s' is Ready",
+					glog.V(networkparams.LogLevel).Infof("The nvidia-network-operator labeled namespace has "+
+						"labels:  %v", newLabeledNsBuilder.Object.Labels)
+				}
+
+				defer func() {
+					if cleanupAfterTest && namespaceCreated {
+						err := nsBuilder.Delete()
+						Expect(err).ToNot(HaveOccurred())
+					}
+				}()
+
+				// NNO Namespace should be created at this point
+				if deployFromBundle {
+					glog.V(networkparams.LogLevel).Infof("Initializing the kube API Client before deploying bundle")
+					deployBundle = deploy.NewDeploy(inittools.APIClient)
+
+					deployBundleConfig.BundleImage = networkOperatorBundleImage
+
+					glog.V(networkparams.LogLevel).Infof("Deploy the Network Operator bundle image '%s'",
+						deployBundleConfig.BundleImage)
+
+					_, existingErr := inittools.APIClient.ClusterServiceVersions(nnoNamespace).Get(context.Background(), bundleCSV.Name, metav1.GetOptions{})
+					bundleCSVCreated = k8serrors.IsNotFound(existingErr)
+					if !bundleCSVCreated {
+						Expect(existingErr).ToNot(HaveOccurred())
+					}
+					err := deployBundle.DeployBundle(networkparams.LogLevel, &deployBundleConfig, nnoNamespace,
+						5*time.Minute)
+					Expect(err).ToNot(HaveOccurred(), "error from deploy.DeployBundle():  '%v' ", err)
+
+					glog.V(networkparams.LogLevel).Infof("Network Operator bundle image '%s' deployed successfully "+
+						"in namespace '%s", deployBundleConfig.BundleImage, nnoNamespace)
+
+				} else {
+					By("Create OperatorGroup in NVIDIA Network Operator Namespace")
+					groups, err := inittools.APIClient.OperatorGroups(nnoNamespace).List(context.Background(), metav1.ListOptions{})
+					Expect(err).ToNot(HaveOccurred(), "cannot inspect NNO OperatorGroups")
+					Expect(len(groups.Items)).To(BeNumerically("<=", 1), "multiple NNO OperatorGroups exist")
+					if len(groups.Items) == 0 {
+						ogBuilder := olm.NewOperatorGroupBuilder(inittools.APIClient, nnoOperatorGroupName, nnoNamespace)
+						_, err := ogBuilder.Create()
+						Expect(err).ToNot(HaveOccurred(), "cannot create NNO OperatorGroup")
+						defer func() {
+							if cleanupAfterTest {
+								Expect(ogBuilder.Delete()).To(Succeed())
+							}
+						}()
+					}
+
+					By("Create Subscription in NVIDIA Network Operator Namespace")
+					subBuilder := olm.NewSubscriptionBuilder(inittools.APIClient, nnoSubscriptionName,
+						nnoSubscriptionNamespace, CatalogSource, nnoCatalogSourceNamespace, nnoPackage)
+
+					subBuilder.WithChannel(SubscriptionChannel)
+
+					subBuilder.WithInstallPlanApproval(InstallPlanApproval)
+
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					createdSub, created, err := nvidianetwork.EnsureNNOSubscription(ctx,
+						inittools.APIClient.OperatorsV1alpha1Interface, subBuilder.Definition, SubscriptionChannel != UndefinedValue)
+					cancel()
+					subscriptionCreated = created
+					Expect(err).ToNot(HaveOccurred(), "cannot create or reconcile NNO subscription")
+					Expect(createdSub).ToNot(BeNil())
+					glog.V(networkparams.LogLevel).Infof("Using NNO subscription %s on channel %s", createdSub.Name, createdSub.Spec.Channel)
+					defer func() {
+						if cleanupAfterTest && subscriptionCreated {
+							err := inittools.APIClient.Subscriptions(createdSub.Namespace).Delete(context.Background(), createdSub.Name, metav1.DeleteOptions{})
+							Expect(err).ToNot(HaveOccurred())
+						}
+					}()
+
+				}
+
+				By("Sleep for 2 minutes to allow the Network Operator deployment to be created")
+				glog.V(networkparams.LogLevel).Infof("Sleep for 2 minutes to allow the Network Operator deployment" +
+					" to be created")
+				time.Sleep(2 * time.Minute)
+
+				By("Wait for up to 4 minutes for Network Operator deployment to be created")
+				nnoDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, nnoDeployment, nnoNamespace,
+					30*time.Second, 4*time.Minute)
+				Expect(nnoDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy "+
+					"Network operator")
+
+				By("Check if the Network operator deployment is ready")
+				nnoOperatorDeployment, err := deployment.Pull(inittools.APIClient, nnoDeployment, nnoNamespace)
+
+				Expect(err).ToNot(HaveOccurred(), "Error trying to pull Network operator "+
+					"deployment is: %v", err)
+
+				glog.V(networkparams.LogLevel).Infof("Pulled Network operator deployment is:  %v ",
 					nnoOperatorDeployment.Definition.Name)
+
+				if nnoOperatorDeployment.IsReady(4 * time.Minute) {
+					glog.V(networkparams.LogLevel).Infof("Pulled Network operator deployment '%s' is Ready",
+						nnoOperatorDeployment.Definition.Name)
+				}
+
 			}
 
 			By("Get the CSV deployed in NVIDIA Network Operator namespace")
-			csvBuilderList, err := olm.ListClusterServiceVersion(inittools.APIClient, nnoNamespace)
-
-			Expect(err).ToNot(HaveOccurred(), "Error getting list of CSVs in Network operator "+
-				"namespace: '%v'", err)
-
-			// Need to handle case where there are more than one CSV in nvidia-network-operator namespace,
-			// such as in RHOAI environment
-			nnoCSVName := ""
-			var nnoCSVBuilder *olm.ClusterServiceVersionBuilder = nil
-
-			for _, csvBuilder := range csvBuilderList {
-				if strings.HasPrefix(csvBuilder.Object.Name, "nvidia-network-operator") {
-					// Found the matching CSV
-					nnoCSVName = csvBuilder.Object.Name
-					nnoCSVBuilder = csvBuilder
-					glog.V(networkparams.LogLevel).Infof("Found nvidia-network-operator CSV '%s' in namespace '%s'",
-						nnoCSVName, nnoNamespace)
-					break
+			var installedCSV *v1alpha1.ClusterServiceVersion
+			Eventually(func() error {
+				csv, err := nnoCSV(true)
+				if err != nil {
+					return err
 				}
-			}
-
-			Expect(nnoCSVName).To(Not(BeEmpty()), "nvidia-network-operator CSV not found in the list of CSVs in namespace '%s'", nnoNamespace)
-
-			// 11-04-2025
-			/*
-				oc get csv -n nvidia-network-operator
-				NAME                                      DISPLAY                            VERSION          REPLACES                              PHASE
-				authorino-operator.v0.16.0                Authorino Operator                 0.16.0           authorino-operator.v0.15.1            Succeeded
-				cert-manager.v1.16.5                      cert-manager                       1.16.5           cert-manager.v1.16.1                  Succeeded
-				devworkspace-operator.v0.37.0             DevWorkspace Operator              0.37.0           devworkspace-operator.v0.36.0         Succeeded
-				nvidia-network-operator.v25.10.0-beta.2   NVIDIA Network Operator            25.10.0-beta.2                                         Succeeded
-				rhods-operator.2.25.0                     Red Hat OpenShift AI               2.25.0           rhods-operator.2.22.2                 Succeeded
-				serverless-operator.v1.36.1               Red Hat OpenShift Serverless       1.36.1           serverless-operator.v1.36.0           Succeeded
-				servicemeshoperator.v2.6.11               Red Hat OpenShift Service Mesh 2   2.6.11-0         servicemeshoperator.v2.6.10           Succeeded
-				web-terminal.v1.13.0                      Web Terminal                       1.13.0           web-terminal.v1.12.1-0.1745393748.p   Succeeded
-
-			*/
-
-			nnoCurrentCSV := nnoCSVBuilder.Definition.Name
+				if csv == nil {
+					return fmt.Errorf("NNO is not installed")
+				}
+				if err := verifyNNOFamily(requestedNNOVersion, csv.Spec.Version.String()); err != nil {
+					return err
+				}
+				installedCSV = csv
+				return nil
+			}, 5*time.Minute, 10*time.Second).Should(Succeed(), "requested NNO family is not ready")
+			nnoCurrentCSV := installedCSV.Name
 
 			glog.V(networkparams.LogLevel).Infof("Deployed ClusterServiceVersion is: '%s'", nnoCurrentCSV)
 
-			nnoCurrentCSVVersion := nnoCSVBuilder.Definition.Spec.Version.String()
+			nnoCurrentCSVVersion := installedCSV.Spec.Version.String()
 			csvVersionString := nnoCurrentCSVVersion
 			currentNNOCSVVersion = csvVersionString
 
@@ -938,7 +886,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			By("Wait for deployed ClusterServiceVersion to be in Succeeded phase")
 			glog.V(networkparams.LogLevel).Infof("Waiting for ClusterServiceVersion '%s' to be in Succeeded phase",
 				nnoCurrentCSV)
-			err = wait.CSVSucceeded(inittools.APIClient, nnoCurrentCSV, nnoNamespace, 60*time.Second,
+			err := wait.CSVSucceeded(inittools.APIClient, nnoCurrentCSV, nnoNamespace, 60*time.Second,
 				5*time.Minute)
 			if err != nil {
 				glog.V(networkparams.LogLevel).Infof("error waiting for ClusterServiceVersion '%s' to be "+
@@ -963,7 +911,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			nnoStepChecks["nno_deployment"] = nnoReportStatusPassed
 
 			defer func() {
-				if cleanupAfterTest {
+				if cleanupAfterTest && (subscriptionCreated || bundleCSVCreated) {
 					err := clusterCSV.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -1158,7 +1106,30 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				By("Delete RDMA test pods left over from previous runs")
 				deleteRdmaTestPods()
 				By("Replace existing NicClusterPolicy if present")
-				deleteNicClusterPolicyIfExists()
+				deleteNicClusterPolicyIfExists(nicClusterPolicyBuilder)
+			}
+
+			_, policyErr := nicClusterPolicyBuilder.Get()
+			policyCreated := k8serrors.IsNotFound(policyErr)
+			if !policyCreated {
+				Expect(policyErr).ToNot(HaveOccurred(), "cannot inspect existing NicClusterPolicy")
+			}
+			if policyCreated {
+				By("Delete /opt/mofed-container/inventory RPMs directory on worker nodes")
+				// Delete the "/opt/mofed-container/inventory" dir on each worker node
+				rdmaWorkerNodes := []string{rdmaClientHostname, rdmaServerHostname}
+
+				for i, workerNode := range rdmaWorkerNodes {
+					glog.V(networkparams.LogLevel).Infof("Deleting MOFED RPMS dir on worker node '%d' named '%s'",
+						i, workerNode)
+					debugPodName := fmt.Sprintf("delete-rpm-pod-%d", i) // ensure unique name
+					deleteMofedRPMDirOutput, err := rdmatest.DeleteMofedRpmDir(inittools.APIClient, debugPodName,
+						"default", clusterArchitecture, workerNode)
+					Expect(err).ToNot(HaveOccurred(), "Error deleting MOFED RPMs dir on worker node"+
+						" '%s':   %v", workerNode, err)
+					glog.V(networkparams.LogLevel).Infof("Output from deleting MOFED RPMS dir on worker node '%s'"+
+						" : \n%s", workerNode, deleteMofedRPMDirOutput)
+				}
 			}
 
 			By("Deploy NicClusterPolicy")
@@ -1169,7 +1140,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				createdNicClusterPolicyBuilder.Definition.Name)
 
 			defer func() {
-				if cleanupAfterTest {
+				if cleanupAfterTest && policyCreated {
 					_, err := createdNicClusterPolicyBuilder.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -1418,7 +1389,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			if nvidiaNetworkConfig.OfedDriverPullSpec != "" {
 				nnoStepChecks["precompiled_selection"] = nnoReportStatusRunning
 				By("Verify the requested driver remained active after GPU Operator installation")
-				selected, err := selectPrecompiledOFEDDriver(nvidiaNetworkConfig.OfedDriverPullSpec)
+				selected, err := selectPrecompiledOFEDDriver(nvidiaNetworkConfig.OfedDriverPullSpec, currentNNOCSVVersion)
 				Expect(err).ToNot(HaveOccurred(), "requested DOCA/OFED image no longer matches this cluster")
 				Expect(selected).ToNot(BeNil(), "requested DOCA/OFED image was not resolved")
 				err = verifyExplicitPrecompiledOFEDDriver(selected)
@@ -1723,7 +1694,108 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 	})
 })
 
-func selectPrecompiledOFEDDriver(requestedPullSpec string) (selected *nvidianetwork.OFEDImage, selectionErr error) {
+func nnoCSV(ready bool) (*v1alpha1.ClusterServiceVersion, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if ready && !deployFromBundle {
+		subs, err := inittools.APIClient.Subscriptions(nnoNamespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		for _, sub := range subs.Items {
+			if sub.Spec == nil || sub.Spec.Package != nnoPackage {
+				continue
+			}
+			if sub.Name != nnoSubscriptionName {
+				return nil, fmt.Errorf("NNO belongs to subscription %s; refusing to adopt it", sub.Name)
+			}
+			if SubscriptionChannel != UndefinedValue && sub.Spec.Channel != SubscriptionChannel {
+				return nil, fmt.Errorf("NNO subscription is on %s, requested %s", sub.Spec.Channel, SubscriptionChannel)
+			}
+		}
+	}
+	csvs, err := inittools.APIClient.ClusterServiceVersions(nnoNamespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return nvidianetwork.FindNNOCSV(csvs.Items, ready)
+}
+
+func verifyNNOFamily(requested, installed string) error {
+	expected, err := nvidianetwork.NNOReleaseFamily(requested)
+	if err != nil {
+		return nil
+	} // Preserve legacy/custom unversioned requests.
+	actual, err := nvidianetwork.NNOReleaseFamily(installed)
+	if err != nil {
+		return err
+	}
+	if expected != actual {
+		return fmt.Errorf("installed NNO %s does not match requested %s", installed, requested)
+	}
+	return nil
+}
+
+func readBundleCSV(image string) (*v1alpha1.ClusterServiceVersion, error) {
+	directory, err := os.MkdirTemp("", "nno-bundle-")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.RemoveAll(directory) }()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	secret, err := inittools.APIClient.Secrets("openshift-config").Get(ctx, "pull-secret", metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	auth := filepath.Join(directory, "auth.json")
+	if err := os.WriteFile(auth, secret.Data[corev1.DockerConfigJsonKey], 0600); err != nil {
+		return nil, err
+	}
+	manifests := filepath.Join(directory, "manifests")
+	if err := os.Mkdir(manifests, 0700); err != nil {
+		return nil, err
+	}
+	if output, err := exec.CommandContext(ctx, "oc", "image", "extract", image,
+		"--path=/manifests/:"+manifests, "--only-files", "--registry-config="+auth).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("read bundle manifests: %w: %s", err, output)
+	}
+	entries, err := os.ReadDir(manifests)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(manifests, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		var csv v1alpha1.ClusterServiceVersion
+		if err := yaml.Unmarshal(data, &csv); err != nil {
+			return nil, err
+		}
+		if csv.Kind == "ClusterServiceVersion" && strings.HasPrefix(csv.Name, nnoPackage+".") {
+			return &csv, nil
+		}
+	}
+	return nil, fmt.Errorf("bundle has no NVIDIA Network Operator CSV")
+}
+
+func resolveRequestedPrecompiledDriver(nnoVersion string) *nvidianetwork.OFEDImage {
+	By("Resolve the precompiled driver for the requested NNO family and both RDMA workers")
+	selected, err := selectPrecompiledOFEDDriver(nvidiaNetworkConfig.OfedDriverPullSpec, nnoVersion)
+	Expect(err).ToNot(HaveOccurred(), "precompiled DOCA/OFED image resolution failed")
+	if selected == nil {
+		precompiledOFEDSkipped = true
+		Skip(precompiledOFEDSkipReason)
+	}
+	By(fmt.Sprintf("Using precompiled DOCA/OFED image %s", selected.PullSpec()))
+	return selected
+}
+
+func selectPrecompiledOFEDDriver(requestedPullSpec, nnoVersion string) (selected *nvidianetwork.OFEDImage, selectionErr error) {
 	precompiledSelectionOutcome = "selection_error"
 	precompiledSelectionError = ""
 	nnoStepChecks["precompiled_selection"] = nnoReportStatusRunning
@@ -1784,66 +1856,29 @@ func selectPrecompiledOFEDDriver(requestedPullSpec string) (selected *nvidianetw
 		return nil, fmt.Errorf("failed to read OpenShift version for precompiled OFED matching: %w", err)
 	}
 
-	osTag := ""
-	if requestedPullSpec != "" {
-		firstWorkerName := ""
-		for _, workerNode := range rdmaWorkers {
-			workerName := workerNode.Name
-			workerOSTag, err := nvidianetwork.NodeOSTag(workerNode.Labels, ocpVersion)
-			if err != nil {
-				return nil, fmt.Errorf("failed to determine OS tag for RDMA worker %s: %w", workerName, err)
-			}
-			if firstWorkerName != "" && workerOSTag != osTag {
-				return nil, fmt.Errorf("RDMA workers %s and %s have different OS tags %q and %q",
-					firstWorkerName, workerName, osTag, workerOSTag)
-			}
-
-			workerImage, err := nvidianetwork.ParseExplicitPrecompiledOFEDPullSpec(requestedPullSpec,
-				workerNode.Status.NodeInfo.KernelVersion, workerOSTag, workerNode.Status.NodeInfo.Architecture)
-			if err != nil {
-				return nil, fmt.Errorf("requested driver does not match RDMA worker %s OS tag %s: %w",
-					workerName, workerOSTag, err)
-			}
-			if selected == nil {
-				selected = workerImage
-				osTag = workerOSTag
-				firstWorkerName = workerName
-				continue
-			}
-		}
-		glog.V(networkparams.LogLevel).Infof("RDMA workers use the same precompiled driver OS tag %s", osTag)
-	} else {
-		osTag, err = nvidianetwork.NodeOSTag(node.Labels, ocpVersion)
+	workers := make([]nvidianetwork.OFEDWorker, 0, len(rdmaWorkers))
+	for _, node := range rdmaWorkers {
+		osTag, err := nvidianetwork.NodeOSTag(node.Labels, ocpVersion)
 		if err != nil {
-			return nil, fmt.Errorf("failed to determine OS tag for worker %s: %w", node.Name, err)
+			return nil, fmt.Errorf("OS tag for worker %s: %w", node.Name, err)
 		}
-		glog.V(networkparams.LogLevel).Infof("Worker node kernel version: %s architecture: %s OS tag: %s",
-			kernelVersion, architecture, osTag)
-		catalog := nvidianetwork.NewStagingCatalogClient(inittools.APIClient)
+		worker := nvidianetwork.OFEDWorker{KernelVersion: node.Status.NodeInfo.KernelVersion,
+			OSTag: osTag, Architecture: node.Status.NodeInfo.Architecture}
+		workers = append(workers, worker)
+		if requestedPullSpec != "" {
+			selected, err = nvidianetwork.ParseExplicitPrecompiledOFEDPullSpec(requestedPullSpec,
+				worker.KernelVersion, worker.OSTag, worker.Architecture)
+			if err != nil {
+				return nil, fmt.Errorf("requested driver does not match worker %s: %w", node.Name, err)
+			}
+		}
+	}
+	osTag := workers[0].OSTag
+	if requestedPullSpec == "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		selected, err = nvidianetwork.SelectPrecompiledOFED(
-			ctx, catalog,
-			kernelVersion, osTag, architecture, "", "")
-		cancel()
-		if err == nil && selected != nil {
-			// Keep the selected version and check the server's exact tag; do not
-			// independently choose a newer version or search for an older shared one.
-			serverNode := rdmaWorkers[1]
-			serverOSTag, serverErr := nvidianetwork.NodeOSTag(serverNode.Labels, ocpVersion)
-			if serverErr != nil {
-				return nil, fmt.Errorf("failed to determine OS tag for RDMA worker %s: %w", serverNode.Name, serverErr)
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			serverErr = nvidianetwork.CheckPrecompiledOFEDWorkerTag(ctx, catalog, selected,
-				serverNode.Status.NodeInfo.KernelVersion, serverOSTag, serverNode.Status.NodeInfo.Architecture)
-			cancel()
-			if serverErr != nil {
-				return nil, fmt.Errorf("selected precompiled OFED version %s does not match RDMA worker %s OS tag %s: %w",
-					selected.Version, serverNode.Name, serverOSTag, serverErr)
-			}
-			glog.V(networkparams.LogLevel).Infof("Selected precompiled OFED version %s is available for both RDMA workers",
-				selected.Version)
-		}
+		defer cancel()
+		selected, err = nvidianetwork.SelectPrecompiledOFEDForNNO(ctx,
+			nvidianetwork.NewStagingCatalogClient(inittools.APIClient), workers, nnoVersion)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("precompiled OFED image resolution failed for kernel %s and OS tag %s: %w",
@@ -1852,10 +1887,16 @@ func selectPrecompiledOFEDDriver(requestedPullSpec string) (selected *nvidianetw
 	if selected == nil {
 		precompiledSelectionOutcome = "no_match"
 		precompiledOFEDSkipReason = fmt.Sprintf(
-			"no precompiled DOCA/OFED image in staging for kernel %s / OS tag %s; skipping precompiled run",
-			kernelVersion, osTag)
+			"no compatible precompiled DOCA/OFED pair for NNO %s, kernel %s / OS tag %s / %s on both RDMA workers; skipping precompiled run",
+			nnoVersion, kernelVersion, osTag, architecture)
 
 		return nil, nil
+	}
+
+	if requestedPullSpec != "" {
+		if err := nvidianetwork.VerifyOFEDReleaseFamily(nnoVersion, selected.Version); err != nil {
+			return nil, err
+		}
 	}
 
 	precompiledSelectionOutcome = "selected"
@@ -1923,25 +1964,41 @@ func hasAnyPrefix(s string, prefixes []string) bool {
 	return false
 }
 
-func deleteNicClusterPolicyIfExists() {
-	existing, err := nvidianetwork.PullNicClusterPolicy(inittools.APIClient, nnoNicClusterPolicyName)
-	if err != nil {
-		glog.V(networkparams.LogLevel).Infof(
-			"No existing NicClusterPolicy '%s' to replace: %v", nnoNicClusterPolicyName, err)
-
+func deleteNicClusterPolicyIfExists(builder *nvidianetwork.NicClusterPolicyBuilder) {
+	existing, err := builder.Get()
+	if k8serrors.IsNotFound(err) {
 		return
 	}
+	Expect(err).ToNot(HaveOccurred(), "cannot inspect existing NicClusterPolicy")
 
 	glog.V(networkparams.LogLevel).Infof(
 		"Deleting existing NicClusterPolicy '%s' before recreate", nnoNicClusterPolicyName)
-	_, err = existing.Delete()
+	err = inittools.APIClient.Delete(context.Background(), existing)
 	Expect(err).ToNot(HaveOccurred(), "error deleting existing NicClusterPolicy %s: %v",
 		nnoNicClusterPolicyName, err)
 
-	Eventually(func() bool {
-		_, pullErr := nvidianetwork.PullNicClusterPolicy(inittools.APIClient, nnoNicClusterPolicyName)
-
-		return pullErr != nil
-	}, 5*time.Minute, 5*time.Second).Should(BeTrue(),
-		"NicClusterPolicy %s was not deleted before recreate", nnoNicClusterPolicyName)
+	Eventually(func() error {
+		_, pullErr := builder.Get()
+		if !k8serrors.IsNotFound(pullErr) {
+			if pullErr != nil {
+				return pullErr
+			}
+			return fmt.Errorf("NicClusterPolicy %s still exists", nnoNicClusterPolicyName)
+		}
+		pods, err := inittools.APIClient.Pods(nnoNamespace).List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			return err
+		}
+		if driver := existing.Spec.OFEDDriver; driver != nil && driver.Image != "" {
+			for _, pod := range pods.Items {
+				for _, container := range pod.Spec.Containers {
+					if strings.Contains(container.Image, "/"+driver.Image+":") ||
+						strings.Contains(container.Image, "/"+driver.Image+"@") {
+						return fmt.Errorf("waiting for previous driver pod %s to stop", pod.Name)
+					}
+				}
+			}
+		}
+		return nil
+	}, 5*time.Minute, 5*time.Second).Should(Succeed(), "previous driver must stop before inventory cleanup")
 }

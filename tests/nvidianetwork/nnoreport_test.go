@@ -10,7 +10,6 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nnopairreport"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidianetwork"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -245,15 +244,9 @@ func nnoStepStatus(specStatus string) string {
 }
 
 func observedNNOCSVVersion() string {
-	csvs, err := olm.ListClusterServiceVersion(inittools.APIClient, nnoNamespace)
-	if err != nil {
-		return ""
-	}
-	for _, csv := range csvs {
-		if csv != nil && csv.Object != nil && csv.Definition != nil &&
-			strings.HasPrefix(csv.Object.Name, "nvidia-network-operator") {
-			return csv.Definition.Spec.Version.String()
-		}
+	csv, _ := nnoCSV(false)
+	if csv != nil {
+		return csv.Spec.Version.String()
 	}
 	return ""
 }

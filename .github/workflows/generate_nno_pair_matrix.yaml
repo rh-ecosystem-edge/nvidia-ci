@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       periodic_job:
-        description: 'Prow periodic job to collect'
+        description: 'Optional single periodic job override; empty collects all DOCA2 sources'
         required: false
-        default: 'periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-e2e'
+        default: ''
         type: string
       publish:
         description: 'Publish changed reports to GitHub Pages (upstream main only)'
@@ -28,6 +28,7 @@ jobs:
       changed: ${{ steps.publish_diff.outputs.changed }}
     env:
       PERIODIC_JOB: ${{ inputs.periodic_job || 'periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-e2e' }}
+      PERIODIC_JOB_OVERRIDE: ${{ inputs.periodic_job }}
       SIGNED_PERIODIC_JOB: periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto
       SIGNED_PR_JOB: pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed
       REPORT_OUTPUT: nno-pair-report-output
@@ -60,8 +61,13 @@ jobs:
           args=(--output "$RUNNER_TEMP/nno-pair-report/history.json")
           args+=(--summary-output "$RUNNER_TEMP/nno-pair-report/collection.json")
           args+=(--periodic-job "$PERIODIC_JOB")
-          args+=(--periodic-job "$SIGNED_PERIODIC_JOB")
-          args+=(--indexed-presubmit-job "$SIGNED_PR_JOB" --lookback-hours 168)
+          if [[ -z "$PERIODIC_JOB_OVERRIDE" ]]; then
+            for variant in doca2-4.21 doca2-4.20 doca2-4.19 doca2-4.20-maintenance; do
+              args+=(--periodic-job "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-${variant}-nno-e2e")
+            done
+            args+=(--periodic-job "$SIGNED_PERIODIC_JOB")
+            args+=(--indexed-presubmit-job "$SIGNED_PR_JOB" --lookback-hours 168)
+          fi
           if [[ -f nno-pages-baseline/nno_doca2_history.json ]]; then
             args+=(--baseline nno-pages-baseline/nno_doca2_history.json)
           fi

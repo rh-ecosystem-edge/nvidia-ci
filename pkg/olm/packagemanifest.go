@@ -15,6 +15,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// ErrPackageManifestNotFound means a successful catalog lookup returned no matching package.
+var ErrPackageManifestNotFound = errors.New("no matching PackageManifests were found")
+
 // PackageManifestBuilder provides a struct for PackageManifest object from the cluster
 // and a PackageManifest definition.
 type PackageManifestBuilder struct {
@@ -153,7 +156,7 @@ func PullPackageManifestByCatalog(apiClient *clients.Settings, name, nsname,
 	}
 	if len(pkgManifestObjects) == 0 {
 		glog.V(100).Infof("The list of matching PackageManifests is empty")
-		return nil, fmt.Errorf("no matching PackageManifests were found")
+		return nil, ErrPackageManifestNotFound
 	}
 	if len(pkgManifestObjects) > 1 {
 		glog.V(100).Infof("More than one matching PackageManifests were found")

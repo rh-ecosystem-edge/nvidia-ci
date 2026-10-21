@@ -145,5 +145,41 @@ class RequestTests(unittest.TestCase):
                 self.assertFalse((root / "artifacts").exists())
 
 
+class LatestChannelTests(unittest.TestCase):
+    def test_latest_ga_uses_configured_catalog(self):
+        import signed_images
+        from unittest.mock import patch
+        manifest = {'items': [
+            {'status': {'catalogSource': catalog, 'channels': [
+                {'name': channel, 'currentCSV': 'nno.'+version, 'currentCSVDesc': {'version': version}}
+            ]}}
+            for catalog, channel, version in [('certified-operators', 'v26.7', '26.7.0'),
+                                               ('custom-nno', 'v26.04', '26.4.0')]
+        ]}
+        with patch.dict(os.environ, {'NVIDIANETWORK_CATALOGSOURCE': 'custom-nno'}, clear=True), \
+                patch.object(signed_images, 'command', return_value=json.dumps(manifest)):
+            self.assertEqual(signed_images.resolve_nno_channel(), 'v26.04')
+
+    def test_latest_ga_and_job_handoff(self):
+        import signed_images
+        from unittest.mock import patch
+        def channel(name, version, **extra):
+            return dict(name=name, currentCSV='nno.'+version, currentCSVDesc={'version': version}, **extra)
+        channels = [channel('v26.04', '26.4.0-1'), channel('v26.7', '26.7.0-beta.2'),
+                    channel('v26.10', '26.10.0', deprecation={}), channel('v26.1', '26.1.0')]
+        self.assertEqual(signed_images.latest_ga(channels), 'v26.04')
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {'SHARED_DIR': directory}, clear=True):
+            manifest = {'items': [{'status': {'catalogSource': 'certified-operators', 'channels': channels}}]}
+            with patch.object(signed_images, 'command', return_value=json.dumps(manifest)) as query:
+                self.assertEqual(signed_images.resolve_nno_channel(), 'v26.04')
+                channels.append(channel('v26.7', '26.7.0-1'))
+                self.assertEqual(signed_images.resolve_nno_channel(), 'v26.04')
+                self.assertEqual(query.call_count, 1)
+            self.assertEqual(signed_images.latest_ga(channels), 'v26.7')
+        for unavailable in [[], [channel('v26.7', '26.7.0-rc.1')], [channel('v26.7', '26.4.0')]]:
+            with self.assertRaises(ValueError):
+                signed_images.latest_ga(unavailable)
+
+
 if __name__ == "__main__":
     unittest.main()

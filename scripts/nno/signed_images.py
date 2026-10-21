@@ -62,6 +62,44 @@ def nno_channel(image):
     return f'v{int(release[1])}.{int(release[2])}'
 
 
+def latest_ga(channels):
+    """Select a versioned GA channel by normalized family, retaining its catalog spelling."""
+    eligible = []
+    for channel in channels:
+        family = re.fullmatch(r'v([0-9]{2})\.(0?[147]|10)', channel.get('name', ''))
+        version = re.fullmatch(r'([0-9]{2})\.(0?[147]|10)\.[0-9]+(?:-[0-9]+(?:\.[0-9]+)*(?:\.p)?)?(?:\+[A-Za-z0-9.-]+)?',
+                               channel.get('currentCSVDesc', {}).get('version', ''))
+        if family and version and channel.get('deprecation') is None and channel.get('currentCSV'):
+            key = tuple(map(int, family.groups()))
+            if key == tuple(map(int, version.groups())):
+                eligible.append((key, channel['name']))
+    if not eligible:
+        raise ValueError('no quarterly GA NNO channel is available in the selected catalog')
+    return max(eligible)[1]
+
+
+def resolve_nno_channel():
+    """Resolve once per job; the handoff records a channel choice, not installation state."""
+    shared = os.environ.get('SHARED_DIR')
+    handoff = Path(shared) / 'nno-channel' if shared else None
+    if handoff and handoff.exists():
+        channel = handoff.read_text().strip()
+        if re.fullmatch(r'v[0-9]{2}\.(0?[147]|10)', channel) is None:
+            raise ValueError('invalid saved NNO channel')
+        return channel
+    namespace = 'openshift-marketplace'
+    catalog = os.environ.get('NVIDIANETWORK_CATALOGSOURCE') or 'certified-operators'
+    manifests = json.loads(command(['oc', 'get', 'packagemanifests', '-n', namespace,
+                                    '--field-selector=metadata.name=nvidia-network-operator', '-o', 'json']))
+    matches = [item['status'] for item in manifests['items'] if item['status'].get('catalogSource') == catalog]
+    if len(matches) != 1:
+        raise ValueError(f'cannot identify one NNO PackageManifest from {catalog}')
+    channel = latest_ga(matches[0]['channels'])
+    if handoff:
+        handoff.write_text(channel + '\n')
+    return channel
+
+
 def nno_version_matches(channel, version):
     """Match a complete CSV version, retaining its patch and packaging suffix."""
     return (isinstance(channel, str) and re.fullmatch(r'v[0-9]+\.[0-9]+', channel) is not None

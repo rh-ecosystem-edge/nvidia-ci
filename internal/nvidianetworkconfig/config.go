@@ -11,6 +11,7 @@ type NvidiaNetworkConfig struct {
 	CatalogSource                      string `envconfig:"NVIDIANETWORK_CATALOGSOURCE"`
 	SubscriptionChannel                string `envconfig:"NVIDIANETWORK_SUBSCRIPTION_CHANNEL"`
 	CleanupAfterTest                   bool   `envconfig:"NVIDIANETWORK_CLEANUP" default:"true"`
+	ReuseNNO                           bool   `envconfig:"NVIDIANETWORK_REUSE_NNO" default:"false"`
 	DeployFromBundle                   bool   `envconfig:"NVIDIANETWORK_DEPLOY_FROM_BUNDLE" default:"false"`
 	BundleImage                        string `envconfig:"NVIDIANETWORK_BUNDLE_IMAGE"`
 	OfedDriverVersion                  string `envconfig:"NVIDIANETWORK_OFED_DRIVER_VERSION"`
