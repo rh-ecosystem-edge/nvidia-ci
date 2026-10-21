@@ -399,21 +399,23 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			} else {
 				glog.V(gpuparams.GpuLogLevel).Infof("Deploying GPU operator from catalogsource")
 
-				By("Check if GPU packagemanifest exists in default GPU catalog")
-				glog.V(gpuparams.GpuLogLevel).Infof("Using default GPU catalogsource '%s'",
-					nvidiagpu.CatalogSourceDefault)
+				By("Check if GPU packagemanifest exists in GPU catalog")
+				glog.V(gpuparams.GpuLogLevel).Infof("Using GPU catalogsource '%s'", CatalogSource)
 
-				gpuPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-					nvidiagpu.Package, nvidiagpu.CatalogSourceNamespace, nvidiagpu.CatalogSourceDefault)
-
+				gpuPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(
+					inittools.APIClient,
+					nvidiagpu.Package,
+					nvidiagpu.CatalogSourceNamespace,
+					CatalogSource,
+				)
 				if err != nil {
 					glog.V(gpuparams.GpuLogLevel).Infof("Error trying to pull GPU packagemanifest '%s' from"+
-						" default catalog '%s': '%v'", nvidiagpu.Package, nvidiagpu.CatalogSourceDefault, err.Error())
+						" catalog '%s': '%v'", nvidiagpu.Package, CatalogSource, err.Error())
 				}
 
 				if gpuPkgManifestBuilderByCatalog == nil {
 					glog.V(gpuparams.GpuLogLevel).Infof("The GPU packagemanifest '%s' was not "+
-						"found in the default '%s' catalog", nvidiagpu.Package, nvidiagpu.CatalogSourceDefault)
+						"found in catalog '%s'", nvidiagpu.Package, CatalogSource)
 
 					if createGPUCustomCatalogsource {
 						glog.V(gpuparams.GpuLogLevel).Infof("Creating custom catalogsource '%s' for GPU Operator, "+
@@ -465,10 +467,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					}
 
 				} else {
-					glog.V(gpuparams.GpuLogLevel).Infof("GPU packagemanifest '%s' was found in the default"+
-						" catalog '%s'", gpuPkgManifestBuilderByCatalog.Object.Name, nvidiagpu.CatalogSourceDefault)
-
-					CatalogSource = nvidiagpu.CatalogSourceDefault
+					glog.V(gpuparams.GpuLogLevel).Infof("GPU packagemanifest '%s' was found in"+
+						" catalog '%s'", gpuPkgManifestBuilderByCatalog.Object.Name, CatalogSource)
 
 					By("Get the GPU Default Channel from Packagemanifest")
 					DefaultSubscriptionChannel = gpuPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
