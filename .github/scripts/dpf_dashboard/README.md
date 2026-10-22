@@ -122,5 +122,4 @@ This module is called by `.github/workflows/generate_dpf_dashboard.yaml` (daily 
 ## See Also
 
 - [GPU Operator Dashboard](../gpu_operator_dashboard/)
-- [Network Operator Dashboard](../nno_dashboard/)
 - [Common Utilities](../common/)
