@@ -6,6 +6,14 @@
                 "ocp_full_version": "4.22.19",
                 "gpu_operator_version": "26.7.2(bundle)",
                 "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/788/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-master-signed/2113067732801949696/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1792636436,
+                "driver_branch": "580.173.02, 595.71.05, 610.57.04, 615.71.09:failed"
+            },
+            {
+                "ocp_full_version": "4.22.19",
+                "gpu_operator_version": "26.7.2(bundle)",
+                "test_status": "SUCCESS",
                 "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/767/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-master-signed/2111483876978200576/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
                 "job_timestamp": 1792257822,
                 "driver_branch": "580.173.02, 595.71.05, 610.57.04, 615.71.09:failed"
@@ -423,6 +431,14 @@
     "4.20": {
         "notes": [],
         "bundle_tests": [
+            {
+                "ocp_full_version": "4.20.43",
+                "gpu_operator_version": "26.7.2(bundle)",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/788/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.20-stable-nvidia-gpu-operator-e2e-master-signed/2113067732692897792/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1792635474,
+                "driver_branch": "580.173.02, 595.71.05, 610.57.04, 615.71.09:failed"
+            },
             {
                 "ocp_full_version": "4.20.43",
                 "gpu_operator_version": "26.7.2(bundle)",
