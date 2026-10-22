@@ -62,7 +62,7 @@ jobs:
           args+=(--summary-output "$RUNNER_TEMP/nno-pair-report/collection.json")
           args+=(--periodic-job "$PERIODIC_JOB")
           if [[ -z "$PERIODIC_JOB_OVERRIDE" ]]; then
-            for variant in doca2-4.21 doca2-4.20 doca2-4.19 doca2-4.20-maintenance; do
+            for variant in nno-4.21 nno-4.20 nno-4.19 nno-4.20-maintenance; do
               args+=(--periodic-job "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-${variant}-nno-e2e")
             done
             args+=(--periodic-job "$SIGNED_PERIODIC_JOB")
