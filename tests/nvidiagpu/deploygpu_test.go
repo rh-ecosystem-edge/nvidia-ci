@@ -63,6 +63,8 @@ var (
 		"arm64": "quay.io/wabouham/gpu_burn_arm64:ubi9",
 	}
 
+	gpuCount int
+
 	// commonNamespaceLabels are applied to every namespace this suite creates (GPU Operator,
 	// gpu-burn), to enable cluster monitoring and satisfy the Pod Security admission level
 	// required by privileged operand/workload pods.
@@ -824,6 +826,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				mig.DisableMig(WorkerNodeSelector)
 			}
 
+			By("Check GPU count on GPU nodes and apply --nvidia-ci.max-gpu")
+			gpuCount = mig.EffectiveGPUCount(WorkerNodeSelector)
+
 			By("Create GPU Burn namespace 'test-gpu-burn'")
 			gpuBurnNsBuilder := namespace.NewBuilder(inittools.APIClient, burn.Namespace)
 			if gpuBurnNsBuilder.Exists() {
@@ -901,11 +906,11 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			}()
 
 			By("Deploy gpu-burn pod in test-gpu-burn namespace")
-			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod image name is: '%s', in namespace '%s'",
-				BurnImageName[clusterArchitecture], burn.Namespace)
+			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod image name is: '%s', in namespace '%s', requesting %d GPUs",
+				BurnImageName[clusterArchitecture], burn.Namespace, gpuCount)
 
-			gpuBurnPod, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.PodName, burn.Namespace,
-				BurnImageName[(clusterArchitecture)], nvidiagpu.BurnPodCreationTimeout)
+			gpuBurnPod, err := gpuburn.CreateGPUBurnPodWithParam(inittools.APIClient, burn.PodName, burn.Namespace,
+				BurnImageName[clusterArchitecture], "gpu", gpuCount, nvidiagpu.BurnPodCreationTimeout)
 			Expect(err).ToNot(HaveOccurred(), "Error creating gpu burn pod: %v", err)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("Creating gpu-burn pod '%s' in namespace '%s'",
@@ -969,11 +974,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				gpuPodPulled.Definition.Name, gpuBurnLogs)
 
 			By("Parse the gpu-burn pod logs and check for successful execution")
-			match1 := strings.Contains(gpuBurnLogs, "GPU 0: OK")
-			match2 := strings.Contains(gpuBurnLogs, "100.0%  proc'd:")
-
-			Expect(match1 && match2).ToNot(BeFalse(), "gpu-burn pod execution was FAILED")
-			glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn pod execution was successful")
+			mig.CheckGPUBurnPodLogs(gpuBurnLogs, gpuCount)
 
 			var failedBranches []string
 			failedBranchSet := make(map[string]bool)
@@ -1325,6 +1326,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("Re-deployed gpu-burn pod image name is: '%s', in "+
 				"namespace '%s'", BurnImageName[clusterArchitecture], burn.Namespace)
 
+			By("Check GPU count on GPU nodes and apply --nvidia-ci.max-gpu")
+			gpuCount = mig.EffectiveGPUCount(WorkerNodeSelector)
+
 			By("Get Cluster Architecture from first GPU enabled worker node")
 			glog.V(gpuparams.GpuLogLevel).Infof("Getting cluster architecture from nodes with "+
 				"WorkerNodeSelector: %v", WorkerNodeSelector)
@@ -1334,8 +1338,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("cluster architecture for GPU enabled worker node is: %s",
 				clusterArch)
 
-			gpuBurnPod2, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.PodName, burn.Namespace,
-				BurnImageName[(clusterArch)], nvidiagpu.BurnPodPostUpgradeCreationTimeout)
+			gpuBurnPod2, err := gpuburn.CreateGPUBurnPodWithParam(inittools.APIClient, burn.PodName, burn.Namespace,
+				BurnImageName[clusterArch], "gpu", gpuCount, nvidiagpu.BurnPodPostUpgradeCreationTimeout)
 			Expect(err).ToNot(HaveOccurred(), "Error re-building gpu burn pod object after "+
 				"upgrade: %v", err)
 
@@ -1398,11 +1402,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				gpuBurnPod2Pulled.Definition.Name, gpuBurnPod2Logs)
 
 			By("Parse the re-created gpu-burn pod logs and check for successful execution")
-			match1a := strings.Contains(gpuBurnPod2Logs, "GPU 0: OK")
-			match2a := strings.Contains(gpuBurnPod2Logs, "100.0%  proc'd:")
-
-			Expect(match1a && match2a).ToNot(BeFalse(), "Re-deployed gpu-burn pod execution was FAILED")
-			glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn pod execution was successful")
+			mig.CheckGPUBurnPodLogs(gpuBurnPod2Logs, gpuCount)
 
 		})
 
@@ -1805,8 +1805,8 @@ func testPrecompiledBranch(nextBranch string, branchIndex int,
 
 	By(fmt.Sprintf("Deploy gpu-burn pod for branch %s", nextBranch))
 
-	newGpuBurnPod, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, burn.PodName, burn.Namespace,
-		BurnImageName[clusterArchitecture], nvidiagpu.BurnPodCreationTimeout)
+	newGpuBurnPod, err := gpuburn.CreateGPUBurnPodWithParam(inittools.APIClient, burn.PodName, burn.Namespace,
+		BurnImageName[clusterArchitecture], "gpu", gpuCount, nvidiagpu.BurnPodCreationTimeout)
 	if err != nil {
 		return fmt.Errorf("error creating gpu burn pod for branch %s: %w", nextBranch, err)
 	}
@@ -1848,14 +1848,10 @@ func testPrecompiledBranch(nextBranch string, branchIndex int,
 
 	glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn pod logs for branch %s:\n%s", nextBranch, branchLogs)
 
-	branchOK1 := strings.Contains(branchLogs, "GPU 0: OK")
-	branchOK2 := strings.Contains(branchLogs, "100.0%  proc'd:")
-
-	if !branchOK1 || !branchOK2 {
+	status := mig.CheckGPUBurnPodLogsAndReturnStatus(branchLogs, gpuCount)
+	if !status {
 		return fmt.Errorf("gpu-burn execution FAILED for driver branch %s", nextBranch)
 	}
-
-	glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn successful for driver branch %s", nextBranch)
 
 	return nil
 }
