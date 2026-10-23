@@ -127,6 +127,27 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - *required*
 - `NVIDIANETWORK_RDMA_GPUDIRECT`: Boolean flag to run RDMA workload with 1 nvidia.com/gpu resource - *optional*
 
+OpenShift SRIOV Network Operator-specific parameters for the script are controlled by the following environment variables (feature: `sriovnetwork`, deployed into the `openshift-sriov-network-operator` namespace):
+
+- `SRIOVNETWORK_CATALOGSOURCE`: custom catalogsource to be used. If not specified, the default "redhat-operators" catalog is used - *optional*
+- `SRIOVNETWORK_SUBSCRIPTION_CHANNEL`: specific subscription channel to be used. If not specified, the package's default channel is used - *optional*
+- `SRIOVNETWORK_CLEANUP`: boolean flag to clean up resources (namespace, Subscription, OperatorGroup, CSV, SriovOperatorConfig, SriovNetworkNodePolicy, SriovNetwork) created by the testcase after execution - Default value is `true` - *optional*
+- `SRIOVNETWORK_NIC_VENDOR`: PCI vendor hex ID used both to select worker nodes (via the NFD `feature.node.kubernetes.io/pci-<vendor>.present`/`.sriov.capable` labels) and in the SriovNetworkNodePolicy's NIC selector - Default value is `15b3` (Mellanox) - *optional*
+- `SRIOVNETWORK_PF_NAMES`: comma-separated physical function interface name(s)/range used in the SriovNetworkNodePolicy's NIC selector (e.g. `ens1f0np0` or a range like `eth_rail0#0-7`) - Default value is `eth_rail0#0-7` - you'll almost certainly want to override this to match your cluster's actual PF interface name(s) - *optional*
+- `SRIOVNETWORK_NUM_VFS`: number of virtual functions to configure per physical function - Default value is `8` - *optional*
+- `SRIOVNETWORK_MTU`: MTU to configure on the virtual functions - Default value is `1500` - *optional*
+- `SRIOVNETWORK_RESOURCE_NAME`: device plugin resource name exposed by the SriovNetworkNodePolicy and consumed by the SriovNetwork - Default value is `sriovlegacy` - *optional*
+- `SRIOVNETWORK_PRIORITY`: SriovNetworkNodePolicy priority (lower value = higher priority) - Default value is `90` - *optional*
+- `SRIOVNETWORK_NETWORK_NODE_POLICY_NAME`: name of the SriovNetworkNodePolicy Custom Resource instance - Default value is `sriov-legacy-policy` - *optional*
+- `SRIOVNETWORK_NETWORK_NAME`: name of the SriovNetwork Custom Resource instance - Default value is `sriov-network` - *optional*
+- `SRIOVNETWORK_NETWORK_NAMESPACE`: namespace of the generated NetworkAttachmentDefinition (`SriovNetwork.spec.networkNamespace`) - i.e. the namespace workload pods must be in to reference the network via the `k8s.v1.cni.cncf.io/networks` annotation. This is independent of the `openshift-sriov-network-operator` namespace where the operator itself is deployed - Default value is `default` - *optional*
+- `SRIOVNETWORK_IPAM_RANGE`: whereabouts IPAM CIDR range assigned to the SriovNetwork - Default value is `192.168.2.225/28` - *optional*
+- `SRIOVNETWORK_IPAM_EXCLUDE_IP1`: first whereabouts IPAM exclude CIDR (e.g. to reserve the gateway address) - Default value is `192.168.2.229/30` - *optional*
+- `SRIOVNETWORK_IPAM_EXCLUDE_IP2`: second whereabouts IPAM exclude CIDR - Default value is `192.168.2.236/32` - *optional*
+- `SRIOVNETWORK_VLAN`: VLAN ID to configure on the SriovNetwork - Default value is `0` (no VLAN) - *optional*
+
+Note: the testcase blocks for up to ~30 minutes waiting on `SriovNetworkNodeState` sync after applying the SriovNetworkNodePolicy, since this drains and reboots the targeted worker node(s). It also skips (does not fail) if no worker node carries the `feature.node.kubernetes.io/pci-<vendor>.present` NFD label.
+
 ### CLI parameters:
 
 NVIDIA MIG parameters for the script are controlled by the following ginkgo parameters which are delivered as `ARGS="-- [{parameter}...]"` for the `make run-tests` (check the examples):
@@ -440,6 +461,41 @@ Executing nvidiagpu test-runner script
 scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="deploy || rdma-legacy-sriov" ./tests/nvidianetwork
 ```
+
+### Example for end-to-end OpenShift SRIOV Network Operator testcase
+
+Example running the end-to-end OpenShift SRIOV Network Operator deploy test case. Adjust
+`SRIOVNETWORK_PF_NAMES` and the IPAM range/exclude values below to match your lab's actual PF
+interface name(s) and a routable IP range:
+
+```bash
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DUMP_FAILED_TESTS=true
+$ export REPORTS_DUMP_DIR=/tmp/nvidia-sriov-ci-logs-dir
+$ export TEST_FEATURES="sriovnetwork"
+$ export TEST_LABELS='deploy'
+$ export TEST_TRACE=true
+$ export VERBOSE_LEVEL=100
+$ export SRIOVNETWORK_CATALOGSOURCE="redhat-operators"
+$ export SRIOVNETWORK_NIC_VENDOR="15b3"
+$ export SRIOVNETWORK_PF_NAMES="ens1f0np0"
+$ export SRIOVNETWORK_NUM_VFS=8
+$ export SRIOVNETWORK_MTU=1500
+$ export SRIOVNETWORK_RESOURCE_NAME="sriovlegacy"
+$ export SRIOVNETWORK_NETWORK_NODE_POLICY_NAME="sriov-legacy-policy"
+$ export SRIOVNETWORK_NETWORK_NAME="sriov-network"
+$ export SRIOVNETWORK_NETWORK_NAMESPACE="default"
+$ export SRIOVNETWORK_IPAM_RANGE="192.168.3.225/28"
+$ export SRIOVNETWORK_IPAM_EXCLUDE_IP1="192.168.3.229/30"
+$ export SRIOVNETWORK_IPAM_EXCLUDE_IP2="192.168.3.236/32"
+$ export SRIOVNETWORK_CLEANUP=false   # keep resources up to inspect afterward
+
+$ make run-tests
+Executing nvidiagpu test-runner script
+scripts/test-runner.sh
+ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="deploy" ./tests/sriovnetwork
+```
+
 ## Applying day-2 manifests to an existing cluster
 
 Separate from the Ginkgo test suites above, [`scripts/apply-manifests.sh`](scripts/apply-manifests.sh)
