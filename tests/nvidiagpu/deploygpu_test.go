@@ -40,11 +40,14 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuburn"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/testworkloads"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/mig"
 	corev1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 var (
@@ -116,6 +119,61 @@ var (
 // nativeDRASmiExecTimeout bounds each 'nvidia-smi' pod-exec call in the native DRA It's
 // GPU-functionality validation step.
 const nativeDRASmiExecTimeout = 1 * time.Minute
+
+const (
+	// nativeDRAMIGRequiredK8sMajor/Minor is the minimum Kubernetes server version required
+	// for the DynamicMIG DRA driver feature gate to work: dynamic MIG partition allocation
+	// depends on the Kubernetes "Partitionable Devices" feature (KEP-4815), available
+	// starting with Kubernetes 1.34 (and, on 1.34/1.35 specifically, also requires the
+	// cluster's own "DRAPartitionableDevices" feature gate to be enabled on the
+	// kube-apiserver/scheduler - not something this test can verify client-side, so a
+	// cluster that reports a new-enough version but hasn't enabled that gate will instead
+	// fail later at the ResourceClaim-allocation step).
+	nativeDRAMIGRequiredK8sMajor = 1
+	nativeDRAMIGRequiredK8sMinor = 34
+
+	nativeDRAMIGNamespace         = "native-dra-mig-test"
+	nativeDRAMIGClaimTemplateName = "native-dra-mig-claim-tpl"
+	nativeDRAMIGClaimName         = "native-dra-mig-claim"
+	nativeDRAMIGPodName           = "native-dra-mig-pod"
+
+	nativeDRAMIGWorkloadTimeout = 2 * time.Minute
+)
+
+// createMIGResourceClaimTemplate creates a ResourceClaimTemplate in the given namespace
+// requesting a single device from the mig.nvidia.com DeviceClass, with no CEL selector
+// (i.e. "any available MIG device"). Per the DRA driver's own documentation, this exact
+// request shape is satisfied identically by a statically pre-sliced MIG partition or by
+// one the driver creates on demand when the DynamicMIG feature gate is enabled, so no
+// profile needs to be hardcoded here.
+func createMIGResourceClaimTemplate(namespace, name string) error {
+	rct := &resourcev1.ResourceClaimTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: resourcev1.ResourceClaimTemplateSpec{
+			Spec: resourcev1.ResourceClaimSpec{
+				Devices: resourcev1.DeviceClaim{
+					Requests: []resourcev1.DeviceRequest{
+						{
+							Name: "mig",
+							Exactly: &resourcev1.ExactDeviceRequest{
+								DeviceClassName: nvidiagpu.MIGDeviceClassName,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := inittools.APIClient.K8sClient.ResourceV1().
+		ResourceClaimTemplates(namespace).
+		Create(context.TODO(), rct, metav1.CreateOptions{})
+
+	return err
+}
 
 var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
@@ -1164,6 +1222,147 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 				glog.V(gpuparams.GpuLogLevel).Infof("nvidia-smi output from pod %s:\n%s", driverPod.Name, output)
 			}
+		})
+
+		// This It builds on the "native DRA" It above: it enables the DRA driver's
+		// "DynamicMIG" feature gate on the same GPUCluster (Kubernetes Partitionable
+		// Devices / KEP-4815) and validates that a MIG device can actually be allocated
+		// and used through a ResourceClaim, instead of only checking driver health via
+		// nvidia-smi. It must run in the same suite invocation as "native-dra" (e.g.
+		// TEST_LABELS='native-dra,native-dra-mig'), since it reuses the GPUCluster that
+		// It creates; it does not install/configure GPUCluster or NVIDIADriver itself.
+		It("Allocate a dynamically-partitioned MIG device via native DRA", Label("native-dra-mig"), func() {
+			if !mig.IsLabelInFilter("native-dra-mig") {
+				glog.V(gpuparams.GpuLogLevel).Infof("Skipping test: 'native-dra-mig' label not present in ginkgo label filter")
+				Skip("Test skipped: 'native-dra-mig' label not present in ginkgo label filter")
+			}
+
+			By("Verify a ready GPUCluster exists (requires the 'native-dra' testcase to have run first)")
+
+			gpuClusterBuilder, err := nvidiagpu.PullGPUCluster(inittools.APIClient, nvidiagpu.GPUClusterName)
+			if err != nil {
+				Skip(fmt.Sprintf("GPUCluster '%s' not found (%v); run with TEST_LABELS including both "+
+					"'native-dra' and 'native-dra-mig' so the native-dra testcase deploys it first",
+					nvidiagpu.GPUClusterName, err))
+			}
+
+			if gpuClusterBuilder.State() != "ready" {
+				Skip(fmt.Sprintf("GPUCluster '%s' is not ready (state=%q); the native-dra testcase must "+
+					"complete successfully before this testcase can run", nvidiagpu.GPUClusterName, gpuClusterBuilder.State()))
+			}
+
+			By("Verify cluster Kubernetes version supports Partitionable Devices (KEP-4815), required by DynamicMIG")
+
+			versionOK, serverVersion, err := check.KubernetesVersionAtLeast(inittools.APIClient,
+				nativeDRAMIGRequiredK8sMajor, nativeDRAMIGRequiredK8sMinor)
+			Expect(err).ToNot(HaveOccurred(), "error getting Kubernetes server version: %v", err)
+
+			if !versionOK {
+				Skip(fmt.Sprintf("Cluster Kubernetes version %s is older than the %d.%d required by the "+
+					"DynamicMIG feature gate (Partitionable Devices / KEP-4815); skipping", serverVersion,
+					nativeDRAMIGRequiredK8sMajor, nativeDRAMIGRequiredK8sMinor))
+			}
+
+			glog.V(gpuparams.GpuLogLevel).Infof(
+				"Cluster Kubernetes version %s satisfies the >= %d.%d requirement for DynamicMIG",
+				serverVersion, nativeDRAMIGRequiredK8sMajor, nativeDRAMIGRequiredK8sMinor)
+
+			By("Verify at least one MIG-capable GPU node is present")
+
+			err = wait.NodeLabelExists(inittools.APIClient, nvidiagpu.MIGCapableLabel, "true",
+				labels.Set(WorkerNodeSelector), nvidiagpu.LabelCheckInterval, nvidiagpu.LabelCheckTimeout)
+			if err != nil {
+				Skip(fmt.Sprintf("No MIG-capable GPU worker node found: %v", err))
+			}
+
+			By("Enable the DynamicMIG feature gate on GPUCluster")
+
+			_, err = gpuClusterBuilder.WithFeatureGate(nvidiagpu.DynamicMIGFeatureGate, true).Update()
+			Expect(err).ToNot(HaveOccurred(), "error enabling '%s' feature gate on GPUCluster: %v",
+				nvidiagpu.DynamicMIGFeatureGate, err)
+
+			DeferCleanup(func() error {
+				By("Disable the DynamicMIG feature gate on GPUCluster")
+
+				pulledBuilder, err := nvidiagpu.PullGPUCluster(inittools.APIClient, nvidiagpu.GPUClusterName)
+				if err != nil {
+					glog.V(gpuparams.GpuLogLevel).Infof(
+						"GPUCluster not found during DynamicMIG cleanup, skipping: %v", err)
+
+					return nil
+				}
+
+				_, err = pulledBuilder.WithFeatureGate(nvidiagpu.DynamicMIGFeatureGate, false).Update()
+
+				return err
+			})
+
+			By("Wait for GPUCluster to be ready again after the DRA driver restarts with DynamicMIG enabled")
+
+			err = wait.GPUClusterReady(inittools.APIClient, nvidiagpu.GPUClusterName,
+				nvidiagpu.ClusterPolicyReadyCheckInterval, nvidiagpu.ClusterPolicyReadyTimeout)
+			Expect(err).ToNot(HaveOccurred(),
+				"error waiting for GPUCluster to be ready after enabling DynamicMIG: %v", err)
+
+			By("Verify the mig.nvidia.com DeviceClass is being served")
+
+			migDeviceClassServed, err := check.DeviceClassServed(inittools.APIClient, nvidiagpu.MIGDeviceClassName)
+			Expect(err).ToNot(HaveOccurred(), "error checking '%s' DeviceClass availability: %v",
+				nvidiagpu.MIGDeviceClassName, err)
+
+			if !migDeviceClassServed {
+				Skip(fmt.Sprintf("'%s' DeviceClass is not being served; the DRA driver's GPU capability may "+
+					"not be deployed on this GPU Operator version", nvidiagpu.MIGDeviceClassName))
+			}
+
+			By("Creating test namespace")
+
+			testNs := namespace.NewBuilder(inittools.APIClient, nativeDRAMIGNamespace)
+			testNs, err = testNs.Create()
+			Expect(err).ToNot(HaveOccurred(), "error creating test namespace '%s': %v", nativeDRAMIGNamespace, err)
+
+			DeferCleanup(func() error {
+				By("Cleaning up test namespace")
+
+				return testNs.DeleteAndWait(2 * time.Minute)
+			})
+
+			By("Creating ResourceClaimTemplate requesting any available MIG device")
+
+			err = createMIGResourceClaimTemplate(nativeDRAMIGNamespace, nativeDRAMIGClaimTemplateName)
+			Expect(err).ToNot(HaveOccurred(), "error creating MIG ResourceClaimTemplate: %v", err)
+
+			By("Creating VectorAdd pod with MIG resource claim")
+
+			rctNamePtr := nativeDRAMIGClaimTemplateName
+			resourceClaims := []corev1.PodResourceClaim{
+				{
+					Name:                      nativeDRAMIGClaimName,
+					ResourceClaimTemplateName: &rctNamePtr,
+				},
+			}
+
+			podResources := corev1.ResourceRequirements{
+				Claims: []corev1.ResourceClaim{
+					{Name: nativeDRAMIGClaimName},
+				},
+			}
+
+			vectorAdd := testworkloads.NewVectorAdd(nativeDRAMIGPodName).
+				WithResources(podResources).
+				WithResourceClaims(resourceClaims)
+
+			workloadBuilder := testworkloads.NewBuilder(inittools.APIClient, nativeDRAMIGNamespace, vectorAdd).Create()
+			Expect(workloadBuilder.Error()).ToNot(HaveOccurred(), "error creating VectorAdd pod: %v", workloadBuilder.Error())
+
+			By("Waiting for VectorAdd pod to succeed on the dynamically-allocated MIG device")
+
+			workloadBuilder.WaitUntilSuccess(nativeDRAMIGWorkloadTimeout)
+			Expect(workloadBuilder.Error()).ToNot(HaveOccurred(),
+				"VectorAdd pod did not succeed on the dynamically allocated MIG device: %v (note: on "+
+					"Ampere-generation GPUs, MIG mode must already be toggled on via a GPU reset before the "+
+					"DRA driver starts - DynamicMIG only manages partitions, not MIG mode itself)",
+				workloadBuilder.Error())
 		})
 
 		It("Upgrade NVIDIA GPU Operator", Label("operator-upgrade"), func() {
