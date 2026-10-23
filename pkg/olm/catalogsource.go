@@ -178,7 +178,16 @@ func (builder *CatalogSourceBuilder) Exists() bool {
 		builder.Definition.Namespace).Get(
 		context.TODO(), builder.Definition.Name, metav1.GetOptions{})
 
-	return err == nil || !k8serrors.IsNotFound(err)
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			glog.Errorf("Error checking if catalogSource %s exists in namespace %s: %v",
+				builder.Definition.Name, builder.Definition.Namespace, err)
+		}
+
+		return false
+	}
+
+	return true
 }
 
 // Delete removes a catalogsource.
@@ -215,10 +224,6 @@ func (builder *CatalogSourceBuilder) IsReady(timeout time.Duration) bool {
 	glog.V(100).Infof("Running periodic check until catalogsource '%s' in namespace '%s' is ready",
 		builder.Definition.Name, builder.Definition.Namespace)
 
-	if !builder.Exists() {
-		return false
-	}
-
 	err := wait.PollUntilContextTimeout(
 		context.TODO(), time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 			var err error
@@ -226,6 +231,10 @@ func (builder *CatalogSourceBuilder) IsReady(timeout time.Duration) bool {
 				context.TODO(), builder.Definition.Name, metav1.GetOptions{})
 
 			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					return false, nil
+				}
+
 				return false, err
 			}
 
