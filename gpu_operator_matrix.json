@@ -8866,6 +8866,13 @@
         "notes": [],
         "bundle_tests": [
             {
+                "ocp_full_version": "4.22",
+                "gpu_operator_version": "master",
+                "test_status": "FAILURE",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/754/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.22-stable-nvidia-gpu-operator-e2e-master/2114330782112681984",
+                "job_timestamp": 1792931241
+            },
+            {
                 "ocp_full_version": "4.22.19",
                 "gpu_operator_version": "26.7.2(bundle)",
                 "test_status": "SUCCESS",
