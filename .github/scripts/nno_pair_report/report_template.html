@@ -168,9 +168,10 @@
     const label = {nno_csv:"NNO CSV", nno_deployment:"NNO deployment", nic_cluster_policy_ready:"NIC cluster policy ready", rdma_shared_device:"Standard RDMA", rdma_gpudirect:"GPUDirect RDMA", driver_image:"DOCA/OFED image in use", shared_device_policy:"Shared-device policy", gpudirect_rdma_write:"GPUDirect RDMA write"};
     const name = value => label[value] || value.replaceAll("_", " ").replace(/\b\w/g, char => char.toUpperCase());
     Object.assign(label,{requested_driver_policy:"Requested driver policy",requested_driver_running:"Requested driver running",requested_target:"Exact requested OCP and image",driver_worker_images:"Driver image on both RDMA workers",deploy_step:"Signed deployment step",gpu_step:"GPU installation step",gpudirect_step:"GPUDirect step",deploy_result:"Deployment test result",gpudirect_result:"GPUDirect test result",discovery_target:"Discovered target matches request",driver_image_id:"Running driver digest"});
-    Object.assign(label,{requested_driver_tag:"Requested driver tag",artifact_consistency:"Artifact consistency"});
-    const validationLabel = value => value==="signed" ? "Signed driver + GPUDirect" : value==="precompiled" ? "Precompiled deployment only" : "Dynamic driver + GPUDirect";
+    Object.assign(label,{requested_driver_tag:"Requested driver tag",artifact_consistency:"Artifact consistency",prow_job:"Prow job completion"});
+    const validationLabel = value => value==="signed" ? "Signed driver + GPUDirect" : value==="precompiled" ? "Precompiled driver + RDMA" : "Dynamic driver + GPUDirect";
     const statusText = value => value === "passed" ? "Passed" : value === "failed" ? "Failed" : name(value);
+    const resultLabel = pair => pair.result_label || statusText(pair.status);
     const safeUrl = value => typeof value === "string" && /^https:\/\//.test(value) ? value : null;
     const versionParts = value => (value.match(/\d+|[^\d]+/g) || []).map(part => /^\d+$/.test(part) ? Number(part) : part);
     function compareVersions(a,b) {
@@ -199,7 +200,7 @@
       return match ? {doca:match[1],driver:match[2]} : null;
     }
     function buildStatus(status) {
-      return {success:"Succeeded",failure:"Failed",aborted:"Aborted",pending:"Pending",running:"Running",no_work:"No work"}[status] || "Unknown";
+      return {success:mode==="signed"?"Validated":"Succeeded",failure:"Failed",aborted:"Aborted",pending:"Pending",running:"Running",no_work:"No work",blocked:"Incomplete validation"}[status] || "Unknown";
     }
     function failedCheckSummary(pair) {
       const failed=Object.entries(pair.checks||{}).filter(([,value])=>value==="failed").map(([key])=>name(key));
@@ -213,7 +214,7 @@
       section.setAttribute("aria-label",`Scheduled build stability for OpenShift ${ocp}`);
       const latest=groups.flatMap(item=>item.runs).sort((a,b)=>b.started_at.localeCompare(a.started_at)||b.build_id.localeCompare(a.build_id))[0];
       const heading=addText(section,"div","","stability-head");
-      addText(heading,"h4","Scheduled build stability");
+      addText(heading,"h4",mode==="signed"?"Scheduled precompiled validation":"Scheduled build stability");
       addText(heading,"p",`Latest: ${buildStatus(latest.status)} · ${latest.started_at.slice(0,10)} · newest first`);
       function addRuns(parent, runs, jobName) {
         const strip=addText(parent,"div","","stability-strip");
@@ -221,7 +222,7 @@
           const url=safeUrl(run.prow_url);
           const mark=addText(strip,url?"a":"span","",`stability-run ${run.status}`);
           const pairs=run.passed_pairs+run.failed_pairs ? `${run.passed_pairs} pairs passed, ${run.failed_pairs} failed` : "No pair result recorded";
-          const description=`${buildStatus(run.status)} · ${jobName} build ${run.build_id} · OpenShift ${run.ocp_version} · ${run.started_at} · ${pairs}`;
+          const description=`${run.result_note||buildStatus(run.status)} · Prow ${run.prow_status||run.status} · ${jobName} build ${run.build_id} · OpenShift ${run.ocp_version} · ${run.started_at} · ${pairs}`;
           mark.title=description;
           mark.setAttribute("aria-label",description);
           if(url) { mark.href=url; mark.target="_blank"; mark.rel="noopener noreferrer"; }
@@ -239,7 +240,7 @@
       }
       const legend=addText(section,"div","","stability-legend");
       legend.setAttribute("aria-label","Build status legend");
-      for(const [status,label] of [["success","Succeeded"],["failure","Failed"],["aborted","Aborted"],["no_work","No work"],["","Pending or unknown"]]) {
+      for(const [status,label] of [["success",mode==="signed"?"Validated":"Succeeded"],["failure","Failed"],["aborted","Aborted"],["no_work","No work"],["blocked","Incomplete validation"],["","Pending or unknown"]]) {
         const item=addText(legend,"span",label);
         const icon=addText(item,"i","",status);
         icon.setAttribute("aria-hidden","true");
@@ -279,8 +280,8 @@
         addLink(recency,`${latest.build.run.kind} build ${latest.build.run.build_id}`,latest.build.run.prow_url);
         addText(recency,"span",` · ${resultTime(latest)}`);
       }
-      $("detail-context").textContent=`${validationLabel(pair.validation)}${pair.image_target?` · ${pair.image_target}`:""} · OpenShift ${run.ocp_version||"unknown"}${pair.note?` · ${pair.note}`:""}`;
-      $("detail-status").textContent=statusText(pair.status);
+      $("detail-context").textContent=`${pair.result_note||validationLabel(pair.validation)}${pair.image_target?` · ${pair.image_target}`:""} · OpenShift ${run.ocp_version||"unknown"}${pair.note?` · ${pair.note}`:""}`;
+      $("detail-status").textContent=resultLabel(pair);
       $("detail-status").className=`result-label ${pair.status==="passed"?"good-text":pair.status==="failed"?"bad-text":"muted"}`;
       const checks=$("checks"); checks.replaceChildren();
       for(const [key,value] of Object.entries(pair.checks)) {
@@ -315,9 +316,12 @@
         const li=addText(history,"li",""); const context=addText(li,"span","");
         addLink(context,`${item.build.run.kind} build ${item.build.run.build_id}`,item.build.run.prow_url);
         addText(context,"small",`${item.pair.completed_at||item.build.run.started_at} · attempt ${item.pair.id}`);
-        addText(li,"span",statusText(item.pair.status),item.pair.status==="passed"?"good-text":item.pair.status==="failed"?"bad-text":"muted");
+        addText(li,"span",resultLabel(item.pair),item.pair.status==="passed"?"good-text":item.pair.status==="failed"?"bad-text":"muted");
       }
       const artifacts=$("artifacts"); artifacts.replaceChildren();
+      for(const step of run.failed_steps||[]) {
+        addText(artifacts,"p","Failed Prow step: "); addLink(artifacts,step.name,step.url);
+      }
       const entries=Object.entries(pair.artifacts);
       if(entries.length) { addText(artifacts,"p","Displayed result artifacts:"); for(const [key,url] of entries) { addLink(artifacts,name(key),url); addText(artifacts,"span"," · "); } }
       if(reveal) row.scrollIntoView({block:"start",behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
@@ -379,20 +383,20 @@
             row.dataset.search=[`openshift ${ocp}`,`nno ${nno}`,doca?`doca ${doca}`:"",`driver ${driver}`,tag?.driver||"",configured.get(key)[0].pair.image_target||"",row.dataset.status].join(" ").toLowerCase();
             if(runs) {
               row.type="button"; row.dataset.key=key; row.setAttribute("aria-expanded","false"); row.setAttribute("aria-controls","selection-detail");
-              const reason=failedCheckSummary(chosen.pair.status==="failed"?chosen.pair:runs[0].pair);
+              const reason=chosen.pair.result_note||failedCheckSummary(chosen.pair.status==="failed"?chosen.pair:runs[0].pair);
               row.setAttribute("aria-label",`OpenShift ${ocp}, NNO ${nno}, ${doca?`DOCA ${doca}, `:""}driver image ${driver}${chosen.pair.image_target?`, ${chosen.pair.image_target}`:""}, result ${chosen.pair.status}${recentFailure?", newest attempt failed":""}${reason?`, failed check: ${reason}`:""}, ${runs.length} executions. Show details`);
               row.addEventListener("click",()=>selectedKey===key && !$("selection-detail").hidden ? hideDetails() : showDetails(key,cells,true));
             }
             const nnoValue=addText(row,"span",nno||"Not observed"); nnoValue.dataset.label="NNO";
             const docaValue=addText(row,"span",doca); docaValue.dataset.label="DOCA";
             const driverValue=addText(row,"span",tag?.driver||driver,"driver-tag"); driverValue.dataset.label="Driver image version"; driverValue.title=configured.get(key)[0].pair.driver_requested.image||driver;
-            if(mode==="signed") addText(driverValue,"small",validationLabel(configured.get(key)[0].pair.validation));
+            if(mode==="signed") addText(driverValue,"small",chosen?.pair.validation_outcome?"Signed workflow target":validationLabel(configured.get(key)[0].pair.validation));
             if(configured.get(key)[0].pair.image_target) addText(driverValue,"small",configured.get(key)[0].pair.image_target);
             const status=chosen?.pair.status;
             const result=addText(row,"span","",`pair-result ${status==="passed"?"good":status==="failed"?"bad":"pending"}`);
             result.dataset.label="Result";
-            addText(result,"span",status?statusText(status):"No result",`result-main${status==="failed"?" failed-tag":""}`);
-            if(status==="failed") addText(result,"small",failedCheckSummary(chosen.pair)||"Failed check not recorded","failure-reason");
+            addText(result,"span",chosen?resultLabel(chosen.pair):"No result",`result-main${status==="failed"?" failed-tag":""}`);
+            if(status==="failed") addText(result,"small",chosen.pair.result_note||failedCheckSummary(chosen.pair)||"Failed check not recorded","failure-reason");
             if(recentFailure) addText(result,"small",`Newest failed${failedCheckSummary(runs[0].pair)?`: ${failedCheckSummary(runs[0].pair)}`:""}`,"recent-failure");
             if(runs) addText(result,"small",`${runs.length} run${runs.length===1?"":"s"}`);
           }
@@ -460,7 +464,7 @@
       const list=$("unreported-list"); list.replaceChildren();
       for(const build of unreported) {
         const p=addText(list,"p",""); addLink(p,`${build.run.kind} build ${build.run.build_id}`,build.run.prow_url);
-        addText(p,"span",` · ${build.run.source||build.run.kind} · ${build.run.job_name} · ${build.run.status} · ${build.run.discovery?.outcome||"incomplete"} · ${build.run.discovery?.reason||build.run.discovery?.error||build.run.note||build.pairs.map(pair=>pair.note).filter(Boolean).join("; ")||"Validation did not complete"} · ${build.pairs.length} configured pair${build.pairs.length===1?"":"s"}`);
+        addText(p,"span",` · ${build.run.source||build.run.kind} · ${build.run.job_name} · ${build.run.status} · ${build.run.discovery?.outcome||"incomplete"} · ${build.run.result_note||build.run.discovery?.reason||build.run.discovery?.error||build.run.note||build.pairs.map(pair=>pair.note).filter(Boolean).join("; ")||"Validation did not complete"} · ${build.pairs.length} configured pair${build.pairs.length===1?"":"s"}`);
       }
     }
     render();
