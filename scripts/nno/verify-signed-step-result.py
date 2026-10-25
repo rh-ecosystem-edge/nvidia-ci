@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import sys
 
-from signed_images import error_message, metadata, nno_channel, nno_version_matches, runtime_digests, strip_installer_suffix
+from signed_images import digest, error_message, metadata, nno_channel, nno_version_matches, runtime_digests, strip_installer_suffix
 
 
 def selected_image(shared, request):
@@ -27,14 +27,26 @@ def selected_image(shared, request):
     return selected
 
 
-def image_digest(image_id):
-    digest = image_id.rsplit("@", 1)[-1]
-    if re.fullmatch(r"sha256:[a-f0-9]{64}", digest) is None:
+def image_digest(image_id, selected=None):
+    if not isinstance(image_id, str):
         raise ValueError("result is missing running driver digest evidence")
-    return digest
+    if re.fullmatch(r"[a-f0-9]{64}", image_id):
+        # A bare runtime ID is config evidence only after checking trusted discovery
+        # metadata. Never interpret manifest/index bytes as a bare config ID.
+        config = (selected or {}).get("config_digest")
+        if not config:
+            raise ValueError("bare runtime imageID requires trusted selected-image SHA-256 config metadata; "
+                             "use the discovery handoff (manual requests without it cannot verify bare IDs)")
+        if digest(config).removeprefix("sha256:") != image_id:
+            raise ValueError("bare runtime imageID does not match the selected image config digest")
+        return config
+    qualified = image_id.rsplit("@", 1)[-1]
+    if re.fullmatch(r"sha256:[a-f0-9]{64}", qualified) is None:
+        raise ValueError("result is missing running driver digest evidence")
+    return qualified
 
 
-def verify(artifact_dir, step, attempt, request, workers):
+def verify(artifact_dir, step, attempt, request, workers, selected=None):
     pair = request["pairs"][0]
     driver = pair["driver_requested"]
     channel = nno_channel(driver["image"])
@@ -58,7 +70,7 @@ def verify(artifact_dir, step, attempt, request, workers):
         for requested, observed in [("kernel", "kernel_version"), ("architecture", "architecture")]:
             if selection.get(observed) != tagged[requested] or driver.get(requested, selection[observed]) != selection[observed]:
                 raise ValueError(f"result is missing or mismatches requested {requested}")
-        image_digest((report.get("configured_ofed_driver") or {}).get("image_id", ""))
+        image_digest((report.get("configured_ofed_driver") or {}).get("image_id", ""), selected)
 
     evidence = json.loads((Path(artifact_dir) / "nno-signed-driver-images.json").read_text())
     if evidence.get("step") != step or evidence.get("attempt") != attempt or evidence.get("pull_spec") != driver["image"]:
@@ -67,14 +79,16 @@ def verify(artifact_dir, step, attempt, request, workers):
     if len(set(workers)) != 2 or not all(workers) or set(observed_workers) != set(workers):
         raise ValueError("driver evidence must cover both configured RDMA workers")
     for image_id in observed_workers.values():
-        digest = image_digest(image_id)
+        digest = image_digest(image_id, selected)
         # This assertion refers to the worker's runtime digest, not an OCI index digest.
         if driver.get("digest", digest) != digest:
             raise ValueError("running driver digest does not match the requested runtime digest")
-    worker_digests = {image_digest(value) for value in observed_workers.values()}
+    worker_digests = {image_digest(value, selected) for value in observed_workers.values()}
     if len(worker_digests) != 1 or any(
-            image_digest(report["configured_ofed_driver"]["image_id"]) not in worker_digests for report in reports):
+            image_digest(report["configured_ofed_driver"]["image_id"], selected) not in worker_digests for report in reports):
         raise ValueError("reports and both workers must agree on the running driver digest")
+    if selected and not worker_digests <= runtime_digests(selected):
+        raise ValueError("worker runtime digest does not match the selected manifest/config/index")
     return worker_digests
 
 
@@ -93,10 +107,8 @@ if __name__ == "__main__":
             sys.exit(0)
         if os.environ.get("NVIDIANETWORK_SUBSCRIPTION_CHANNEL") != channel:
             raise ValueError("NNO subscription channel does not match the staging driver release")
-        observed = verify(os.environ["ARTIFACT_DIR"], os.environ["NNO_STEP_NAME"], os.environ["NNO_STEP_ATTEMPT"], request,
-                          [os.environ["NVIDIANETWORK_RDMA_CLIENT_HOSTNAME"], os.environ["NVIDIANETWORK_RDMA_SERVER_HOSTNAME"]])
-        if selected and not observed <= runtime_digests(selected):
-            raise ValueError("worker runtime digest does not match the selected manifest/config/index")
+        verify(os.environ["ARTIFACT_DIR"], os.environ["NNO_STEP_NAME"], os.environ["NNO_STEP_ATTEMPT"], request,
+               [os.environ["NVIDIANETWORK_RDMA_CLIENT_HOSTNAME"], os.environ["NVIDIANETWORK_RDMA_SERVER_HOSTNAME"]], selected)
     except (KeyError, IndexError, TypeError, OSError, ValueError) as error:
         print(f"signed DOCA2 result error: {error_message(error)}", file=sys.stderr)
         sys.exit(1)

@@ -991,6 +991,13 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				"ENTRYPOINT_DEBUG":                  "true",
 			}
 
+			if strings.HasPrefix(nicClusterPolicyBuilder.Definition.Spec.OFEDDriver.Version, "doca3.4.1-") {
+				// Debug output contaminates the captured RHEL version in DOCA 3.4.1's Bash DTK setup.
+				// https://github.com/Mellanox/doca-driver-build/blob/7fa75defaf4487f80a0252a781b201093298cdaf/entrypoint.sh#L370-L402
+				newEnvVars["ENTRYPOINT_DEBUG"] = "false"
+				glog.V(networkparams.LogLevel).Info("Disabling ENTRYPOINT_DEBUG for DOCA 3.4.1 DTK builds")
+			}
+
 			for key, value := range newEnvVars {
 				updatedOfedDriverEnvVars = append(updatedOfedDriverEnvVars, corev1.EnvVar{
 					Name: key, Value: value})

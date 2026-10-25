@@ -26,7 +26,7 @@ result = {'step': step, 'attempt': attempt, 'status': 'passed', 'ocp_version': p
           'checks': dict.fromkeys(['requested_driver_policy', 'requested_driver_running', check], 'passed'),
           'precompiled_selection': {'pull_spec': os.environ['NVIDIANETWORK_OFED_DRIVER_PULLSPEC'],
               'kernel_version': pair['driver_requested']['kernel'], 'architecture': 'amd64'},
-          'configured_ofed_driver': {'image_id': 'sha256:' + 'a' * 64}}
+          'configured_ofed_driver': {'image_id': os.environ.get('MOCK_RUNTIME_IMAGE_ID', 'sha256:' + 'a' * 64)}}
 artifacts = Path(os.environ['ARTIFACT_DIR'])
 artifacts.mkdir(exist_ok=True)
 (artifacts / 'nno-step-result-mock.json').write_text(json.dumps(result))
@@ -182,6 +182,31 @@ class SignedInvocationTests(unittest.TestCase):
         for stage in ["deploy", "gpudirect"]:
             result = self.invoke(stage)
             self.assertEqual(result.returncode, 0, result.stderr)
+
+        # The real failed run reported config bytes without a sha256 prefix.
+        raw_id = "e65fc701cc1488be5ad4b0e8c11a65af604b1cc016a8b92406641529072c23e1"
+        selected["config_digest"] = "sha256:" + raw_id
+        path.write_text(json.dumps(dict(outcome="selected", job_name="local", build_id="local", selected=selected)))
+        self.env["MOCK_RUNTIME_IMAGE_ID"] = raw_id
+        for stage in ["deploy", "gpudirect"]:
+            result = self.invoke(stage)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            evidence = json.loads((self.root / "artifacts/nno-signed-driver-images.json").read_text())
+            self.assertEqual(set(evidence["workers"].values()), {raw_id})
+
+        # Neither a wrong config nor a missing handoff can justify bare evidence.
+        selected["config_digest"] = "sha256:" + "b" * 64
+        path.write_text(json.dumps(dict(outcome="selected", job_name="local", build_id="local", selected=selected)))
+        result = self.invoke("gpudirect")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("selected image config digest", result.stderr)
+        handoff = path.read_text()
+        path.unlink()
+        result = self.invoke("gpudirect")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires trusted selected-image", result.stderr)
+        path.write_text(handoff)
+        del self.env["MOCK_RUNTIME_IMAGE_ID"]
 
         # A different selected digest must fail verification.
         selected["manifest_digest"] = "sha256:" + "c" * 64
