@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -134,6 +135,26 @@ def make_standard_rdma_result(*, attempt=None, status="passed"):
         checks={"rdma_shared_device": status},
         metrics={"standard_bandwidth_gbps": 91.2, "standard_message_rate_mpps": 0.18},
     )
+
+
+def make_precompiled_deployment():
+    return make_step_result(
+        "network-operator-e2e-precompiled",
+        checks={"nno_deployment": "passed", "nic_cluster_policy_ready": "passed", "precompiled_selection": "passed"},
+        precompiled_selection={
+            "outcome": "selected", "version": STEP_OFED_VERSION,
+            "pull_spec": f"{STEP_OFED_REPOSITORY}/{STEP_OFED_IMAGE}:kernel-test",
+            "kernel_version": "5.14.0-test", "architecture": "amd64",
+        },
+    )
+
+
+def make_precompiled_rdma(*, status="passed"):
+    result = make_standard_rdma_result(status=status)
+    # BeforeEach resets selection for the RDMA spec, but the precompiled
+    # invocation still publishes the selection object. The DTK invocation does not.
+    result["precompiled_selection"] = {"outcome": "not_run"}
+    return result
 
 
 def write_step_result(root, result, filename):
@@ -446,7 +467,7 @@ class StepResultTests(unittest.TestCase):
             for url in pair["artifacts"].values()
         ))
 
-    def test_precompiled_pair_is_reported_as_signed_without_rdma_check(self):
+    def test_precompiled_deployment_without_rdma_is_incomplete(self):
         deployment = make_step_result(
             "network-operator-e2e-shared-device",
             checks={"nno_deployment": "passed", "nic_cluster_policy_ready": "passed"},
@@ -484,10 +505,10 @@ class StepResultTests(unittest.TestCase):
         self.assertIn("standard", standard["id"])
         self.assertEqual(standard["status"], "passed")
         self.assertIn("precompiled", precompiled_pair["id"])
-        self.assertEqual(precompiled_pair["status"], "passed")
+        self.assertEqual(precompiled_pair["status"], "blocked")
         self.assertEqual(precompiled_pair["mode"], "signed")
         self.assertEqual(precompiled_pair["validation"], "precompiled")
-        self.assertNotIn("rdma_shared_device", precompiled_pair["checks"])
+        self.assertEqual(precompiled_pair["checks"]["rdma_shared_device"], "blocked")
         self.assertNotIn("rdma_gpudirect", precompiled_pair["checks"])
         self.assertEqual(builds[0]["run"]["planned_modes"], ["signed", "standard"])
         self.assertEqual(
@@ -499,6 +520,87 @@ class StepResultTests(unittest.TestCase):
         signed = render.mode_data(history, "signed")["builds"]
         self.assertEqual(len(signed), 1)
         self.assertEqual(signed[0]["pairs"][0]["id"], precompiled_pair["id"])
+
+    def test_precompiled_rdma_pass_and_failure_are_collected(self):
+        for rdma_status in ("passed", "failed"):
+            with self.subTest(rdma=rdma_status):
+                build = self.collect_local([
+                    (make_precompiled_deployment(), "nno-step-result-deploy.json"),
+                    (make_precompiled_rdma(status=rdma_status), "nno-step-result-rdma.json"),
+                ])[0]
+                self.assertEqual(len(build["pairs"]), 1)
+                pair = build["pairs"][0]
+                self.assertEqual(pair["status"], rdma_status)
+                self.assertEqual(pair["checks"]["rdma_shared_device"], rdma_status)
+                self.assertEqual(pair["metrics"]["standard_bandwidth_gbps"], 91.2)
+                self.assertEqual(pair["driver_requested"]["kernel"], "5.14.0-test")
+
+    def test_dtk_rdma_cannot_satisfy_precompiled_rdma(self):
+        deployment = make_step_result(
+            "network-operator-e2e-shared-device",
+            checks={"nno_deployment": "passed", "nic_cluster_policy_ready": "passed"},
+        )
+        gpudirect = make_step_result("network-operator-e2e-gpudirect", checks={"rdma_gpudirect": "passed"})
+        build = self.collect_local([
+            (deployment, "nno-step-result-dtk-deploy.json"),
+            (make_standard_rdma_result(), "nno-step-result-dtk-rdma.json"),
+            (gpudirect, "nno-step-result-dtk-gpudirect.json"),
+            (make_precompiled_deployment(), "nno-step-result-precompiled.json"),
+        ])[0]
+        standard, precompiled = build["pairs"]
+        self.assertEqual(standard["status"], "passed")
+        self.assertEqual(precompiled["status"], "blocked")
+        self.assertEqual(precompiled["checks"]["rdma_shared_device"], "blocked")
+        self.assertEqual(precompiled["metrics"], {})
+
+    def test_precompiled_rdma_failure_is_not_hidden_by_a_passed_deployment(self):
+        rdma = make_precompiled_rdma(status="failed")
+        rdma["metrics"] = {"bandwidth_gbps": 2.3, "message_rate_mpps": 0.01}
+        pair = self.collect_local([
+            (make_precompiled_deployment(), "nno-step-result-deploy.json"),
+            (rdma, "nno-step-result-rdma.json"),
+        ])[0]["pairs"][0]
+        self.assertEqual(pair["status"], "failed")
+        self.assertEqual(pair["checks"]["nic_cluster_policy_ready"], "passed")
+        self.assertEqual(pair["metrics"]["standard_bandwidth_gbps"], 2.3)
+        self.assertNotIn("bandwidth_gbps", pair["metrics"])
+
+    def test_precompiled_rdma_must_observe_the_deployed_driver(self):
+        for field, value in (("version", "another-version"), ("image_id", "sha256:another-digest")):
+            with self.subTest(field=field):
+                rdma = make_precompiled_rdma()
+                rdma["configured_ofed_driver"][field] = value
+                pair = self.collect_local([
+                    (make_precompiled_deployment(), "nno-step-result-deploy.json"),
+                    (rdma, "nno-step-result-rdma.json"),
+                ])[0]["pairs"][0]
+                self.assertEqual(pair["status"], "failed")
+                self.assertIn("differed between step records", pair["note"])
+
+    def test_old_precompiled_history_is_refreshed_once_to_recover_rdma(self):
+        deployment, rdma = make_precompiled_deployment(), make_precompiled_rdma()
+        build = self.collect_local([(deployment, "nno-step-result-deploy.json"),
+                                    (rdma, "nno-step-result-rdma.json")])[0]
+        build["run"]["status"] = "success"
+        del build["pairs"][0]["checks"]["rdma_shared_device"]
+        history = collect.merge_builds({}, [build])
+        root = build["build_path"]
+        records = {f"{root}/artifacts/{result['step']}/artifacts/nno-step-result-{index}.json": result
+                   for index, result in enumerate((deployment, rdma))}
+        metadata = {root + "/started.json": {"timestamp": "2026-10-04T09:00:00Z"},
+                    root + "/finished.json": {"result": "SUCCESS"}}
+        with patch.object(collect, "datetime", wraps=datetime) as clock, \
+             patch.object(collect.gcs_utils, "gcsweb_enabled", return_value=False), \
+             patch.object(collect, "list_gcs_report_artifacts", return_value=list(records)), \
+             patch.object(collect, "_fetch_gcs_json", side_effect={**records, **metadata}.__getitem__) as fetch:
+            clock.now.return_value = datetime(2026, 10, 25, tzinfo=UTC)
+            incoming = collect.load_gcs([], [STEP_JOB], baseline=history, lookback_hours=168)
+            self.assertEqual(len(incoming), 1)
+            self.assertEqual(incoming[0]["pairs"][0]["checks"]["rdma_shared_device"], "passed")
+            fetch.reset_mock()
+            updated = collect.merge_builds(history, incoming)
+            self.assertEqual(collect.load_gcs([], [STEP_JOB], baseline=updated, lookback_hours=168), [])
+            fetch.assert_not_called()
 
     def test_missing_deployment_step_is_blocked(self):
         gpudirect = make_step_result(
@@ -754,6 +856,92 @@ class RenderTests(unittest.TestCase):
     def setUp(self):
         self.history = sample_history()
 
+    def daily_history(self, records, *, prow_status="success"):
+        root = f"logs/{STEP_JOB}/{STEP_BUILD}"
+        paths = [(f"{root}/artifacts/network-operator-e2e-precompiled/artifacts/nno-step-result-{index}.json", result)
+                 for index, result in enumerate(records)]
+        build = collect.normalize_step_results(paths, paths[0][0])
+        build["run"]["status"] = prow_status
+        return collect.merge_builds({}, [build])
+
+    def test_daily_precompiled_policy_and_rdma_pass_requires_successful_prow(self):
+        for prow, status in (("success", "passed"), ("failure", "failed"),
+                             ("aborted", "failed"), ("unknown", "blocked"), ("running", "blocked")):
+            with self.subTest(prow=prow):
+                history = self.daily_history([make_precompiled_deployment(), make_precompiled_rdma()], prow_status=prow)
+                data = render.mode_data(history, "signed")
+                self.assertEqual(len(data["builds"]), 1)
+                pair = data["builds"][0]["pairs"][0]
+                self.assertEqual(pair["status"], status)
+                stability = data["scheduled_stability"][0]["runs"][0]
+                self.assertEqual(stability["passed_pairs"], int(status == "passed"))
+                self.assertEqual(stability["status"] == "success", status == "passed")
+                self.assertEqual(stability["prow_status"], prow)
+
+    def test_daily_precompiled_rdma_failure_is_visible_even_if_prow_is_green(self):
+        for prow in ("success", "failure"):
+            with self.subTest(prow=prow):
+                history = self.daily_history([
+                    make_precompiled_deployment(), make_precompiled_rdma(status="failed"),
+                ], prow_status=prow)
+                data = render.mode_data(history, "signed")
+                pair = data["builds"][0]["pairs"][0]
+                self.assertEqual(pair["status"], "failed")
+                self.assertEqual(pair["checks"]["nic_cluster_policy_ready"], "passed")
+                self.assertEqual(data["scheduled_stability"][0]["runs"][0]["status"], "failure")
+
+    def test_daily_precompiled_policy_failure_is_visible(self):
+        deployment = make_precompiled_deployment()
+        deployment["status"] = "failed"
+        deployment["checks"]["nic_cluster_policy_ready"] = "failed"
+        history = self.daily_history([deployment], prow_status="failure")
+        data = render.mode_data(history, "signed")
+        self.assertEqual(data["builds"][0]["pairs"][0]["status"], "failed")
+
+    def test_daily_failure_before_precompiled_is_excluded_from_signed_report(self):
+        deployment = make_step_result("network-operator-e2e-shared-device", status="failed",
+                                      checks={"nno_deployment": "failed"})
+        history = self.daily_history([deployment], prow_status="failure")
+        # Older manifests can advertise both planned modes before either runs.
+        history["builds"][0]["run"]["planned_modes"] = ["standard", "signed"]
+        data = render.mode_data(history, "signed")
+        self.assertEqual(data["builds"], [])
+        self.assertEqual(data["scheduled_stability"], [])
+        self.assertEqual(len(render.mode_data(history, "standard")["builds"]), 1)
+
+    def test_daily_no_image_skip_is_excluded_including_stability(self):
+        deployment = make_precompiled_deployment()
+        deployment.update(status="skipped", precompiled_selection={"outcome": "no_match"})
+        deployment["checks"].update(precompiled_selection="not_found", nno_deployment="skipped",
+                                     nic_cluster_policy_ready="not_run")
+        history = self.daily_history([deployment])
+        data = render.mode_data(history, "signed")
+        self.assertEqual(data["builds"], [])
+        self.assertEqual(data["scheduled_stability"], [])
+
+    def test_daily_image_selection_error_without_precompiled_tests_is_excluded(self):
+        deployment = make_precompiled_deployment()
+        deployment.update(status="failed", precompiled_selection={"outcome": "selection_error"})
+        deployment["checks"].update(precompiled_selection="failed", nno_deployment="failed",
+                                     nic_cluster_policy_ready="not_run")
+        data = render.mode_data(self.daily_history([deployment], prow_status="failure"), "signed")
+        self.assertEqual(data["builds"], [])
+        self.assertEqual(data["scheduled_stability"], [])
+
+    def test_saved_precompiled_deployment_only_pass_is_incomplete(self):
+        history = self.daily_history([make_precompiled_deployment()])
+        pair = history["builds"][0]["pairs"][0]
+        # Published history used to omit RDMA entirely and mark deployment-only green.
+        pair["status"] = "passed"
+        del pair["checks"]["rdma_shared_device"]
+        before = copy.deepcopy(history)
+        data = render.mode_data(history, "signed")
+        displayed = data["builds"][0]["pairs"][0]
+        self.assertEqual(displayed["status"], "blocked")
+        self.assertEqual(displayed["checks"]["rdma_shared_device"], "blocked")
+        self.assertEqual(data["scheduled_stability"][0]["runs"][0]["status"], "blocked")
+        self.assertEqual(history, before)
+
     def test_standard_includes_both_sources_and_signed_is_empty(self):
         standard = render.mode_data(self.history, "standard")
         signed = render.mode_data(self.history, "signed")
@@ -803,7 +991,7 @@ class RenderTests(unittest.TestCase):
 
     def test_old_signed_history_does_not_need_a_signature_check(self):
         history = copy.deepcopy(self.history)
-        build = next(build for build in history["builds"] if any(
+        build = next(build for build in history["builds"] if build["run"]["status"] == "success" and any(
             pair["status"] == "passed" and pair["mode"] == "standard" for pair in build["pairs"]
         ))
         signed = copy.deepcopy(next(pair for pair in build["pairs"] if pair["status"] == "passed"))
