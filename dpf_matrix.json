@@ -384,6 +384,18 @@
         "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2112703060143771648",
         "job_timestamp": "1792557141",
         "build_id": "2112703060143771648"
+      },
+      {
+        "ocp_version": "4.22.12-multi",
+        "branch": "main",
+        "dpf_version": "v26.4.1",
+        "ovn_chart_version": "v26.4.1-ocp-release-v4.22",
+        "bluefield_ocp_image": "",
+        "hcp_provisioner_image": "quay.io/redhat-user-workloads/dpu-kit-for-nvidia-operator-tenant/dpf-hcp-provisioner-rhel10-operator:latest",
+        "networking_status": "FAILURE",
+        "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2115239909533945856",
+        "job_timestamp": "1793157507",
+        "build_id": "2115239909533945856"
       }
     ]
   }
