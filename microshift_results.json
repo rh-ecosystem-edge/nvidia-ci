@@ -1,6 +1,13 @@
 {
   "4.22": [
     {
+      "num": 2115609916033994752,
+      "timestamp": 1793240343,
+      "status": "SUCCESS",
+      "url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-openshift-microshift-release-4.22-periodics-e2e-aws-ai-model-serving-nightly/2115609916033994752/",
+      "microshift_version": "4.22.0_0.nightly_2026_10_25_124857_20261026080037_6ccf34479"
+    },
+    {
       "num": 2115247503161954304,
       "timestamp": 1793155022,
       "status": "SUCCESS",
