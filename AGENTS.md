@@ -42,7 +42,7 @@ make build-container-image  # podman build
 
 Tests are Ginkgo suites under `tests/`. The test-runner script (`scripts/test-runner.sh`) wraps ginkgo with env-var-driven configuration:
 
-- **`TEST_FEATURES`** (required): comma-separated subdirectory names under `tests/` (e.g. `nvidiagpu`, `mps`, `mig`, `nvidianetwork`, `timeslicing`, `dra`)
+- **`TEST_FEATURES`** (required): comma-separated subdirectory names under `tests/` (e.g. `nvidiagpu`, `mps`, `mig`, `nvidianetwork`, `sriovnetwork`, `timeslicing`, `dra`)
 - **`TEST_LABELS`**: Ginkgo label filter (e.g. `'nvidia-ci,gpu'`, `'deploy || rdma-legacy-sriov'`)
 - **`KUBECONFIG`**: path to cluster kubeconfig
 - **`NVIDIAGPU_CLEANUP`**: set to `false` when chaining test suites (e.g. deploy GPU Operator first, then run MPS/MIG/timeslicing tests on the same cluster)
@@ -56,10 +56,10 @@ Pass ginkgo CLI parameters via `ARGS`: `make run-tests ARGS="-- --single.mig.pro
 - **`internal/inittools/`**: Package-level `init()` that creates the API client (`APIClient`) and loads config (`GeneralConfig`). Import with dot-import to get these globals. All test files under `tests/` import this.
 - **`internal/config/`**: `GeneralConfig` struct, populated from `default.yaml` + env vars via `envconfig`. Controls report paths, verbosity, dry-run, node labels.
 - **`internal/tsparams/`**: Test suite parameters: labels, namespaces to dump, CRDs to dump. Separate vars files per feature (GPU, network, MPS, MIG, timeslicing).
-- **`internal/gpuparams/`, `internal/networkparams/`**: Label constants and feature-specific env-var-driven config structs.
+- **`internal/gpuparams/`, `internal/networkparams/`, `internal/sriovparams/`**: Label constants and feature-specific env-var-driven config structs.
 - **`internal/`** (other packages): Test helpers for specific features: `deploy/`, `check/`, `get/`, `wait/`, `gpuburn/`, `mps/`, `rdma/`, `timeslicing/`, `dra/`, `helm/`, `testworkloads/`, `reporter/`.
-- **`pkg/`**: Reusable Kubernetes resource wrappers: `clients/`, `pod/`, `namespace/`, `deployment/`, `nodes/`, `machine/`, `configmap/`, `olm/`, `nfd/`, `nvidiagpu/`, `nvidianetwork/`, `mig/`, `operatorconfig/`.
-- **`tests/`**: Ginkgo test suites. Each subdirectory has a `*_suite_test.go` (test runner + reporter setup) and `*_test.go` files. Test suites: `nvidiagpu`, `nvidianetwork`, `mps`, `mig`, `timeslicing`, `dra/` (with `gpuallocation` and `computedomain` sub-suites), `dummy`.
+- **`pkg/`**: Reusable Kubernetes resource wrappers: `clients/`, `pod/`, `namespace/`, `deployment/`, `nodes/`, `machine/`, `configmap/`, `olm/`, `nfd/`, `nvidiagpu/`, `nvidianetwork/`, `sriovnetwork/` (with a hand-maintained, trimmed local copy of the upstream SRIOV Network Operator API types under `sriovnetwork/api/`, to avoid vendoring that operator's heavy transitive dependency tree), `mig/`, `operatorconfig/`.
+- **`tests/`**: Ginkgo test suites. Each subdirectory has a `*_suite_test.go` (test runner + reporter setup) and `*_test.go` files. Test suites: `nvidiagpu`, `nvidianetwork`, `sriovnetwork`, `mps`, `mig`, `timeslicing`, `dra/` (with `gpuallocation` and `computedomain` sub-suites), `dummy`.
 - **`.github/scripts/dpf_dashboard/`**: Python scripts for generating the Red Hat OpenShift DPF CI dashboard. Fetches periodic job results from GCS, accumulates in `dpf_matrix.json`, and generates `dpf_matrix.html`. Configured via `versions.json`.
 - **`mcp/prow-analyzer/`**: Python MCP server for analyzing Prow CI job results (separate from the Go codebase).
 
