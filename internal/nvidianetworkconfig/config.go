@@ -8,6 +8,7 @@ import (
 
 // NvidiaNetworkConfig contains environment information related to nvidianetwork tests.
 type NvidiaNetworkConfig struct {
+	PreparePrecompiledOnly             bool   `envconfig:"NVIDIANETWORK_PREPARE_PRECOMPILED_ONLY" default:"false"`
 	CatalogSource                      string `envconfig:"NVIDIANETWORK_CATALOGSOURCE"`
 	SubscriptionChannel                string `envconfig:"NVIDIANETWORK_SUBSCRIPTION_CHANNEL"`
 	CleanupAfterTest                   bool   `envconfig:"NVIDIANETWORK_CLEANUP" default:"true"`
