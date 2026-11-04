@@ -30,7 +30,7 @@ type PrecompiledSelection struct {
 	Error         string `json:"error,omitempty"`
 }
 
-// StepResult is the durable result record for one NNO Prow test step.
+// StepResult is the durable result record for one NNO test step.
 type StepResult struct {
 	SchemaVersion        int                   `json:"schema_version"`
 	JobName              string                `json:"job_name"`

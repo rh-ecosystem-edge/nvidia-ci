@@ -162,6 +162,11 @@ func listStagingRegistryTags(
 	}
 	_ = resp.Body.Close()
 
+	// An unpublished repository has no candidate images. Authentication and
+	// other registry failures still propagate to the caller.
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
 	if resp.StatusCode != http.StatusUnauthorized {
 		return nil, fmt.Errorf("expected 401 from %s, got %d", precompiledOFEDRegistry, resp.StatusCode)
 	}
@@ -175,8 +180,8 @@ func listStagingRegistryTags(
 	var allTags []string
 	nextURL := tagsURL
 
-	for nextURL != "" {
-		pageTags, next, err := listStagingRegistryTagsPage(ctx, client, nextURL, token)
+	for firstPage := true; nextURL != ""; firstPage = false {
+		pageTags, next, err := listStagingRegistryTagsPage(ctx, client, nextURL, token, firstPage)
 		if err != nil {
 			return nil, err
 		}
@@ -189,7 +194,7 @@ func listStagingRegistryTags(
 }
 
 func listStagingRegistryTagsPage(
-	ctx context.Context, client *http.Client, pageURL, token string,
+	ctx context.Context, client *http.Client, pageURL, token string, firstPage bool,
 ) ([]string, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
@@ -204,6 +209,11 @@ func listStagingRegistryTagsPage(
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	// Only the first page can identify a missing repository. A missing later
+	// page is a lookup failure, so callers must discard the incomplete catalog.
+	if resp.StatusCode == http.StatusNotFound && firstPage {
+		return nil, "", nil
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read registry response: %w", err)

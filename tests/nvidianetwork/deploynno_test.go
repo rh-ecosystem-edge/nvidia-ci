@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -190,6 +191,29 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				SubscriptionChannel = nvidiaNetworkConfig.SubscriptionChannel
 				glog.V(networkparams.LogLevel).Infof("NNO Subscription Channel now set to env variable "+
 					"NVIDIANETWORK_SUBSCRIPTION_CHANNEL value '%s'", SubscriptionChannel)
+			}
+
+			// Preparation needs only the existing NNO, worker inventory and staging
+			// credentials. It must not configure networks or install/clean up NFD.
+			if nvidiaNetworkConfig.PreparePrecompiledOnly {
+				sharedDir := os.Getenv("SHARED_DIR")
+				Expect(sharedDir).NotTo(BeEmpty(), "preparation requires SHARED_DIR")
+				for _, name := range []string{"nno-precompiled-pullspec", "skip-nno-precompiled"} {
+					err := os.Remove(filepath.Join(sharedDir, name))
+					if !errors.Is(err, os.ErrNotExist) {
+						Expect(err).NotTo(HaveOccurred(), "cannot clear stale precompiled result %s", name)
+					}
+				}
+				Expect(nvidiaNetworkConfig.UsePrecompiledOFED && nvidiaNetworkConfig.ReuseNNO).To(BeTrue(),
+					"preparation requires precompiled selection and the existing NNO installation")
+				Expect(nvidiaNetworkConfig.OfedDriverVersion).To(BeEmpty(), "preparation cannot use an OFED version override")
+				Expect(nvidiaNetworkConfig.OfedDriverRepository).To(BeEmpty(), "preparation cannot use an OFED repository override")
+				rdmaClientHostname = nvidiaNetworkConfig.RdmaClientHostname
+				rdmaServerHostname = nvidiaNetworkConfig.RdmaServerHostname
+				Expect(rdmaClientHostname).NotTo(BeEmpty(), "preparation requires the RDMA client hostname")
+				Expect(rdmaServerHostname).NotTo(BeEmpty(), "preparation requires the RDMA server hostname")
+				Expect(rdmaClientHostname).NotTo(Equal(rdmaServerHostname), "preparation requires two distinct RDMA workers")
+				return
 			}
 
 			if nvidiaNetworkConfig.CleanupAfterTest {
@@ -571,6 +595,9 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				precompiledSelectionVersion = ""
 				precompiledSelectionPullSpec = ""
 			}
+			if nvidiaNetworkConfig.PreparePrecompiledOnly && !slices.Contains(CurrentSpecReport().LeafNodeLabels, "deploy") {
+				Skip("preparation-only mode does not run deployment or RDMA workload specs")
+			}
 			if precompiledOFEDSkipped {
 				Skip(precompiledOFEDSkipReason)
 			}
@@ -619,7 +646,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 		AfterAll(func() {
 
-			if nfdInstance.CleanupAfterInstall && cleanupAfterTest {
+			if !nvidiaNetworkConfig.PreparePrecompiledOnly && nfdInstance.CleanupAfterInstall && cleanupAfterTest {
 				err := nfd.Cleanup(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "Error cleaning up NFD resources: %v", err)
 			}
@@ -627,6 +654,19 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 		})
 
 		It("Deploy NVIDIA Network Operator with DTK", Label("deploy"), func() {
+			// Select against the installed NNO before any catalog or driver mutations.
+			if nvidiaNetworkConfig.PreparePrecompiledOnly {
+				csv, err := nnoCSV(true)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(csv).NotTo(BeNil())
+				Expect(verifyNNOFamily(SubscriptionChannel, csv.Spec.Version.String())).To(Succeed())
+				selected := resolveRequestedPrecompiledDriver(csv.Spec.Version.String())
+				err = os.WriteFile(filepath.Join(os.Getenv("SHARED_DIR"), "nno-precompiled-pullspec"),
+					[]byte(selected.PullSpec()+"\n"), 0644)
+				Expect(err).NotTo(HaveOccurred(), "cannot publish selected precompiled image")
+				nnoStepChecks["nno_deployment"] = nnoReportStatusNotRun
+				return
+			}
 			var selectedPrecompiledOFED *nvidianetwork.OFEDImage
 			var bundleCSV *v1alpha1.ClusterServiceVersion
 			requestedNNOVersion := ""
@@ -1109,7 +1149,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				nicClusterPolicyBuilder.Definition.Spec.RdmaSharedDevicePlugin.Config = &newRDMASharedDevicePluginConfig
 			}
 
-			if nvidiaNetworkConfig.UsePrecompiledOFED {
+			if nvidiaNetworkConfig.UsePrecompiledOFED && ofedDriverImage != UndefinedValue {
 				By("Delete RDMA test pods left over from previous runs")
 				deleteRdmaTestPods()
 				By("Replace existing NicClusterPolicy if present")
@@ -1790,11 +1830,18 @@ func readBundleCSV(image string) (*v1alpha1.ClusterServiceVersion, error) {
 	return nil, fmt.Errorf("bundle has no NVIDIA Network Operator CSV")
 }
 
+// resolveRequestedPrecompiledDriver reuses image matching and publishes the
+// preparation skip result when no compatible image exists for both workers.
 func resolveRequestedPrecompiledDriver(nnoVersion string) *nvidianetwork.OFEDImage {
 	By("Resolve the precompiled driver for the requested NNO family and both RDMA workers")
 	selected, err := selectPrecompiledOFEDDriver(nvidiaNetworkConfig.OfedDriverPullSpec, nnoVersion)
 	Expect(err).ToNot(HaveOccurred(), "precompiled DOCA/OFED image resolution failed")
 	if selected == nil {
+		if nvidiaNetworkConfig.PreparePrecompiledOnly {
+			err := os.WriteFile(filepath.Join(os.Getenv("SHARED_DIR"), "skip-nno-precompiled"),
+				[]byte(precompiledOFEDSkipReason+"\n"), 0644)
+			Expect(err).NotTo(HaveOccurred(), "cannot publish precompiled skip reason")
+		}
 		precompiledOFEDSkipped = true
 		Skip(precompiledOFEDSkipReason)
 	}
@@ -1871,6 +1918,9 @@ func selectPrecompiledOFEDDriver(requestedPullSpec, nnoVersion string) (selected
 		}
 		worker := nvidianetwork.OFEDWorker{KernelVersion: node.Status.NodeInfo.KernelVersion,
 			OSTag: osTag, Architecture: node.Status.NodeInfo.Architecture}
+		if nvidiaNetworkConfig.PreparePrecompiledOnly && len(workers) > 0 && worker != workers[0] {
+			return nil, fmt.Errorf("preparation requires identical kernel, OS tag and architecture on both RDMA workers; worker %s differs", node.Name)
+		}
 		workers = append(workers, worker)
 		if requestedPullSpec != "" {
 			selected, err = nvidianetwork.ParseExplicitPrecompiledOFEDPullSpec(requestedPullSpec,
