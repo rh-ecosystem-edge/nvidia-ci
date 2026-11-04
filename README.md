@@ -109,6 +109,7 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_DEPLOY_FROM_BUNDLE`: boolean flag to deploy Network Operator from bundle image with operator-sdk - Default value is false - *required when deploying from bundle*
 - `NVIDIANETWORK_SUBSCRIPTION_UPGRADE_TO_CHANNEL`: specific subscription channel to upgrade to from previous version.  *required when running operator-upgrade testcase*
 - `NVIDIANETWORK_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - *required only when cleanup is not needed*
+- `NVIDIANETWORK_CLEANUP_DRIVERS_ONLY`: run only the explicit driver-cleanup spec, without deployment or RDMA workloads. Set automatically by `make cleanup-nno-drivers`. Default is `false` - *optional*
 - `NVIDIANETWORK_NNO_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - *required when deploying fallback custom NNO catalogsource*
 - `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - *required when deploying fallback custom NFD catalogsource*
 - `NVIDIANETWORK_OFED_DRIVER_VERSION`: OFED Driver Version.  If not specified, the default driver version is used - *optional*
@@ -364,6 +365,33 @@ $ make run-tests
 ```
 
 ### Cleaning up leftover resources
+
+#### Switching NNO driver images
+
+To stop the drivers and RDMA workloads from an earlier NNO test run:
+
+```bash
+export KUBECONFIG=/path/to/kubeconfig
+export NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE=default
+export REPORTS_DUMP_DIR=/tmp/nno-driver-cleanup
+make cleanup-nno-drivers
+```
+
+The target runs a dedicated Ginkgo spec and produces its normal JUnit report.
+It saves the existing GPU and NIC policies in the report directory, deletes RDMA
+test pods in the specified namespace, disables the GPU driver and its consumers,
+waits for GPU driver pods to terminate, then deletes `nic-cluster-policy` and waits
+for the old OFED driver pods to terminate. GPU and OFED shutdown each have a
+10-minute timeout, within a 30-minute overall spec timeout. Missing policies and
+already-deleted test pods are tolerated; other API failures fail the operation.
+
+Run image selection before cleanup when switching to a precompiled driver. If no
+compatible image exists, skip cleanup as well. The target does not select images,
+change Secure Boot, reboot workers, or install replacement drivers. GPU operands
+remain disabled and the NIC policy remains removed, including if a later phase
+fails. Ordinary test runs skip this cleanup spec unless explicitly enabled.
+
+#### Removing the GPU Operator
 
 If you ran any `nvidiagpu` testcase with `NVIDIAGPU_CLEANUP=false` (e.g. to chain into MPS/MIG/
 time-slicing, or to leave resources in place for debugging) and now want to remove everything,
