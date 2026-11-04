@@ -73,6 +73,11 @@ run-tests: get-gpu-operator-must-gather get-nfd-must-gather ## Run test suite
 	@echo "Executing nvidiagpu test-runner script"
 	scripts/test-runner.sh $(ARGS)
 
+.PHONY: cleanup-nno-drivers
+cleanup-nno-drivers: ## Remove RDMA workloads and stop GPU/OFED drivers before switching driver images (requires KUBECONFIG)
+	$(MAKE) run-tests TEST_FEATURES=nvidianetwork TEST_LABELS=cleanup-nno-drivers \
+		NVIDIANETWORK_CLEANUP_DRIVERS_ONLY=true NVIDIANETWORK_SUBSCRIPTION_CHANNEL=
+
 run-mig-tests: get-gpu-operator-must-gather get-nfd-must-gather
 	@echo "Executing mig-tests runner script"
 	scripts/mig-tests.sh $(ARGS)

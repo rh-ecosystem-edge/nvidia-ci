@@ -172,6 +172,9 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 	Context("DeployNNO", Label("deploy-nno-with-dtk"), func() {
 
 		BeforeAll(func() {
+			if nvidiaNetworkConfig.CleanupDriversOnly {
+				Skip("driver cleanup does not run deployment or RDMA workload specs")
+			}
 
 			if nvidiaNetworkConfig.CatalogSource == "" {
 				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_CATALOGSOURCE"+
@@ -646,7 +649,8 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 		AfterAll(func() {
 
-			if !nvidiaNetworkConfig.PreparePrecompiledOnly && nfdInstance.CleanupAfterInstall && cleanupAfterTest {
+			if !nvidiaNetworkConfig.PreparePrecompiledOnly && !nvidiaNetworkConfig.CleanupDriversOnly &&
+				nfdInstance.CleanupAfterInstall && cleanupAfterTest {
 				err := nfd.Cleanup(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "Error cleaning up NFD resources: %v", err)
 			}
@@ -1151,9 +1155,10 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 			if nvidiaNetworkConfig.UsePrecompiledOFED && ofedDriverImage != UndefinedValue {
 				By("Delete RDMA test pods left over from previous runs")
-				deleteRdmaTestPods()
+				deleteRdmaTestPods(context.Background(), rdmaWorkloadNamespace)
 				By("Replace existing NicClusterPolicy if present")
-				deleteNicClusterPolicyIfExists(nicClusterPolicyBuilder)
+				deleteNicClusterPolicyIfExists(context.Background(), nicClusterPolicyBuilder.Definition.Name,
+					nnoNamespace, 5*time.Minute)
 			}
 
 			_, policyErr := nicClusterPolicyBuilder.Get()
@@ -1967,95 +1972,4 @@ func selectPrecompiledOFEDDriver(requestedPullSpec, nnoVersion string) (selected
 		selected.PullSpec(), selected.Version)
 
 	return selected, nil
-}
-
-// rdmaTestPodNamePrefixes are the name prefixes of the RDMA workload pods created by the rdma-shared-dev
-// and rdma-legacy-sriov test cases.
-var rdmaTestPodNamePrefixes = []string{"rdma-shared-dev-", "rdma-legacy-sriov-"}
-
-func deleteRdmaTestPods() {
-	if rdmaWorkloadNamespace == UndefinedValue || rdmaWorkloadNamespace == "" {
-		glog.V(networkparams.LogLevel).Infof("RDMA workload namespace is not set, no RDMA test pods to delete")
-
-		return
-	}
-
-	podList, err := inittools.APIClient.Pods(rdmaWorkloadNamespace).List(context.TODO(), metav1.ListOptions{})
-	Expect(err).ToNot(HaveOccurred(), "error listing pods in namespace %s: %v", rdmaWorkloadNamespace, err)
-
-	var deleted []string
-
-	for _, pod := range podList.Items {
-		if !hasAnyPrefix(pod.Name, rdmaTestPodNamePrefixes) {
-			continue
-		}
-
-		glog.V(networkparams.LogLevel).Infof(
-			"Deleting RDMA test pod '%s' in namespace '%s'", pod.Name, rdmaWorkloadNamespace)
-		err := inittools.APIClient.Pods(rdmaWorkloadNamespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			Expect(err).ToNot(HaveOccurred(), "error deleting RDMA test pod %s: %v", pod.Name, err)
-		}
-
-		deleted = append(deleted, pod.Name)
-	}
-
-	for _, podName := range deleted {
-		Eventually(func() bool {
-			_, getErr := inittools.APIClient.Pods(rdmaWorkloadNamespace).Get(
-				context.TODO(), podName, metav1.GetOptions{})
-
-			return k8serrors.IsNotFound(getErr)
-		}, 5*time.Minute, 5*time.Second).Should(BeTrue(),
-			"RDMA test pod %s was not deleted", podName)
-	}
-}
-
-func hasAnyPrefix(s string, prefixes []string) bool {
-	for _, prefix := range prefixes {
-		if strings.HasPrefix(s, prefix) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func deleteNicClusterPolicyIfExists(builder *nvidianetwork.NicClusterPolicyBuilder) {
-	existing, err := builder.Get()
-	if k8serrors.IsNotFound(err) {
-		return
-	}
-	Expect(err).ToNot(HaveOccurred(), "cannot inspect existing NicClusterPolicy")
-
-	glog.V(networkparams.LogLevel).Infof(
-		"Deleting existing NicClusterPolicy '%s' before recreate", nnoNicClusterPolicyName)
-	err = inittools.APIClient.Delete(context.Background(), existing)
-	Expect(err).ToNot(HaveOccurred(), "error deleting existing NicClusterPolicy %s: %v",
-		nnoNicClusterPolicyName, err)
-
-	Eventually(func() error {
-		_, pullErr := builder.Get()
-		if !k8serrors.IsNotFound(pullErr) {
-			if pullErr != nil {
-				return pullErr
-			}
-			return fmt.Errorf("NicClusterPolicy %s still exists", nnoNicClusterPolicyName)
-		}
-		pods, err := inittools.APIClient.Pods(nnoNamespace).List(context.Background(), metav1.ListOptions{})
-		if err != nil {
-			return err
-		}
-		if driver := existing.Spec.OFEDDriver; driver != nil && driver.Image != "" {
-			for _, pod := range pods.Items {
-				for _, container := range pod.Spec.Containers {
-					if strings.Contains(container.Image, "/"+driver.Image+":") ||
-						strings.Contains(container.Image, "/"+driver.Image+"@") {
-						return fmt.Errorf("waiting for previous driver pod %s to stop", pod.Name)
-					}
-				}
-			}
-		}
-		return nil
-	}, 5*time.Minute, 5*time.Second).Should(Succeed(), "previous driver must stop before inventory cleanup")
 }
