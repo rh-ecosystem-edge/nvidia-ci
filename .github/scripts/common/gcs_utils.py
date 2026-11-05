@@ -14,6 +14,8 @@ from collections import deque
 from typing import Dict, Any, List, Tuple
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from common.utils import logger
 
@@ -40,6 +42,22 @@ _CURATED_PREFIX = os.environ.get("PROW_CURATED_PREFIX", "curated/")
 
 # Cache for recursive directory traversals (avoids re-crawling the same prefix)
 _files_cache: Dict[str, List[str]] = {}
+
+# Reuse connections and retry transient failures for both artifact backends.
+# Keep the final HTTP response so callers can still distinguish missing files
+# from exhausted rate limits with raise_for_status().
+_http_session = requests.Session()
+_http_retry = Retry(
+    total=5,
+    allowed_methods=frozenset({"GET"}),
+    status_forcelist=(408, 429, 500, 502, 503, 504),
+    backoff_factor=1,
+    backoff_jitter=0.5,
+    respect_retry_after_header=True,
+    raise_on_status=False,
+)
+for _scheme in ("http://", "https://"):
+    _http_session.mount(_scheme, HTTPAdapter(max_retries=_http_retry))
 
 
 class GCSFileNotFoundError(requests.HTTPError):
@@ -93,7 +111,7 @@ def list_gcsweb_directory(dir_path: str) -> Tuple[List[str], List[str]]:
     if not gcsweb_path.endswith("/"):
         gcsweb_path += "/"
 
-    response = requests.get(
+    response = _http_session.get(
         _gcsweb_url(gcsweb_path), headers=_get_auth_headers(), timeout=30
     )
     response.raise_for_status()
@@ -188,7 +206,7 @@ def _gcsweb_list_all_files(prefix: str) -> List[str]:
     while dirs_to_visit:
         current = dirs_to_visit.popleft()
         try:
-            response = requests.get(
+            response = _http_session.get(
                 _gcsweb_url(current), headers=_get_auth_headers(), timeout=30
             )
             response.raise_for_status()
@@ -228,7 +246,7 @@ def http_get_json(url: str, params: Dict[str, Any] | None = None, headers: Dict[
     Raises:
         requests.HTTPError: If the request fails
     """
-    response = requests.get(url, params=params, headers=headers, timeout=30)
+    response = _http_session.get(url, params=params, headers=headers, timeout=30)
     response.raise_for_status()
     return response.json()
 
@@ -249,7 +267,7 @@ def fetch_gcs_file_content(file_path: str) -> str:
     if _use_gcsweb():
         gcsweb_path = f"{_CURATED_PREFIX}{file_path}"
         logger.info(f"Fetching file content via gcsweb: {file_path}")
-        response = requests.get(
+        response = _http_session.get(
             _gcsweb_url(gcsweb_path), headers=_get_auth_headers(), timeout=30
         )
         response.raise_for_status()
@@ -263,7 +281,7 @@ def fetch_gcs_file_content(file_path: str) -> str:
         return response.text
 
     logger.info(f"Fetching file content for {file_path}")
-    response = requests.get(
+    response = _http_session.get(
         url=f"{GCS_API_BASE_URL}/{urllib.parse.quote_plus(file_path)}",
         params={"alt": "media"},
         timeout=30,
