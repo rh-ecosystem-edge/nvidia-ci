@@ -321,7 +321,7 @@
     }).catch(function() {});
 
     // NNO pair report dashboards
-    function loadNnoPairDashboard(jsonFile, dotId, historyId) {
+    function loadNnoPairDashboard(jsonFile, dotId, historyId, hideInconclusive) {
       fetch(jsonFile).then(function(r) { return r.json(); }).then(function(data) {
         var builds = (data.builds || []).slice().sort(function(a, b) {
           return (b.run.started_at || '').localeCompare(a.run.started_at || '');
@@ -332,6 +332,7 @@
           if (!pairs.length) return;
           var passed = pairs.filter(function(p) { return p.status === 'passed'; }).length;
           var failed = pairs.filter(function(p) { return p.status === 'failed'; }).length;
+          if (hideInconclusive && !passed && !failed) return;
           var status = failed > 0 ? 'failed' : (passed > 0 ? 'passed' : 'unknown');
           runs.push({ status: status, date: (build.run.started_at || '').replace('T', ' ').replace('Z', ' UTC'), url: build.run.prow_url });
         });
@@ -341,8 +342,8 @@
         renderHistory(historyId, latest);
       }).catch(function() {});
     }
-    loadNnoPairDashboard('nno_doca2_matrix.json', 'status-nno', 'history-nno');
-    loadNnoPairDashboard('nno_doca2_signed_matrix.json', 'status-nno-signed', 'history-nno-signed');
+    loadNnoPairDashboard('nno_doca2_matrix.json', 'status-nno', 'history-nno', false);
+    loadNnoPairDashboard('nno_doca2_signed_matrix.json', 'status-nno-signed', 'history-nno-signed', true);
   </script>
 </body>
 </html>
