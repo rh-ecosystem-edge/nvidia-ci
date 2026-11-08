@@ -6,6 +6,10 @@ This file provides guidance to AI tools when working with code in this repositor
 
 Golang + Ginkgo automation/CI framework for testing NVIDIA GPU Operator and Network Operator on OpenShift Container Platform (OCP >= 4.12). Tests run against a pre-installed OCP cluster via `KUBECONFIG`.
 
+## AI agent workflow
+
+For planning or delivering NVIDIA feature verification and automation, start with [docs/feature-verification-workflow.md](docs/feature-verification-workflow.md). The `nvidia-verification` skill is the main coordinator; invoke a phase skill directly only when its phase and scope are already clear. This file remains the authority for repository-specific commands, layout, and test mechanics; the workflow links here instead of duplicating them.
+
 ## Common commands
 
 ```bash
