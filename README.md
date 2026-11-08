@@ -7,6 +7,8 @@
 This repository is an automation/CI framework to test NVIDIA operators, the GPU Operator and Network Operator.
 This project is based on golang + [ginkgo](https://onsi.github.io/ginkgo) framework.
 
+For planning or delivering NVIDIA feature verification and automation, start with the [NVIDIA feature verification and automation workflow](docs/feature-verification-workflow.md).
+
 ### Project requirements
 
 Golang and ginkgo versions based on versions specified in `go.mod` file.
