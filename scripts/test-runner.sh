@@ -27,15 +27,21 @@ fi
 
 # The signed NNO workflow publishes this handoff before its GPU installation step.
 # Its workload uses DMA-BUF, so override the release step's legacy RDMA patch
-# before creating ClusterPolicy and starting the driver build.
+# before creating ClusterPolicy and starting driver deployment.
 if [[ "${TEST_FEATURES}" == "nvidiagpu" && -n "${SHARED_DIR:-}" &&
       -s "${SHARED_DIR}/nno-doca2-signed-request.json" ]]; then
+    # Keep signed jobs working before openshift/release exposes the version input.
+    export NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH="${NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH:-595.91.07}"
     if ! signed_gpu_patch=$(python3 - <<'PY'
 import json
 import os
+import re
 import sys
 
 try:
+    version = os.environ.get("NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH", "")
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+        raise ValueError("NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH must select one full GPU release, such as 595.91.07; floating and list selections are unsupported")
     patch = json.loads(os.environ.get("NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH") or "[]")
     if not isinstance(patch, list):
         raise ValueError("ClusterPolicy patch must be a JSON array")
@@ -44,6 +50,7 @@ except ValueError as error:
     sys.exit(1)
 
 patch.extend([
+    {"op": "add", "path": "/spec/driver/enabled", "value": True},
     {"op": "add", "path": "/spec/driver/rdma", "value": {"enabled": False}},
     {"op": "add", "path": "/spec/driver/kernelModuleType", "value": "open"},
 ])
@@ -53,7 +60,8 @@ PY
         exit 1
     fi
     export NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH="${signed_gpu_patch}"
-    echo "Signed NNO GPU installation uses open kernel modules and DMA-BUF (driver.rdma.enabled=false)"
+    export NVIDIAGPU_USE_PRECOMPILED_DRIVER=true
+    echo "Signed NNO GPU installation uses production precompiled driver ${NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH}, open kernel modules and DMA-BUF (driver.rdma.enabled=false)"
 fi
 
 # Set feature_dirs to top-level test directory when "all" feature provided
