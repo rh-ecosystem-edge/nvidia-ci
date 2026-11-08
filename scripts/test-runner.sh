@@ -30,8 +30,6 @@ fi
 # before creating ClusterPolicy and starting driver deployment.
 if [[ "${TEST_FEATURES}" == "nvidiagpu" && -n "${SHARED_DIR:-}" &&
       -s "${SHARED_DIR}/nno-doca2-signed-request.json" ]]; then
-    # Keep signed jobs working before openshift/release exposes the version input.
-    export NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH="${NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH:-595.91.07}"
     if ! signed_gpu_patch=$(python3 - <<'PY'
 import json
 import os
@@ -40,8 +38,8 @@ import sys
 
 try:
     version = os.environ.get("NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH", "")
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
-        raise ValueError("NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH must select one full GPU release, such as 595.91.07; floating and list selections are unsupported")
+    if version and not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+        raise ValueError("NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH must be empty for automatic kernel discovery or select one full GPU release; floating and list selections are unsupported")
     patch = json.loads(os.environ.get("NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH") or "[]")
     if not isinstance(patch, list):
         raise ValueError("ClusterPolicy patch must be a JSON array")
@@ -61,7 +59,7 @@ PY
     fi
     export NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH="${signed_gpu_patch}"
     export NVIDIAGPU_USE_PRECOMPILED_DRIVER=true
-    echo "Signed NNO GPU installation uses production precompiled driver ${NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH}, open kernel modules and DMA-BUF (driver.rdma.enabled=false)"
+    echo "Signed NNO GPU installation uses production precompiled drivers (version: ${NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH:-automatic kernel discovery}), open kernel modules and DMA-BUF (driver.rdma.enabled=false)"
 fi
 
 # Set feature_dirs to top-level test directory when "all" feature provided

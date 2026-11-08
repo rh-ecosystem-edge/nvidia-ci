@@ -47,7 +47,7 @@ class SignedGPUPolicyTests(unittest.TestCase):
             "CAPTURE": str(self.capture),
             "TEST_FEATURES": "nvidiagpu",
             "NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH": json.dumps(LEGACY_PATCH),
-            "NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH": "595.91.07",
+            "NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH": "",
         }
 
     def invoke(self):
@@ -102,7 +102,7 @@ class SignedGPUPolicyTests(unittest.TestCase):
                 self.assertNotIn("DMA-BUF", result.stdout)
                 self.assertNotIn("NVIDIAGPU_USE_PRECOMPILED_DRIVER", captured)
 
-    def test_signed_gpu_requires_one_full_release(self):
+    def test_signed_gpu_requires_one_full_release_for_explicit_override(self):
         """Reject explicit floating, list, and malformed releases before deployment."""
         for value in [" ", "595", "all", "595.91.07,580.178.04", "595.91", "595.91.07-source"]:
             with self.subTest(value=value):
@@ -112,8 +112,8 @@ class SignedGPUPolicyTests(unittest.TestCase):
                 self.assertIn("one full GPU release", result.stderr)
                 self.assertFalse(self.capture.exists())
 
-    def test_signed_gpu_defaults_release_before_release_wiring(self):
-        """Keep signed jobs usable before the release step exposes the input."""
+    def test_signed_gpu_uses_automatic_discovery_without_release_override(self):
+        """Let existing kernel-based discovery select a driver when no version is supplied."""
         for value in [None, ""]:
             with self.subTest(value=value):
                 self.env.pop("NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH", None)
@@ -122,18 +122,63 @@ class SignedGPUPolicyTests(unittest.TestCase):
                 result = self.invoke()
                 self.assertEqual(result.returncode, 0, result.stderr)
                 captured = json.loads(self.capture.read_text())
-                self.assertEqual(captured["NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH"], "595.91.07")
+                self.assertEqual(captured.get("NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH"), value)
                 self.assertEqual(captured["NVIDIAGPU_USE_PRECOMPILED_DRIVER"], "true")
-                self.assertIn("595.91.07", result.stdout)
+                self.assertEqual(json.loads(captured["NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH"]),
+                                 LEGACY_PATCH + DMA_BUF_PATCH)
+                self.assertIn("automatic kernel discovery", result.stdout)
 
     def test_signed_gpu_preserves_explicit_full_release(self):
-        """Keep a caller-selected release instead of substituting the default."""
+        """Keep a caller-selected release instead of enabling automatic selection."""
         self.env["NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH"] = "580.178.04"
         result = self.invoke()
         self.assertEqual(result.returncode, 0, result.stderr)
         captured = json.loads(self.capture.read_text())
         self.assertEqual(captured["NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH"], "580.178.04")
         self.assertIn("580.178.04", result.stdout)
+
+    def test_signed_gpu_preserves_operator_channel_selection(self):
+        """Use the catalog default unless a caller supplies an operator channel."""
+        for channel in [None, "", "v26.3", "v26.7"]:
+            with self.subTest(channel=channel):
+                self.env.pop("NVIDIAGPU_SUBSCRIPTION_CHANNEL", None)
+                if channel is not None:
+                    self.env["NVIDIAGPU_SUBSCRIPTION_CHANNEL"] = channel
+                result = self.invoke()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                captured = json.loads(self.capture.read_text())
+                self.assertEqual(captured.get("NVIDIAGPU_SUBSCRIPTION_CHANNEL"), channel)
+                self.assertEqual(captured["NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH"], "")
+                self.assertEqual(captured["NVIDIAGPU_USE_PRECOMPILED_DRIVER"], "true")
+
+    @unittest.skipUnless(os.environ.get("DOCA2_RELEASE_DIR"), "set DOCA2_RELEASE_DIR to check release callers")
+    def test_release_gpu_step_preserves_automatic_and_explicit_selections(self):
+        """Exercise the release GPU command through the runner with both selection modes."""
+        make = self.root / "bin/make"
+        make.write_text(
+            f"#!{sys.executable}\n"
+            "import os\n"
+            f"os.execv('/bin/bash', ['bash', {str(SCRIPT)!r}])\n")
+        make.chmod(0o755)
+        script = (Path(os.environ["DOCA2_RELEASE_DIR"]) / "ci-operator/step-registry/nno/"
+                  "install-gpu-operator-rdma/nno-install-gpu-operator-rdma-commands.sh")
+        for version, channel in [(None, None), ("", ""), ("580.178.04", "v26.3")]:
+            with self.subTest(version=version, channel=channel):
+                self.env.pop("NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH", None)
+                self.env.pop("NVIDIAGPU_SUBSCRIPTION_CHANNEL", None)
+                if version is not None:
+                    self.env["NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH"] = version
+                if channel is not None:
+                    self.env["NVIDIAGPU_SUBSCRIPTION_CHANNEL"] = channel
+                result = subprocess.run(["bash", str(script)], cwd=REPO, env=self.env,
+                                        capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                captured = json.loads(self.capture.read_text())
+                self.assertEqual(captured.get("NVIDIAGPU_PRECOMPILED_DRIVER_BRANCH"), version)
+                self.assertEqual(captured.get("NVIDIAGPU_SUBSCRIPTION_CHANNEL"), channel)
+                self.assertEqual(captured["NVIDIAGPU_USE_PRECOMPILED_DRIVER"], "true")
+                self.assertEqual(json.loads(captured["NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH"]),
+                                 LEGACY_PATCH + DMA_BUF_PATCH)
 
     def test_unsigned_selection_modes_remain_available(self):
         """Preserve all existing selections and avoid defaulting unsigned runs."""
