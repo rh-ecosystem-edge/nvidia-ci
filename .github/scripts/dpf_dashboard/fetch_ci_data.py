@@ -119,6 +119,13 @@ def fetch_build_result(
         logger.warning(f"Invalid finished.json for build {build_id}")
         return None
 
+    pause_path = (
+        f"{base_path}/artifacts/{step_prefix}/{env_step}/artifacts/pause"
+    )
+    if gcs_get_file(pause_path) is not None:
+        logger.info(f"Cluster paused for build {build_id}, skipping")
+        return None
+
     timestamp = finished.get("timestamp", 0)
     branch = finished.get("revision", "unknown")
 

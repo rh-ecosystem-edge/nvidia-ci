@@ -23,6 +23,13 @@ The dashboard fetches results from periodic Prow jobs stored in Google Cloud Sto
 
 A job is considered successful if the `dpf-hypervisor-network-tests` step passes. This is checked via the step's `finished.json` (`passed: true`).
 
+Paused runs are excluded from the dashboard and its history. When the hypervisor
+has `/root/${CLUSTER_NAME}/pause`, the deploy step publishes an empty `pause` file
+in its artifacts and stops before deployment. The fetcher skips runs containing
+`dpf-hypervisor-deploy-cluster/artifacts/pause`, even when the file is empty.
+Prow still reports the stopped job as failed. Older runs without the marker
+retain the existing behavior.
+
 ## Configuration
 
 Job definitions are in `versions.json`:
@@ -67,6 +74,7 @@ PYTHONPATH=.github/scripts python -m dpf_dashboard.fetch_ci_data \
 
 For each job run, it fetches:
 - `finished.json` (timestamp, branch)
+- `dpf-hypervisor-deploy-cluster/artifacts/pause` (skip the run if present)
 - `dpf-hypervisor-network-tests/finished.json` (networking pass/fail)
 - `dpf-hypervisor-deploy-cluster/artifacts/.env` (version info)
 
