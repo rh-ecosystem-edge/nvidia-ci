@@ -43,6 +43,17 @@ def outcome(record: dict[str, Any] | None) -> str:
     return "passed" if result == "success" else "failed" if result in {"failure", "error", "aborted"} else "blocked"
 
 
+def failed_steps(records: list[tuple[str, dict[str, Any]]], root: str) -> list[dict[str, str]]:
+    """Retain the failing Prow stage even when no driver tests were reached."""
+    return [
+        {"name": PurePosixPath(path).parent.name,
+         "url": f"https://prow.ci.openshift.org/view/gs/test-platform-results-public/{path}"}
+        for path, data in records
+        if path.startswith(root + "/artifacts/") and PurePosixPath(path).name == "finished.json"
+        and outcome(data) == "failed"
+    ]
+
+
 def blocked_manifest(records: list[tuple[str, dict[str, Any]]], identity: dict[str, str], reason: str) -> dict[str, Any]:
     """Keep contradictory completed builds visible without trusting their target."""
     root = identity["build_path"]
@@ -55,6 +66,7 @@ def blocked_manifest(records: list[tuple[str, dict[str, Any]]], identity: dict[s
             "status": str(by_path.get(root + "/finished.json", {}).get("result", "unknown")).lower(),
             "source": "manual" if identity["kind"] == "presubmit" else "automatic",
             "planned_modes": ["signed"],
+            "failed_steps": failed_steps(records, root),
         },
         "pairs": [{
             "id": "doca2-signed-invalid-evidence", "mode": "signed", "validation": "signed",
@@ -107,6 +119,7 @@ def normalize(records: list[tuple[str, dict[str, Any]]], identity: dict[str, str
         "source": "manual" if identity["kind"] == "presubmit" else "automatic",
         "provenance": (request or {}).get("provenance", {}),
         "discovery": discovery or {},
+        "failed_steps": failed_steps(records, root),
     }
     manifest = {"schema_version": 1, "run": run, "pairs": []}
     if discovery and discovery["outcome"] != "selected":

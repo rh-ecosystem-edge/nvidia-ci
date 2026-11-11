@@ -303,6 +303,82 @@ class SignedResultsTests(unittest.TestCase):
         self.assertEqual(build["run"]["status"], "failure")
         self.assertIn("No normalized", build["run"]["note"])
 
+    def test_signed_workflows_always_appear_even_before_any_test_artifacts(self):
+        for job in (signed.MANUAL_JOB, signed.AUTOMATIC_JOB):
+            for result in ("SUCCESS", "FAILURE", "ABORTED"):
+                with self.subTest(job=job, result=result):
+                    root, records = artifacts(job)
+                    records = {path: data for path, data in records.items() if "/artifacts/" not in path}
+                    records[root + "/finished.json"]["result"] = result
+                    build = normalize(root, records)
+                    data = render.mode_data(collect.merge_builds({}, [build]), "signed")
+                    self.assertEqual(len(data["builds"]), 1)
+                    self.assertEqual(data["builds"][0]["pairs"], [])
+                    if job == signed.AUTOMATIC_JOB:
+                        run = data["scheduled_stability"][0]["runs"][0]
+                        self.assertEqual(run["status"], "blocked" if result == "SUCCESS" else result.lower())
+
+    def test_signed_workflow_pair_requires_successful_overall_job(self):
+        for job in (signed.MANUAL_JOB, signed.AUTOMATIC_JOB):
+            for result in ("SUCCESS", "FAILURE", "ABORTED"):
+                with self.subTest(job=job, result=result):
+                    root, records = artifacts(job)
+                    records[root + "/finished.json"]["result"] = result
+                    build = normalize(root, records)
+                    data = render.mode_data(collect.merge_builds({}, [build]), "signed")
+                    pair = data["builds"][0]["pairs"][0]
+                    self.assertEqual(pair["status"], "passed" if result == "SUCCESS" else "failed")
+
+    def test_cluster_failure_label_preserves_signed_failure_and_counts(self):
+        for job in (signed.MANUAL_JOB, signed.AUTOMATIC_JOB):
+            with self.subTest(job=job):
+                root, records = artifacts(job)
+                records = {path: data for path, data in records.items()
+                           if not any('/' + stage + '/' in path for stage in signed.STAGES.values())}
+                records[root + "/finished.json"]["result"] = "FAILURE"
+                failure = root + "/artifacts/nno-signed-auto/dpf-hypervisor-deploy-cluster/finished.json"
+                records[failure] = {"result": "FAILURE"}
+                build = normalize(root, records)
+                self.assertEqual(build["run"]["failed_steps"], [{
+                    "name": "dpf-hypervisor-deploy-cluster",
+                    "url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/" + failure,
+                }])
+                data = render.mode_data(collect.merge_builds({}, [build]), "signed")
+                displayed = data["builds"][0]
+                self.assertEqual(displayed["run"]["status"], "failure")
+                pair = displayed["pairs"][0]
+                self.assertEqual(pair["status"], "failed")
+                self.assertEqual(pair["result_label"], "Failed before validation")
+                self.assertEqual(pair["result_note"], "Cluster deployment failed — precompiled validation not reached")
+                self.assertEqual(pair["checks"]["prow_job"], "failed")
+                if job == signed.AUTOMATIC_JOB:
+                    run = data["scheduled_stability"][0]["runs"][0]
+                    self.assertEqual((run["status"], run["passed_pairs"], run["failed_pairs"]), ("failure", 0, 1))
+
+    def test_missing_artifacts_do_not_imply_a_cluster_deployment_failure(self):
+        records = {path: data for path, data in self.records.items()
+                   if not any('/' + stage + '/' in path for stage in signed.STAGES.values())}
+        records[self.root + "/finished.json"]["result"] = "FAILURE"
+        build = normalize(self.root, records)
+        data = render.mode_data(collect.merge_builds({}, [build]), "signed")
+        pair = data["builds"][0]["pairs"][0]
+        self.assertEqual(pair["status"], "failed")
+        self.assertEqual(pair["result_label"], "Failed — validation not recorded")
+        self.assertNotIn("Cluster deployment failed", pair["result_note"])
+
+    def test_deployment_stage_failure_without_observed_nno_is_not_labeled_early(self):
+        records = {path: data for path, data in self.records.items()
+                   if not any('/' + stage + '/' in path for stage in signed.STAGES.values())}
+        records[self.root + "/finished.json"]["result"] = "FAILURE"
+        records[self.root + "/artifacts/nno-signed/" + signed.STAGES["deploy"] + "/finished.json"] = {"result": "FAILURE"}
+        build = normalize(self.root, records)
+        data = render.mode_data(collect.merge_builds({}, [build]), "signed")
+        pair = data["builds"][0]["pairs"][0]
+        self.assertEqual(pair["nno_observed"], "")
+        self.assertEqual(pair["status"], "failed")
+        self.assertEqual(pair["checks"]["deploy_step"], "failed")
+        self.assertNotIn("result_label", pair)
+
     def test_local_and_gcs_artifacts_follow_the_same_contract(self):
         with tempfile.TemporaryDirectory() as directory:
             for relative, record in self.records.items():
@@ -348,6 +424,29 @@ class SignedResultsTests(unittest.TestCase):
 
 
 class SignedDiscoveryTests(unittest.TestCase):
+    def test_old_signed_history_refreshes_failed_stage_evidence_once(self):
+        root, records = artifacts(signed.AUTOMATIC_JOB)
+        records = {path: data for path, data in records.items()
+                   if not any('/' + stage + '/' in path for stage in signed.STAGES.values())}
+        records[root + "/finished.json"]["result"] = "FAILURE"
+        failure = root + "/artifacts/nno-signed-auto/dpf-hypervisor-deploy-cluster/finished.json"
+        records[failure] = {"result": "FAILURE"}
+        old = normalize(root, records)
+        del old["run"]["failed_steps"]
+        with patch.object(collect, "datetime", wraps=datetime) as clock, \
+             patch.object(collect.gcs_utils, "gcsweb_enabled", return_value=False), \
+             patch.object(collect, "list_gcs_report_artifacts", return_value=list(records)), \
+             patch.object(collect, "_fetch_gcs_json", side_effect=records.__getitem__) as fetch:
+            clock.now.return_value = datetime(2026, 10, 25, tzinfo=UTC)
+            builds = collect.load_gcs([], [signed.AUTOMATIC_JOB],
+                                      baseline=collect.merge_builds({}, [old]), lookback_hours=168)
+            self.assertEqual(len(builds), 1)
+            self.assertEqual(builds[0]["run"]["failed_steps"][0]["name"], "dpf-hypervisor-deploy-cluster")
+            fetch.reset_mock()
+            self.assertEqual(collect.load_gcs([], [signed.AUTOMATIC_JOB],
+                                              baseline=collect.merge_builds({}, builds), lookback_hours=168), [])
+            fetch.assert_not_called()
+
     def test_seven_day_refresh_keeps_old_history_and_backfills_missing_builds(self):
         now = datetime(2026, 10, 20, tzinfo=UTC)
         roots, records, baseline = [], {}, []
