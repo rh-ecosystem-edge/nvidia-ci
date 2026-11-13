@@ -7,4 +7,6 @@ const (
 	GPUTestNamespace = "test-gpu-burn"
 	// NetworkLabelSuite represents Netowrk Operator  label that can be used for test cases selection.
 	NetworkLabelSuite = "nno"
+	// SriovLabelSuite represents SRIOV Network Operator label that can be used for test cases selection.
+	SriovLabelSuite = "sriov-network-operator"
 )
