@@ -87,33 +87,15 @@ func (builder *SriovNetworkNodePolicyBuilder) Get() (*sriovnetworkapi.SriovNetwo
 func PullSriovNetworkNodePolicy(apiClient *clients.Settings, name, nsname string) (*SriovNetworkNodePolicyBuilder, error) {
 	glog.V(100).Infof("Pulling existing SriovNetworkNodePolicy name %s in namespace %s", name, nsname)
 
-	builder := &SriovNetworkNodePolicyBuilder{
-		apiClient: apiClient,
-		Definition: &sriovnetworkapi.SriovNetworkNodePolicy{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: nsname,
-			},
-		},
+	builder := NewSriovNetworkNodePolicyBuilder(apiClient, name, nsname)
+
+	nodePolicy, err := builder.Get()
+	if err != nil {
+		return nil, fmt.Errorf("sriovNetworkNodePolicy object %s doesn't exist in namespace %s: %w", name, nsname, err)
 	}
 
-	if name == "" {
-		builder.errorMsg = "SriovNetworkNodePolicy 'name' cannot be empty"
-
-		return nil, errors.New(builder.errorMsg)
-	}
-
-	if nsname == "" {
-		builder.errorMsg = "SriovNetworkNodePolicy 'nsname' cannot be empty"
-
-		return nil, errors.New(builder.errorMsg)
-	}
-
-	if !builder.Exists() {
-		return nil, fmt.Errorf("sriovNetworkNodePolicy object %s doesn't exist in namespace %s", name, nsname)
-	}
-
-	builder.Definition = builder.Object
+	builder.Definition = nodePolicy
+	builder.Object = nodePolicy
 
 	return builder, nil
 }

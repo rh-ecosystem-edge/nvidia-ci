@@ -87,33 +87,15 @@ func (builder *SriovNetworkBuilder) Get() (*sriovnetworkapi.SriovNetwork, error)
 func PullSriovNetwork(apiClient *clients.Settings, name, nsname string) (*SriovNetworkBuilder, error) {
 	glog.V(100).Infof("Pulling existing SriovNetwork name %s in namespace %s", name, nsname)
 
-	builder := &SriovNetworkBuilder{
-		apiClient: apiClient,
-		Definition: &sriovnetworkapi.SriovNetwork{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: nsname,
-			},
-		},
+	builder := NewSriovNetworkBuilder(apiClient, name, nsname)
+
+	sriovNetwork, err := builder.Get()
+	if err != nil {
+		return nil, fmt.Errorf("sriovNetwork object %s doesn't exist in namespace %s: %w", name, nsname, err)
 	}
 
-	if name == "" {
-		builder.errorMsg = "SriovNetwork 'name' cannot be empty"
-
-		return nil, errors.New(builder.errorMsg)
-	}
-
-	if nsname == "" {
-		builder.errorMsg = "SriovNetwork 'nsname' cannot be empty"
-
-		return nil, errors.New(builder.errorMsg)
-	}
-
-	if !builder.Exists() {
-		return nil, fmt.Errorf("sriovNetwork object %s doesn't exist in namespace %s", name, nsname)
-	}
-
-	builder.Definition = builder.Object
+	builder.Definition = sriovNetwork
+	builder.Object = sriovNetwork
 
 	return builder, nil
 }

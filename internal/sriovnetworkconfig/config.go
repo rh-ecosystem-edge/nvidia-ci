@@ -8,7 +8,7 @@ import (
 
 // SriovNetworkConfig contains environment information related to sriovnetwork tests.
 type SriovNetworkConfig struct {
-	CatalogSource       string `envconfig:"SRIOVNETWORK_CATALOGSOURCE"`
+	CatalogSource       string `envconfig:"SRIOVNETWORK_CATALOGSOURCE" default:"redhat-operators"`
 	SubscriptionChannel string `envconfig:"SRIOVNETWORK_SUBSCRIPTION_CHANNEL"`
 	CleanupAfterTest    bool   `envconfig:"SRIOVNETWORK_CLEANUP" default:"true"`
 	NicVendor           string `envconfig:"SRIOVNETWORK_NIC_VENDOR" default:"15b3"`

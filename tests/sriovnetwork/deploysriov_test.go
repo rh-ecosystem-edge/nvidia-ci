@@ -12,15 +12,14 @@ import (
 
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/deploy"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	internalNFD "github.com/rh-ecosystem-edge/nvidia-ci/internal/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/sriovnetworkconfig"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/sriovparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/wait"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
 	nfd "github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nodes"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
@@ -38,7 +37,6 @@ const (
 	sriovDeploymentName         = "sriov-network-operator"
 	sriovPackage                = "sriov-network-operator"
 	sriovOperatorConfigName     = "default"
-	sriovCatalogSourceDefault   = "redhat-operators"
 	sriovOperatorConfigLogLevel = 2
 )
 
@@ -47,10 +45,6 @@ var (
 
 	sriovNetworkConfig *sriovnetworkconfig.SriovNetworkConfig
 	nfdConfig          *internalNFD.NFDConfig
-
-	catalogSource       = UndefinedValue
-	subscriptionChannel = UndefinedValue
-	cleanupAfterTest    = true
 
 	sriovNicPresentLabel = UndefinedValue
 	sriovNicCapableLabel = UndefinedValue
@@ -67,24 +61,6 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 		BeforeAll(func() {
 			Expect(sriovNetworkConfig).ToNot(BeNil(), "failed to load SRIOVNETWORK_* env config")
 			Expect(nfdConfig).ToNot(BeNil(), "failed to load NFD env config")
-
-			if sriovNetworkConfig.CatalogSource == "" {
-				glog.V(sriovparams.LogLevel).Infof("env variable SRIOVNETWORK_CATALOGSOURCE"+
-					" is not set, using default catalogsource '%s'", sriovCatalogSourceDefault)
-				catalogSource = sriovCatalogSourceDefault
-			} else {
-				catalogSource = sriovNetworkConfig.CatalogSource
-			}
-
-			if sriovNetworkConfig.SubscriptionChannel == "" {
-				glog.V(sriovparams.LogLevel).Infof("env variable SRIOVNETWORK_SUBSCRIPTION_CHANNEL" +
-					" is not set, will deploy the package's default channel")
-				subscriptionChannel = UndefinedValue
-			} else {
-				subscriptionChannel = sriovNetworkConfig.SubscriptionChannel
-			}
-
-			cleanupAfterTest = sriovNetworkConfig.CleanupAfterTest
 
 			sriovNicPresentLabel = fmt.Sprintf("feature.node.kubernetes.io/pci-%s.present", sriovNetworkConfig.NicVendor)
 			sriovNicCapableLabel = fmt.Sprintf("feature.node.kubernetes.io/pci-%s.sriov.capable", sriovNetworkConfig.NicVendor)
@@ -112,7 +88,7 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 		})
 
 		AfterAll(func() {
-			if nfdInstance.CleanupAfterInstall && cleanupAfterTest {
+			if nfdInstance.CleanupAfterInstall && sriovNetworkConfig.CleanupAfterTest {
 				err := nfd.Cleanup(inittools.APIClient)
 				Expect(err).ToNot(HaveOccurred(), "Error cleaning up NFD resources: %v", err)
 			}
@@ -129,102 +105,50 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 
 			By("Check if 'sriov-network-operator' packagemanifest exists in the configured catalog")
 			pkgManifestBuilder, err := olm.PullPackageManifestByCatalog(inittools.APIClient, sriovPackage,
-				nfd.CatalogSourceNamespace, catalogSource)
+				nfd.CatalogSourceNamespace, sriovNetworkConfig.CatalogSource)
 			Expect(err).ToNot(HaveOccurred(), "error getting SRIOV Network Operator packagemanifest "+
-				"'%s' from catalog '%s': %v", sriovPackage, catalogSource, err)
+				"'%s' from catalog '%s': %v", sriovPackage, sriovNetworkConfig.CatalogSource, err)
 
-			defaultSubscriptionChannel := pkgManifestBuilder.Object.Status.DefaultChannel
-			glog.V(sriovparams.LogLevel).Infof("SRIOV Network Operator default channel from packagemanifest "+
-				"is '%s'", defaultSubscriptionChannel)
-
-			By("Create the SRIOV Network Operator namespace")
-			nsBuilder := namespace.NewBuilder(inittools.APIClient, sriovNamespace)
-			if !nsBuilder.Exists() {
-				createdNsBuilder, err := nsBuilder.Create()
-				Expect(err).ToNot(HaveOccurred(), "error creating namespace '%s': %v",
-					nsBuilder.Definition.Name, err)
-				glog.V(sriovparams.LogLevel).Infof("Successfully created namespace '%s'",
-					createdNsBuilder.Object.Name)
+			channel := sriovNetworkConfig.SubscriptionChannel
+			if channel == "" {
+				channel = pkgManifestBuilder.Object.Status.DefaultChannel
+				glog.V(sriovparams.LogLevel).Infof("SRIOVNETWORK_SUBSCRIPTION_CHANNEL is not set, using "+
+					"the package's default channel '%s'", channel)
 			}
 
+			By("Deploy the SRIOV Network Operator via OLM")
+			installResult, err := deploy.InstallOperatorFromCatalog(inittools.APIClient, sriovparams.LogLevel,
+				deploy.OLMInstallConfig{
+					Namespace:              sriovNamespace,
+					OperatorGroupName:      sriovOperatorGroupName,
+					SubscriptionName:       sriovSubscriptionName,
+					PackageName:            sriovPackage,
+					CatalogSource:          sriovNetworkConfig.CatalogSource,
+					CatalogSourceNamespace: nfd.CatalogSourceNamespace,
+					Channel:                channel,
+					InstallPlanApproval:    v1alpha1.Approval("Automatic"),
+					DeploymentName:         sriovDeploymentName,
+				})
+
 			defer func() {
-				if cleanupAfterTest {
-					err := nsBuilder.Delete()
-					Expect(err).ToNot(HaveOccurred())
+				if !sriovNetworkConfig.CleanupAfterTest || installResult == nil {
+					return
+				}
+
+				if installResult.SubscriptionBuilder != nil {
+					Expect(installResult.SubscriptionBuilder.Delete()).ToNot(HaveOccurred())
+				}
+
+				if installResult.OperatorGroupBuilder != nil {
+					Expect(installResult.OperatorGroupBuilder.Delete()).ToNot(HaveOccurred())
+				}
+
+				if installResult.NamespaceBuilder != nil {
+					Expect(installResult.NamespaceBuilder.Delete()).ToNot(HaveOccurred())
 				}
 			}()
 
-			By("Create OperatorGroup in the SRIOV Network Operator namespace")
-			ogBuilder := olm.NewOperatorGroupBuilder(inittools.APIClient, sriovOperatorGroupName, sriovNamespace)
-			if !ogBuilder.Exists() {
-				createdOgBuilder, err := ogBuilder.Create()
-				Expect(err).ToNot(HaveOccurred(), "error creating operatorgroup '%s': %v",
-					sriovOperatorGroupName, err)
-				glog.V(sriovparams.LogLevel).Infof("Successfully created operatorgroup '%s'",
-					createdOgBuilder.Definition.Name)
-			}
-
-			defer func() {
-				if cleanupAfterTest {
-					err := ogBuilder.Delete()
-					Expect(err).ToNot(HaveOccurred())
-				}
-			}()
-
-			By("Create Subscription in the SRIOV Network Operator namespace")
-			subBuilder := olm.NewSubscriptionBuilder(inittools.APIClient, sriovSubscriptionName, sriovNamespace,
-				catalogSource, nfd.CatalogSourceNamespace, sriovPackage)
-
-			if subscriptionChannel != UndefinedValue {
-				subBuilder.WithChannel(subscriptionChannel)
-			} else {
-				subBuilder.WithChannel(defaultSubscriptionChannel)
-			}
-			subBuilder.WithInstallPlanApproval(v1alpha1.Approval("Automatic"))
-
-			createdSub, err := subBuilder.Create()
-			Expect(err).ToNot(HaveOccurred(), "error creating subscription '%s': %v",
-				sriovSubscriptionName, err)
-			glog.V(sriovparams.LogLevel).Infof("Successfully created subscription '%s'",
-				createdSub.Object.Name)
-
-			defer func() {
-				if cleanupAfterTest {
-					err := createdSub.Delete()
-					Expect(err).ToNot(HaveOccurred())
-				}
-			}()
-
-			By("Wait for up to 4 minutes for SRIOV Network Operator deployment to be created")
-			deploymentCreated := wait.DeploymentCreated(inittools.APIClient, sriovDeploymentName, sriovNamespace,
-				30*time.Second, 4*time.Minute)
-			Expect(deploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy SRIOV Network Operator")
-
-			By("Check if the SRIOV Network Operator deployment is ready")
-			sriovOperatorDeployment, err := deployment.Pull(inittools.APIClient, sriovDeploymentName, sriovNamespace)
-			Expect(err).ToNot(HaveOccurred(), "error pulling SRIOV Network Operator deployment: %v", err)
-			Expect(sriovOperatorDeployment.IsReady(4*time.Minute)).To(BeTrue(),
-				"SRIOV Network Operator deployment '%s' did not become ready", sriovOperatorDeployment.Definition.Name)
-
-			By("Get the CSV deployed in the SRIOV Network Operator namespace")
-			csvBuilderList, err := olm.ListClusterServiceVersion(inittools.APIClient, sriovNamespace)
-			Expect(err).ToNot(HaveOccurred(), "error listing CSVs in SRIOV Network Operator namespace: %v", err)
-
-			sriovCSVName := ""
-			for _, csvBuilder := range csvBuilderList {
-				if strings.HasPrefix(csvBuilder.Object.Name, sriovPackage) {
-					sriovCSVName = csvBuilder.Object.Name
-
-					break
-				}
-			}
-			Expect(sriovCSVName).ToNot(BeEmpty(), "sriov-network-operator CSV not found in namespace '%s'",
-				sriovNamespace)
-
-			By("Wait for the deployed ClusterServiceVersion to be in Succeeded phase")
-			err = wait.CSVSucceeded(inittools.APIClient, sriovCSVName, sriovNamespace, 60*time.Second, 5*time.Minute)
-			Expect(err).ToNot(HaveOccurred(), "error waiting for ClusterServiceVersion '%s' to succeed: %v",
-				sriovCSVName, err)
+			Expect(err).ToNot(HaveOccurred(), "error installing SRIOV Network Operator via OLM: %v", err)
 
 			By("Create or update SriovOperatorConfig")
 			operatorConfigBuilder := sriovnetwork.NewSriovOperatorConfigBuilder(inittools.APIClient,
@@ -263,7 +187,7 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 				createdOperatorConfig.Definition.Name)
 
 			defer func() {
-				if cleanupAfterTest && !operatorConfigPreexisting {
+				if sriovNetworkConfig.CleanupAfterTest && !operatorConfigPreexisting {
 					_, err := createdOperatorConfig.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -289,7 +213,7 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 				createdNodePolicy.Definition.Name)
 
 			defer func() {
-				if cleanupAfterTest {
+				if sriovNetworkConfig.CleanupAfterTest {
 					_, err := createdNodePolicy.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -332,7 +256,7 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 				createdNetwork.Definition.Name)
 
 			defer func() {
-				if cleanupAfterTest {
+				if sriovNetworkConfig.CleanupAfterTest {
 					_, err := createdNetwork.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}

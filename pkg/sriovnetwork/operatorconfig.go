@@ -87,33 +87,15 @@ func (builder *SriovOperatorConfigBuilder) Get() (*sriovnetworkapi.SriovOperator
 func PullSriovOperatorConfig(apiClient *clients.Settings, name, nsname string) (*SriovOperatorConfigBuilder, error) {
 	glog.V(100).Infof("Pulling existing SriovOperatorConfig name %s in namespace %s", name, nsname)
 
-	builder := &SriovOperatorConfigBuilder{
-		apiClient: apiClient,
-		Definition: &sriovnetworkapi.SriovOperatorConfig{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: nsname,
-			},
-		},
+	builder := NewSriovOperatorConfigBuilder(apiClient, name, nsname)
+
+	operatorConfig, err := builder.Get()
+	if err != nil {
+		return nil, fmt.Errorf("sriovOperatorConfig object %s doesn't exist in namespace %s: %w", name, nsname, err)
 	}
 
-	if name == "" {
-		builder.errorMsg = "SriovOperatorConfig 'name' cannot be empty"
-
-		return nil, errors.New(builder.errorMsg)
-	}
-
-	if nsname == "" {
-		builder.errorMsg = "SriovOperatorConfig 'nsname' cannot be empty"
-
-		return nil, errors.New(builder.errorMsg)
-	}
-
-	if !builder.Exists() {
-		return nil, fmt.Errorf("sriovOperatorConfig object %s doesn't exist in namespace %s", name, nsname)
-	}
-
-	builder.Definition = builder.Object
+	builder.Definition = operatorConfig
+	builder.Object = operatorConfig
 
 	return builder, nil
 }
@@ -185,33 +167,10 @@ func (builder *SriovOperatorConfigBuilder) Create() (*SriovOperatorConfigBuilder
 	return builder, err
 }
 
-// Update renovates the existing SriovOperatorConfig object with the definition in builder.
-func (builder *SriovOperatorConfigBuilder) Update() (*SriovOperatorConfigBuilder, error) {
-	if valid, err := builder.validate(); !valid {
-		return builder, err
-	}
-
-	glog.V(100).Infof("Updating the SriovOperatorConfig object named: %s in namespace %s",
-		builder.Definition.Name, builder.Definition.Namespace)
-
-	err := builder.apiClient.Update(context.TODO(), builder.Definition)
-
-	if err != nil {
-		glog.V(100).Infof(msg.FailToUpdateNotification("sriovOperatorConfig", builder.Definition.Name,
-			builder.Definition.Namespace))
-
-		return builder, err
-	}
-
-	builder.Object = builder.Definition
-
-	return builder, nil
-}
-
 // Patch sends a merge patch computed against original, applying only the fields that
-// builder.Definition changed relative to it. Unlike Update, this does not replace the whole
-// spec, so fields of the real upstream SriovOperatorConfigSpec that this package's trimmed local
-// type does not know about are left untouched on the server.
+// builder.Definition changed relative to it. Unlike a full-object replace, this leaves fields of
+// the real upstream SriovOperatorConfigSpec that this package's trimmed local type does not know
+// about untouched on the server.
 func (builder *SriovOperatorConfigBuilder) Patch(
 	original *sriovnetworkapi.SriovOperatorConfig) (*SriovOperatorConfigBuilder, error) {
 	if valid, err := builder.validate(); !valid {
