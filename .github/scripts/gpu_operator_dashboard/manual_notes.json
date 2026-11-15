@@ -1,0 +1,5 @@
+{
+  "5.0": [
+    "On Red Hat OpenShift 5, the default GPU driver image will not work. A RHEL 10-compatible driver image must be explicitly specified in ClusterPolicy."
+  ]
+}
