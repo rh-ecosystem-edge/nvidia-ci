@@ -21,7 +21,8 @@ class TestOpenShift(unittest.TestCase):
         # Mock API response
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            '4-stable': ['4.10.1', '4.10.2', '4.11.0', '4.12.3']}
+            '4-stable': ['4.10.1', '4.10.2', '4.11.0', '4.12.3'],
+            '5-stable': []}
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 
@@ -51,7 +52,8 @@ class TestOpenShift(unittest.TestCase):
         # Mock API response
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            '4-stable': ['4.10.1', '4.10.2', '4.11.0', '4.12.3', '4.19.0-rc.0', '4.19.0-rc.1']}
+            '4-stable': ['4.10.1', '4.10.2', '4.11.0', '4.12.3', '4.19.0-rc.0', '4.19.0-rc.1'],
+            '5-stable': []}
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 
@@ -76,10 +78,13 @@ class TestOpenShift(unittest.TestCase):
 
         # Mock API response with multiple patch versions for the same minor version
         mock_response = MagicMock()
-        mock_response.json.return_value = {'4-stable': [
-            '4.10.0', '4.10.1', '4.10.2', '4.10.1-rc.3',
-            '4.11.5', '4.11.3', '4.11.8', '4.11.4'
-        ]}
+        mock_response.json.return_value = {
+            '4-stable': [
+                '4.10.0', '4.10.1', '4.10.2', '4.10.1-rc.3',
+                '4.11.5', '4.11.3', '4.11.8', '4.11.4'],
+            '5-stable': [
+                '5.0.0', '5.0.1', '5.0.2', '5.0.1-rc.3',
+                '5.1.5', '5.1.3', '5.1.8', '5.1.4']}
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 
@@ -90,8 +95,57 @@ class TestOpenShift(unittest.TestCase):
         expected = {
             '4.10': '4.10.2',     # Highest patch for 4.10
             '4.11': '4.11.8',     # Highest patch for 4.11
+            '5.0': '5.0.2',       # Highest patch for 5.0
+            '5.1': '5.1.8',       # Highest patch for 5.1
         }
         self.assertEqual(result, expected)
+
+    @patch('gpu_operator_versions.openshift.Settings')
+    @patch('gpu_operator_versions.openshift.requests.get')
+    def test_fetch_ocp_versions_mixed_streams(self, mock_get, mock_settings):
+        """Test that versions from OpenShift 4 and 5 streams are merged."""
+        mock_settings.ignored_versions = "x^"
+        mock_settings.request_timeout_sec = 30
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            '4-stable': ['4.18.9', '4.19.5'],
+            '5-stable': ['5.0.2', '5.0.1', '5.1.0']
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = fetch_ocp_versions(mock_settings)
+
+        self.assertEqual(result, {
+            '4.18': '4.18.9',
+            '4.19': '4.19.5',
+            '5.0': '5.0.2',
+            '5.1': '5.1.0',
+        })
+
+    @patch('gpu_operator_versions.openshift.Settings')
+    @patch('gpu_operator_versions.openshift.requests.get')
+    def test_fetch_ocp_versions_patch_selection_across_streams(self, mock_get, mock_settings):
+        """Test that the highest patch is selected without collapsing majors."""
+        mock_settings.ignored_versions = "x^"
+        mock_settings.request_timeout_sec = 30
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            '4-stable': ['4.19.1', '4.19.0', '4.19.2'],
+            '5-stable': ['5.0.0', '5.0.2', '5.0.1', '5.1.0', '5.1.3', '5.1.2']
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = fetch_ocp_versions(mock_settings)
+
+        self.assertEqual(result, {
+            '4.19': '4.19.2',
+            '5.0': '5.0.2',
+            '5.1': '5.1.3',
+        })
 
     @patch('gpu_operator_versions.openshift.Settings')
     @patch('gpu_operator_versions.openshift.requests.get')
@@ -103,7 +157,7 @@ class TestOpenShift(unittest.TestCase):
 
         # Mock empty API response
         mock_response = MagicMock()
-        mock_response.json.return_value = {'4-stable': []}
+        mock_response.json.return_value = {'4-stable': [], '5-stable': []}
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 
@@ -139,7 +193,7 @@ class TestOpenShift(unittest.TestCase):
         mock_settings.ignored_versions = "x^"
         mock_settings.request_timeout_sec = 30
 
-        # Mock invalid API response (missing 4-stable key)
+        # Mock invalid API response (missing stable stream keys)
         mock_response = MagicMock()
         mock_response.json.return_value = {'some-other-key': []}
         mock_response.raise_for_status = MagicMock()
@@ -160,7 +214,8 @@ class TestOpenShift(unittest.TestCase):
         # Mock API response with invalid semver
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            '4-stable': ['4.10.1', 'not-a-semver', '4.11.0']}
+            '4-stable': ['4.10.1', 'not-a-semver', '4.11.0'],
+            '5-stable': []}
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 
