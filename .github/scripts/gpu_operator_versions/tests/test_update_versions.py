@@ -202,6 +202,18 @@ class TestCreateTestsMatrix(unittest.TestCase):
             diff, ['4.12', '4.13', '4.15'], ['24.4', '25.3'], default_support_matrix)
         self.assertEqual(tests, {('4.15', '24.4', None), ('4.15', '25.3', None)})
 
+    def test_mixed_openshift_4_and_5_selection(self):
+        """GPU changes select every active OpenShift 4 and 5 version."""
+        diff = {'gpu-operator': {'26.7': '26.7.2'}}
+        tests = create_tests_matrix(
+            diff, ['4.20', '4.22', '5.0'], ['26.3', '26.7'], default_support_matrix
+        )
+        self.assertEqual(tests, {
+            ('4.20', '26.7', None),
+            ('4.22', '26.7', None),
+            ('5.0', '26.7', None),
+        })
+
     def test_no_changes(self):
         diff = {}
         tests = create_tests_matrix(
@@ -409,6 +421,36 @@ class TestCreateTestsCommands(unittest.TestCase):
             all('-signed' in cmd for cmd in commands if cmd.startswith('/test')))
         self.assertTrue(
             any('master-signed' in cmd for cmd in commands))
+
+    def test_mixed_openshift_4_and_5_command_generation(self):
+        """Mixed OCP changes generate standard and signed/precompiled commands."""
+        diff = {'ocp': {'4.22': '4.22.23', '5.0': '5.0.2'}}
+        ocp_releases = ['4.20', '4.22', '5.0']
+        gpu_releases = ['26.3', '26.7']
+
+        commands = create_tests_commands(
+            diff, ocp_releases, gpu_releases, default_support_matrix
+        )
+        signed_commands = create_tests_commands(
+            diff,
+            ocp_releases,
+            gpu_releases,
+            default_support_matrix,
+            test_command_suffix='-signed',
+        )
+
+        self.assertEqual(commands, {
+            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-3-x',
+            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-7-x',
+            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-3-x',
+            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-7-x',
+        })
+        self.assertEqual(signed_commands, {
+            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-3-x-signed',
+            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-7-x-signed',
+            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-3-x-signed',
+            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-7-x-signed',
+        })
 
 
 if __name__ == '__main__':
