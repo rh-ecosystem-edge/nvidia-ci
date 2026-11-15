@@ -528,14 +528,17 @@ cluster, via the `make apply-manifests` / `make delete-manifests` targets. This 
 one-off, day-2 cluster configuration (e.g. worker `MachineConfig`s, `ServiceAccount`s) that isn't
 part of a Ginkgo test flow.
 
+Requires Python 3, `oc`, and `envsubst` (included in the CI image).
+
 ### Environment variables
 
 - `KUBECONFIG` - Path to kubeconfig file - _required_ (same variable used everywhere else in this repo)
 - `MANIFEST_DIR` - Directory containing the `*.yaml`/`*.yml` files to apply/delete - Defaults to `manifests/nno` - _optional_
 - `MANIFEST_VARS` - Space-separated list of `$VAR` tokens (`envsubst`'s own filter syntax) restricting variable substitution to only those variables. If unset, every variable present in the environment is eligible for substitution in every manifest - _optional_
-- `WAIT_FOR_WORKER_MCP` - `{true|false}` - When `true` and the action is `apply`, waits for the worker `MachineConfigPool` to finish rolling out after each manifest is applied, before moving on to the next one. `make apply-manifests` defaults this to `true` (since the default `MANIFEST_DIR=manifests/nno` contains `MachineConfig`s that reboot workers); the underlying script itself defaults to `false` - _optional_
+- `WAIT_FOR_WORKER_MCP` - `{true|false}` - Wait for worker `MachineConfigPool` rollouts during apply. Defaults to `true` in Make, `false` in the script - _optional_
+- `BATCH_WORKER_MCP` - `{true|false}` - With MCP waiting enabled, batches new MachineConfigs into one rollout. Defaults to `true` for `make apply-manifests` with `MANIFEST_DIR=manifests/nno`, otherwise `false`. Existing MachineConfigs and post-apply hooks use per-file waits - _optional_
 - `WORKER_MCP_NAME` - Name of the `MachineConfigPool` to wait on when `WAIT_FOR_WORKER_MCP=true` - Defaults to `worker` - _optional_
-- `WORKER_MCP_ROLLOUT_START_TIMEOUT` - How long to wait for the pool to *start* updating before giving up and moving on (tolerant: a manifest that doesn't touch worker `MachineConfig`s, like a `ServiceAccount`, never makes the pool start updating, so this timeout is expected to elapse harmlessly for those files) - Defaults to `2m` - _optional_
+- `WORKER_MCP_ROLLOUT_START_TIMEOUT` - How long to wait for the pool to start updating before checking completion - Defaults to `2m` - _optional_
 - `WORKER_MCP_ROLLOUT_TIMEOUT` - How long to wait for the pool to *finish* updating once it starts (fatal: the whole run aborts if this elapses) - Defaults to `40m` - _optional_
 
 ### Manifest file conventions
@@ -548,7 +551,7 @@ part of a Ginkgo test flow.
 - **Required variables** (`<name>.env-required`): if a sibling file with the same base name and
   a `.env-required` extension exists next to a manifest (e.g. `10-foo.yaml` ->
   `10-foo.env-required`, one variable name per line, blank lines and `#`-comments ignored), the
-  script verifies every listed variable is set and non-empty before rendering that manifest,
+  script checks all required variables before applying any manifest,
   failing fast instead of letting `envsubst` silently substitute an empty string for a variable
   nobody remembered to export.
 - **Post-apply hooks** (`<name>.sh`): if a sibling file with the same base name and a `.sh`
@@ -586,10 +589,8 @@ EOF
 $ make apply-manifests
 ```
 
-The two `MachineConfig` files each trigger a worker `MachineConfigPool` rollout (cordon/drain/
-reboot/uncordon per node); with the default `WAIT_FOR_WORKER_MCP=true`, `make apply-manifests`
-waits for that to finish after each one before moving on. The `rdma` ServiceAccount is applied
-next, then `21-doca1-rdma-privileged-scc.yaml` grants it the `privileged` SCC.
+On a fresh cluster, `make apply-manifests` batches the NNO `MachineConfig`s into one worker rollout.
+Use `BATCH_WORKER_MCP=false` for per-file waits when later manifests depend on an earlier rollout.
 
 To remove everything again:
 

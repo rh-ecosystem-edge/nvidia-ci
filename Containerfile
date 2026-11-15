@@ -47,7 +47,7 @@ COPY --from=operator-sdk /usr/local/bin/operator-sdk /usr/local/bin/operator-sdk
 COPY --from=regctl /regctl /usr/local/bin/regctl
 
 # Install dependencies combined into single layer to reduce image size
-RUN dnf install -y jq gettext skopeo && \
+RUN dnf install -y jq gettext skopeo python3 && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum
 
