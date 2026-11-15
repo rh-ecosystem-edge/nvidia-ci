@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from gpu_operator_dashboard.generate_ci_dashboard import (
     build_bundle_info, build_catalog_table_rows, build_topbar,
-    has_valid_semantic_versions, generate_test_matrix)
+    has_valid_semantic_versions, generate_test_matrix, sort_ocp_minor_versions)
 from gpu_operator_dashboard.fetch_ci_data import (
     OCP_FULL_VERSION, GPU_OPERATOR_VERSION, DRIVER_BRANCH,
     STATUS_ABORTED, STATUS_SUCCESS, STATUS_FAILURE)
@@ -423,6 +423,13 @@ class TestSemanticVersionValidation(TestCase):
         self.assertNotIn("invalid-gpu", html)
 
 
+class TestSortOpenShiftVersions(TestCase):
+    def test_sorts_mixed_openshift_4_and_5_numerically(self):
+        """OpenShift 5.0 sorts ahead of all OpenShift 4 minor versions."""
+        result = sort_ocp_minor_versions(['4.22', '5.0', '4.10', '4.9'])
+        self.assertEqual(result, ['5.0', '4.22', '4.10', '4.9'])
+
+
 class TestGenerateTestMatrix(TestCase):
     """Test cases for the main generate_test_matrix function with separated data structure."""
 
@@ -523,6 +530,40 @@ class TestGenerateTestMatrix(TestCase):
 
         # Verify last updated timestamp is added
         self.assertIn('Last updated:', html_result)
+
+    @patch('gpu_operator_dashboard.generate_ci_dashboard.load_template')
+    def test_generate_test_matrix_renders_mixed_openshift_4_and_5(self, mock_load_template):
+        """Mixed 4.x/5.x sections sort correctly and preserve routing links."""
+        mock_load_template.side_effect = [
+            '<html><body>',
+            '<a id="ocp-{ocp_key}"></a><div>{table_rows}{bundle_info}</div>',
+            '</body></html>'
+        ]
+
+        def version_data(full_version, job_url):
+            return {
+                'bundle_tests': [],
+                'release_tests': [{
+                    OCP_FULL_VERSION: full_version,
+                    GPU_OPERATOR_VERSION: '26.3.3',
+                    'test_status': STATUS_SUCCESS,
+                    'prow_job_url': job_url,
+                    'job_timestamp': '1788519296'
+                }]
+            }
+
+        html_result = generate_test_matrix({
+            '4.22': version_data('4.22.22', 'https://example.com/4-22'),
+            '4.20': version_data('4.20.46', 'https://example.com/4-20'),
+            '5.0': version_data('5.0.2', 'https://example.com/5-0'),
+        })
+
+        self.assertLess(html_result.find('id="ocp-5.0"'), html_result.find('id="ocp-4.22"'))
+        self.assertLess(html_result.find('id="ocp-4.22"'), html_result.find('id="ocp-4.20"'))
+        self.assertIn('href="#ocp-5.0"', html_result)
+        self.assertIn('href="https://example.com/5-0"', html_result)
+        self.assertIn('href="https://example.com/4-22"', html_result)
+        self.assertIn('href="https://example.com/4-20"', html_result)
 
     @patch('gpu_operator_dashboard.generate_ci_dashboard.load_template')
     def test_generate_test_matrix_with_empty_sections(self, mock_load_template):

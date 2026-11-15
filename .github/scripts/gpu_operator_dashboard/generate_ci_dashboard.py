@@ -44,6 +44,15 @@ def build_topbar(sibling_url: str, sibling_label: str) -> str:
     )
 
 
+def sort_ocp_minor_versions(ocp_keys: List[str]) -> List[str]:
+    """Sort major.minor OpenShift versions numerically, newest first."""
+    return sorted(
+        ocp_keys,
+        key=lambda version: tuple(int(part) for part in version.split('.')),
+        reverse=True,
+    )
+
+
 def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], title: str = DEFAULT_TITLE,
                          sibling_url: str = "", sibling_label: str = "") -> str:
     """
@@ -57,7 +66,7 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], title: str = DEFAU
     header_template = header_template.replace("{sibling_link}", build_topbar(sibling_url, sibling_label))
     html_content = header_template
     main_table_template = load_template("main_table.html")
-    sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
+    sorted_ocp_keys = sort_ocp_minor_versions(ocp_data.keys())
     html_content += build_toc(sorted_ocp_keys)
 
     # Check if any renderable result has driver_branch data

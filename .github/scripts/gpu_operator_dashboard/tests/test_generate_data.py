@@ -5,8 +5,9 @@ import unittest
 from unittest import mock, TestCase
 
 from gpu_operator_dashboard.fetch_ci_data import (
-    merge_and_save_results, OCP_FULL_VERSION, GPU_OPERATOR_VERSION,
-    DRIVER_BRANCH, STATUS_SUCCESS, STATUS_FAILURE, STATUS_ABORTED)
+    merge_and_save_results, process_tests_for_pr, OCP_FULL_VERSION,
+    GPU_OPERATOR_VERSION, DRIVER_BRANCH, STATUS_SUCCESS, STATUS_FAILURE,
+    STATUS_ABORTED)
 
 # Testing final logic of generate_ci_dashboard.py which stores the JSON test data
 
@@ -440,6 +441,56 @@ class TestSaveToJson(TestCase):
 
         result_without = next(r for r in results if r[OCP_FULL_VERSION] == "4.22.12")
         self.assertNotIn(DRIVER_BRANCH, result_without)
+
+
+class TestProcessTestsForOpenShiftFive(TestCase):
+    @mock.patch('gpu_operator_dashboard.fetch_ci_data.fetch_gcs_file_content')
+    @mock.patch('gpu_operator_dashboard.fetch_ci_data.fetch_pr_files')
+    def test_groups_openshift_5_build_by_minor_version(self, mock_fetch_pr_files, mock_fetch_content):
+        """A 5.0 job is fetched, grouped, and linked without losing exact versions."""
+        job_name = (
+            'pull-ci-rh-ecosystem-edge-nvidia-ci-main-'
+            '5.0-stable-nvidia-gpu-operator-e2e-26-3-x'
+        )
+        build_path = f'pr-logs/pull/rh-ecosystem-edge_nvidia-ci/123/{job_name}/100'
+        finished_file = {'name': f'{build_path}/finished.json'}
+        artifact_path = (
+            f'{build_path}/artifacts/nvidia-gpu-operator-e2e-26-3-x/'
+            'gpu-operator-e2e/artifacts'
+        )
+        ocp_file = {'name': f'{artifact_path}/ocp.version'}
+        gpu_file = {'name': f'{artifact_path}/operator.version'}
+
+        mock_fetch_pr_files.return_value = (
+            [finished_file], [ocp_file], [gpu_file], [])
+
+        def file_content(path):
+            if path.endswith('finished.json'):
+                return '{"result": "SUCCESS", "timestamp": "1788519296"}'
+            if path.endswith('ocp.version'):
+                return '5.0.2'
+            if path.endswith('operator.version'):
+                return '26.3.3'
+            raise AssertionError(f'Unexpected file requested: {path}')
+
+        mock_fetch_content.side_effect = file_content
+
+        job_history_url = (
+            'https://prow.ci.openshift.org/job-history/'
+            'gs/test-platform-results-public/pr-logs/directory/'
+            f'{job_name}'
+        )
+
+        results_by_ocp = {}
+        process_tests_for_pr('123', results_by_ocp)
+
+        self.assertEqual(list(results_by_ocp), ['5.0'])
+        release_tests = results_by_ocp['5.0']['release_tests']
+        self.assertEqual(len(release_tests), 1)
+        self.assertEqual(release_tests[0][OCP_FULL_VERSION], '5.0.2')
+        self.assertEqual(release_tests[0][GPU_OPERATOR_VERSION], '26.3.3')
+        self.assertIn(job_name, release_tests[0]['prow_job_url'])
+        self.assertIn(job_history_url, results_by_ocp['5.0']['job_history_links'])
 
 
 if __name__ == '__main__':
