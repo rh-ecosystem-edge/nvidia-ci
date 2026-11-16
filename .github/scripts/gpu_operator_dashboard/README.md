@@ -48,6 +48,12 @@ First, make sure `pytest` is installed. Then, run:
 PYTHONPATH=.github/scripts python -m pytest .github/scripts/gpu_operator_dashboard/tests/ -v
 ```
 
+## Manual Notes
+
+Manual notes are stored in `manual_notes.json` next to the dashboard package. Each key is an OpenShift major.minor version, and its value is a list of note strings.
+
+During data collection, manual notes replace any notes carried in the baseline JSON before the HTML dashboard is rendered. This creates a section for a version even when no test results exist yet and keeps `manual_notes.json` as the single source of truth for manually maintained notes.
+
 ## GitHub Actions Integration
 
 - **Automatic**: Processes merged pull requests to update the dashboard with new test results and deploys to GitHub Pages
