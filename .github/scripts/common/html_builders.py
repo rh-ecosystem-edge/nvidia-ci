@@ -3,7 +3,9 @@ Shared HTML building utilities for CI dashboards.
 """
 
 import html
+import re
 from typing import List, Dict, Any
+from urllib.parse import urlparse
 from datetime import datetime, timezone
 
 
@@ -29,6 +31,64 @@ def build_toc(ocp_keys: List[str]) -> str:
     """
 
 
+_MARKDOWN_LINK_PATTERN = re.compile(
+    r"\[(?P<label>[^\]]+)\]\((?P<url>https?://[^)\s]+)\)"
+)
+_BOLD_PATTERN = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
+_ITALIC_PATTERN = re.compile(r"(?<!\*)\*([^*\n]+)\*(?!\*)")
+
+
+def _format_inline_markup(text: str) -> str:
+    """Apply the supported bold and italic markup to escaped text."""
+    text = _BOLD_PATTERN.sub(r"<strong>\1</strong>", text)
+    text = _ITALIC_PATTERN.sub(r"<em>\1</em>", text)
+    return text
+
+
+def render_note(note: str) -> str:
+    """Render a manual note with a safe Markdown-like subset.
+
+    The renderer supports ``[label](https://example.com)`` links, ``**bold**``,
+    and ``*italic*`` text. All text and link attributes are HTML-escaped before
+    the markup is converted to HTML.
+    """
+    rendered_parts = []
+    cursor = 0
+
+    for match in _MARKDOWN_LINK_PATTERN.finditer(note):
+        rendered_parts.append(
+            _format_inline_markup(html.escape(note[cursor:match.start()]))
+        )
+        url = match.group("url")
+        try:
+            parsed_url = urlparse(url)
+            is_http_url = (
+                parsed_url.scheme in {"http", "https"}
+                and bool(parsed_url.netloc)
+            )
+        except ValueError:
+            # urlparse raises ValueError for some malformed hosts, such as an
+            # unmatched IPv6 bracket. Keep the note visible as escaped literal
+            # text instead of dropping it or rendering an unsafe link.
+            is_http_url = False
+
+        if is_http_url:
+            label = _format_inline_markup(html.escape(match.group("label")))
+            rendered_parts.append(
+                f'<a href="{html.escape(url, quote=True)}" '
+                'target="_blank" rel="noopener noreferrer">'
+                f"{label}</a>"
+            )
+        else:
+            rendered_parts.append(
+                _format_inline_markup(html.escape(match.group(0)))
+            )
+        cursor = match.end()
+
+    rendered_parts.append(_format_inline_markup(html.escape(note[cursor:])))
+    return "".join(rendered_parts)
+
+
 def build_notes(notes: List[str]) -> str:
     """
     Build an HTML snippet with manual notes for an OCP version.
@@ -42,9 +102,8 @@ def build_notes(notes: List[str]) -> str:
     if not notes:
         return ""
 
-    # Escape HTML in notes for safety
-    escaped_notes = [html.escape(note) for note in notes]
-    items = "\n".join(f'<li class="note-item">{n}</li>' for n in escaped_notes)
+    rendered_notes = [render_note(note) for note in notes]
+    items = "\n".join(f'<li class="note-item">{n}</li>' for n in rendered_notes)
     return f"""
   <div class="section-label">Notes</div>
   <div class="note-items">
