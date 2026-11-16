@@ -1,4 +1,17 @@
 {
+  "4.12": [
+    "Red Hat OpenShift 4.12 is no longer receiving updates of the NVIDIA GPU operator. The last available version is 25.3.2.",
+    "On Red Hat OpenShift 4.12, starting with the NVIDIA GPU operator v25.3.1, a user must explicitly define a driver image in ClusterPolicy. The default driver image will not work."
+  ],
+  "4.13": [
+    "Red Hat OpenShift 4.13 is no longer receiving updates of the NVIDIA GPU operator. The last available version is 25.3.2."
+  ],
+  "4.16": [
+    "On Red Hat OpenShift 4.16.58, the GPU operator fails to run because of a kernel version mismatch in the driver toolkit (DTK) image. See <a href=\"https://redhat.atlassian.net/browse/OCPBUGS-78529\">OCPBUGS-78529</a> for details."
+  ],
+  "4.18": [
+    "On Red Hat OpenShift 4.18.22 and 4.18.23, the NVIDIA GPU operator is broken. See <a href=\"https://issues.redhat.com/browse/OCPBUGS-60663\">OCPBUGS-60663</a> for details."
+  ],
   "5.0": [
     "On Red Hat OpenShift 5, the default GPU driver image will not work. A RHEL 10-compatible driver image must be explicitly specified in ClusterPolicy."
   ]

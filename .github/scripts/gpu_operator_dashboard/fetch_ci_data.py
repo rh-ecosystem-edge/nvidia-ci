@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Set
 
@@ -689,11 +690,41 @@ def merge_ocp_version_results(
     return merged_version_data
 
 
+def load_manual_notes() -> Dict[str, List[str]]:
+    """Load source-controlled manual notes for OpenShift versions."""
+    manual_notes_path = Path(__file__).parent / "manual_notes.json"
+    with manual_notes_path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def apply_manual_notes(
+    results: Dict[str, Dict[str, Any]],
+    manual_notes: Dict[str, List[str]],
+) -> Dict[str, Dict[str, Any]]:
+    """Replace baseline notes with source-controlled manual notes."""
+    for version_data in results.values():
+        version_data["notes"] = []
+
+    for ocp_version, notes in manual_notes.items():
+        version_data = results.setdefault(
+            ocp_version,
+            {
+                "notes": [],
+                "bundle_tests": [],
+                "release_tests": [],
+                "job_history_links": [],
+            },
+        )
+        version_data["notes"] = notes
+    return results
+
+
 def merge_and_save_results(
     new_results: Dict[str, Dict[str, List[Dict[str, Any]]]],
     output_file: str,
     existing_results: Dict[str, Dict[str, Any]] = None,
-    bundle_result_limit: Optional[int] = None
+    bundle_result_limit: Optional[int] = None,
+    manual_notes: Optional[Dict[str, List[str]]] = None
 ) -> None:
     """Merge and save test results with separated bundle and release test keys.
 
@@ -709,6 +740,9 @@ def merge_and_save_results(
             version_data, existing_version_data, bundle_result_limit
         )
         merged_results[ocp_version] = merged_version_data
+
+    if manual_notes is not None:
+        merged_results = apply_manual_notes(merged_results, manual_notes)
 
     with open(output_file, "w") as f:
         json.dump(merged_results, f, indent=4)
@@ -754,7 +788,12 @@ def main() -> None:
     else:
         process_tests_for_pr(args.pr_number, local_results)
     merge_and_save_results(
-        local_results, args.merged_data_filepath, existing_results=existing_results, bundle_result_limit=args.bundle_result_limit)
+        local_results,
+        args.merged_data_filepath,
+        existing_results=existing_results,
+        bundle_result_limit=args.bundle_result_limit,
+        manual_notes=load_manual_notes(),
+    )
 
 
 if __name__ == "__main__":

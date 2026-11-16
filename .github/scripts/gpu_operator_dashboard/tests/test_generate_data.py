@@ -5,7 +5,8 @@ import unittest
 from unittest import mock, TestCase
 
 from gpu_operator_dashboard.fetch_ci_data import (
-    merge_and_save_results, process_tests_for_pr, OCP_FULL_VERSION,
+    apply_manual_notes, merge_and_save_results, process_tests_for_pr,
+    OCP_FULL_VERSION,
     GPU_OPERATOR_VERSION, DRIVER_BRANCH, STATUS_SUCCESS, STATUS_FAILURE,
     STATUS_ABORTED)
 
@@ -441,6 +442,73 @@ class TestSaveToJson(TestCase):
 
         result_without = next(r for r in results if r[OCP_FULL_VERSION] == "4.22.12")
         self.assertNotIn(DRIVER_BRANCH, result_without)
+
+
+class TestManualNotes(TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.output_dir = self.temp_dir.name
+        self.test_file = "test_data.json"
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_manual_notes_create_missing_sections(self):
+        """Manual notes create an OCP section even when no results exist."""
+        manual_notes = {
+            "5.0": ["Use a RHEL 10-compatible driver image."]
+        }
+        data_file = os.path.join(self.output_dir, self.test_file)
+
+        merge_and_save_results(
+            {}, data_file, existing_results={}, manual_notes=manual_notes
+        )
+
+        with open(data_file, "r", encoding="utf-8") as f:
+            saved_data = json.load(f)
+
+        self.assertEqual(saved_data, {
+            "5.0": {
+                "notes": ["Use a RHEL 10-compatible driver image."],
+                "bundle_tests": [],
+                "release_tests": [],
+                "job_history_links": [],
+            }
+        })
+
+    def test_manual_notes_replace_baseline_notes(self):
+        """Manual notes replace any notes carried in the baseline data."""
+        results = {
+            "5.0": {
+                "notes": ["Baseline-only note"],
+                "bundle_tests": [],
+                "release_tests": [],
+                "job_history_links": [],
+            }
+        }
+
+        results = apply_manual_notes(
+            results,
+            {"5.0": ["Manual note"]},
+        )
+
+        self.assertEqual(results["5.0"]["notes"], ["Manual note"])
+
+    def test_manual_notes_remove_unmanaged_baseline_notes(self):
+        """Baseline notes are not retained when no manual note is defined."""
+        results = {
+            "4.14": {
+                "notes": ["Baseline-only note"],
+                "bundle_tests": [],
+                "release_tests": [],
+                "job_history_links": [],
+            }
+        }
+
+        results = apply_manual_notes(results, {"5.0": ["Manual note"]})
+
+        self.assertEqual(results["4.14"]["notes"], [])
+        self.assertEqual(results["5.0"]["notes"], ["Manual note"])
 
 
 class TestProcessTestsForOpenShiftFive(TestCase):
