@@ -21,11 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.branch || 'main' }}
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.13
       - name: Update OCP Version
@@ -82,7 +82,7 @@ jobs:
           CHECK_CATALOG_AVAILABILITY: "true"
       - name: Create Pull Request
         id: create-pr
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           title: "[Automatic] Update versions, run ID: ${{ github.run_id }}"
           commit-message: Update versions
@@ -127,7 +127,7 @@ jobs:
 
       - name: Create issues for new GPU operator channels
         if: steps.new_gpu_channels.outputs.channels != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           NEW_CHANNELS: ${{ steps.new_gpu_channels.outputs.channels }}
         with:

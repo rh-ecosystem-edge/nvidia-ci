@@ -52,18 +52,18 @@ jobs:
           fi
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.base.ref || github.event.inputs.branch }}
 
       - name: Checkout GitHub Pages
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.GH_PAGES_BRANCH }}
           path: ${{ env.DASHBOARD_OUTPUT_DIR }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
