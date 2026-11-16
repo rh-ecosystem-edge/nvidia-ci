@@ -51,6 +51,7 @@ PYTHONPATH=.github/scripts python -m pytest .github/scripts/gpu_operator_dashboa
 ## Manual Notes
 
 Manual notes are stored in `manual_notes.json` next to the dashboard package. Each key is an OpenShift major.minor version, and its value is a list of note strings.
+Notes support a safe Markdown-like subset for `[label](https://example.com)` links, `**bold**`, and `*italic*` text. Raw HTML is escaped.
 
 During data collection, manual notes replace any notes carried in the baseline JSON before the HTML dashboard is rendered. This creates a section for a version even when no test results exist yet and keeps `manual_notes.json` as the single source of truth for manually maintained notes.
 

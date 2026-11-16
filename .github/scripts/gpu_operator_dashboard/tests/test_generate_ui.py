@@ -2,6 +2,7 @@ from unittest import TestCase
 from unittest.mock import patch
 from datetime import datetime, timezone
 
+from common.html_builders import build_notes, render_note
 from gpu_operator_dashboard.generate_ci_dashboard import (
     build_bundle_info, build_catalog_table_rows, build_topbar,
     has_valid_semantic_versions, generate_test_matrix, sort_ocp_minor_versions)
@@ -421,6 +422,56 @@ class TestSemanticVersionValidation(TestCase):
         # Should not contain the invalid entries
         self.assertNotIn("invalid-ocp", html)
         self.assertNotIn("invalid-gpu", html)
+
+
+class TestManualNoteRendering(TestCase):
+    def test_renders_markdown_link(self):
+        """Markdown links render as clickable, escaped HTML anchors."""
+        note = "See [OCPBUGS-1](https://example.com/issues/1) for details."
+
+        rendered = render_note(note)
+
+        self.assertIn(
+            '<a href="https://example.com/issues/1" '
+            'target="_blank" rel="noopener noreferrer">OCPBUGS-1</a>',
+            rendered,
+        )
+
+    def test_renders_bold_and_italic(self):
+        """Manual notes support simple bold and italic markup."""
+        rendered = render_note("**Important** and *note*")
+
+        self.assertEqual(rendered, "<strong>Important</strong> and <em>note</em>")
+
+    def test_escapes_html_in_note_text(self):
+        """Raw HTML in manual notes remains escaped."""
+        rendered = render_note("<script>alert('x')</script>")
+
+        self.assertNotIn("<script>", rendered)
+        self.assertIn("&lt;script&gt;", rendered)
+
+    def test_build_notes_uses_safe_renderer(self):
+        """build_notes renders manual-note markup without exposing raw HTML."""
+        html_result = build_notes([
+            "See [issue](https://example.com/issue) and **bold** text"
+        ])
+
+        self.assertIn('href="https://example.com/issue"', html_result)
+        self.assertIn("<strong>bold</strong>", html_result)
+        self.assertIn('class="note-item"', html_result)
+
+    def test_malformed_url_renders_safe_literal_note(self):
+        """A malformed URL keeps its note visible as escaped literal text."""
+        note = "Broken [<script>](https://[invalid) end"
+
+        rendered = render_note(note)
+
+        self.assertNotIn("<a ", rendered)
+        self.assertNotIn("<script>", rendered)
+        self.assertIn("Broken", rendered)
+        self.assertIn("&lt;script&gt;", rendered)
+        self.assertIn("https://[invalid", rendered)
+        self.assertIn("end", rendered)
 
 
 class TestSortOpenShiftVersions(TestCase):
