@@ -38,18 +38,18 @@ jobs:
           echo "JOB_LIMIT=${{ github.event.inputs.job_limit || '1' }}" >> "$GITHUB_ENV"
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.branch || 'main' }}
 
       - name: Checkout GitHub Pages
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.GH_PAGES_BRANCH }}
           path: ${{ env.DASHBOARD_OUTPUT_DIR }}
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 

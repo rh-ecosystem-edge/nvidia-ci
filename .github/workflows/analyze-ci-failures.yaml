@@ -40,10 +40,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
           cache: 'pip'
@@ -56,14 +56,14 @@ jobs:
       # Cache Ollama binary (~100MB) and models (~1GB for llama3.2:1b)
       - name: Cache Ollama binary
         id: cache-ollama-bin
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /usr/local/bin/ollama
           key: ollama-bin-v0.13.5
       
       - name: Cache Ollama models
         id: cache-ollama-models
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.ollama
           key: ollama-models-llama3.2-1b-v1
@@ -236,7 +236,7 @@ jobs:
 
       - name: Post PR comment
         if: steps.summarize.outputs.summary != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const summary = process.env.SUMMARY;

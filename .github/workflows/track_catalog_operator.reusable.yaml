@@ -35,7 +35,7 @@ jobs:
     steps:
       - name: Login to Red Hat registry
         id: login
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: registry.redhat.io
           username: ${{ secrets.registry_username }}
@@ -91,7 +91,7 @@ jobs:
           fi
       - name: Create GitHub issue for operator availability
         if: steps.catalog_check.outputs.found == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const ocpVersion = '${{ inputs.ocp_version }}';
@@ -120,7 +120,7 @@ jobs:
             }
       - name: Checkout Code
         if: failure()
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           sparse-checkout: .github/actions/notify-failure
           fetch-depth: 1
