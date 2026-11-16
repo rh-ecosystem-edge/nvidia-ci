@@ -12,23 +12,16 @@ from gpu_operator_versions.version_utils import max_version
 RELEASE_URL_API = 'https://amd64.ocp.releases.ci.openshift.org/api/v1/releasestreams/accepted'
 OPENSHIFT_STREAMS = ('4-stable', '5-stable')
 
-def fetch_ocp_versions(settings: Settings) -> dict[str, str]:
+
+def fetch_ocp_version_stream(request_timeout_sec: int) -> list[str]:
     """
-    Fetches accepted OpenShift versions from the 4-stable and 5-stable release streams.
+    Fetch raw accepted OpenShift versions from the 4-stable and 5-stable streams.
 
-    The function filters out versions based on the regex pattern defined in settings.ignored_versions.
-    For each minor version (e.g., 4.12 and 5.0), only the highest patch version is kept.
-
-    Returns:
-        dict: A dictionary mapping minor versions (e.g., '4.12') to their highest patch version (e.g., '4.12.3').
+    Profile-specific ignored-version filtering is intentionally deferred so that
+    every profile can consume the same discovered snapshot.
     """
-
-    logger.info(f'Ignored versions: {settings.ignored_versions}')
-    ignored_regex: Pattern[AnyStr] = re.compile(settings.ignored_versions)
-    versions: dict = {}
-
     logger.info('Listing accepted OpenShift versions')
-    response = requests.get(RELEASE_URL_API, timeout=settings.request_timeout_sec)
+    response = requests.get(RELEASE_URL_API, timeout=request_timeout_sec)
     response.raise_for_status()
     release_streams = response.json()
     accepted_versions = [
@@ -37,6 +30,19 @@ def fetch_ocp_versions(settings: Settings) -> dict[str, str]:
         for version in release_streams[stream]
     ]
     logger.debug(f'Received OpenShift versions: {accepted_versions}')
+    return accepted_versions
+
+
+def filter_ocp_versions(accepted_versions: list[str], ignored_versions_regex: str) -> dict[str, str]:
+    """
+    Filter and reduce accepted OpenShift versions for one profile.
+
+    Versions matching the configured regex are excluded. For each minor version
+    (for example, 4.12 and 5.0), only the highest patch version is retained.
+    """
+    logger.info(f'Ignored versions: {ignored_versions_regex}')
+    ignored_regex: Pattern[AnyStr] = re.compile(ignored_versions_regex)
+    versions: dict[str, str] = {}
 
     for ver in accepted_versions:
         if ignored_regex.fullmatch(ver):
@@ -53,3 +59,11 @@ def fetch_ocp_versions(settings: Settings) -> dict[str, str]:
         versions[minor] = max_version(patches, ver) if patches else ver
 
     return versions
+
+
+def fetch_ocp_versions(settings: Settings) -> dict[str, str]:
+    """Fetch and filter accepted OpenShift versions for one settings object."""
+    return filter_ocp_versions(
+        fetch_ocp_version_stream(settings.request_timeout_sec),
+        settings.ignored_versions,
+    )

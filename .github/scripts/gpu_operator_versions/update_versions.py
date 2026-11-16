@@ -1,8 +1,16 @@
+import argparse
 import json
-from common.utils import logger
+from datetime import datetime, timezone
+from pathlib import Path
 
-from gpu_operator_versions.settings import Settings
-from gpu_operator_versions.openshift import fetch_ocp_versions
+from common.utils import logger
+from gpu_operator_versions.profiles import (
+    Profile,
+    ProfileManifest,
+    load_profiles,
+    resolve_profiles,
+)
+from gpu_operator_versions.openshift import fetch_ocp_version_stream, filter_ocp_versions
 from gpu_operator_versions.version_utils import get_latest_versions, get_earliest_versions
 from gpu_operator_versions.nvidia_gpu_operator import get_operator_versions, get_sha
 from gpu_operator_versions.catalog_checker import (
@@ -11,7 +19,6 @@ from gpu_operator_versions.catalog_checker import (
 )
 
 # Constants
-test_command_template = "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}{suffix}"
 
 # Version type constants
 VERSION_MASTER = "master"
@@ -32,7 +39,9 @@ CONFIG_UNLISTED_VERSIONS = "unlisted_versions"
 
 
 def save_tests_commands(tests_commands: set, file_path: str):
-    with open(file_path, "w+") as f:
+    output = Path(file_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w", encoding="utf-8") as f:
         for command in sorted(tests_commands):
             f.write(command + "\n")
 
@@ -198,14 +207,14 @@ def create_tests_matrix(diffs: dict, ocp_releases: list, gpu_releases: list,
 
 
 def create_tests_commands(diffs: dict, ocp_releases: list, gpu_releases: list,
-                         support_matrix: dict, gpu_catalog_entries: list[dict] | None = None,
-                         test_command_suffix: str = "") -> set[str]:
+                         support_matrix: dict, test_command_template: str,
+                         gpu_catalog_entries: list[dict] | None = None) -> set[str]:
     """
     Create test commands from diffs.
 
     Args:
         gpu_catalog_entries: Optional NVIDIA GPU operator catalog entries for availability checking
-        test_command_suffix: Suffix appended to test command job names (e.g., "-signed")
+        test_command_template: Complete profile-specific /test command template
 
     Returns:
         Set of test command strings and comment strings (e.g., warnings)
@@ -221,7 +230,7 @@ def create_tests_commands(diffs: dict, ocp_releases: list, gpu_releases: list,
         # Generate test command
         gpu_version_suffix = version2suffix(gpu_version)
         tests_commands.add(test_command_template.format(
-            ocp_version=ocp_version, gpu_version=gpu_version_suffix, suffix=test_command_suffix))
+            ocp_version=ocp_version, gpu_version=gpu_version_suffix))
 
     return tests_commands
 
@@ -313,7 +322,7 @@ def filter_new_gpu_versions_by_catalog(
         if not available_in_any:
             logger.warning(
                 f'GPU operator {gpu_full_version} not available in any active OCP catalog - '
-                f'excluding from versions.json (will retry next run)'
+                f'excluding from the profile version file (will retry next run)'
             )
         else:
             filtered_diffs[gpu_version] = gpu_full_version
@@ -333,67 +342,145 @@ def apply_diffs(old_versions: dict, diffs: dict) -> dict:
     return updated
 
 
-def main():
-    settings = Settings()
-    sha = get_sha(settings)
-    gpu_versions = get_operator_versions(settings)
-    ocp_versions = fetch_ocp_versions(settings)
 
-    if settings.signed_gpu_min_channel:
-        min_parts = tuple(int(x) for x in settings.signed_gpu_min_channel.split('.'))
-        gpu_versions = {
-            k: v for k, v in gpu_versions.items()
-            if tuple(int(x) for x in k.split('.')) >= min_parts
-        }
+def _version_tuple(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split('.'))
 
-    new_versions = {
-        VERSION_GPU_MAIN_LATEST: sha,
-        VERSION_GPU_OPERATOR: gpu_versions,
-        VERSION_OCP: ocp_versions
+
+def filter_gpu_versions(gpu_versions: dict[str, str], minimum_gpu_channel: str) -> dict[str, str]:
+    """Filter GPU Operator channels by an optional minimum channel."""
+    if not minimum_gpu_channel:
+        return dict(gpu_versions)
+
+    minimum = _version_tuple(minimum_gpu_channel)
+    return {
+        channel: version
+        for channel, version in gpu_versions.items()
+        if _version_tuple(channel) >= minimum
     }
 
-    with open(settings.version_file_path, "r+") as json_f:
-        old_versions = json.load(json_f)
 
-        # Calculate diffs with catalog filtering
-        diffs, gpu_catalog_entries = calculate_diffs(
-            old_versions,
-            new_versions,
-            ocp_versions=ocp_versions,
-            support_matrix=settings.support_matrix,
-            check_catalog=settings.check_catalog_availability
-        )
+def discover_versions(request_timeout_sec: int) -> dict:
+    """Discover the raw upstream version state exactly once."""
+    return {
+        VERSION_GPU_MAIN_LATEST: get_sha(request_timeout_sec),
+        VERSION_GPU_OPERATOR: get_operator_versions(request_timeout_sec),
+        VERSION_OCP: fetch_ocp_version_stream(request_timeout_sec),
+    }
 
-        # Apply filtered diffs to get final versions
-        final_versions = apply_diffs(old_versions, diffs)
 
-        json_f.seek(0)
-        json.dump(final_versions, json_f, indent=4)
-        json_f.truncate()
+def process_profile(snapshot: dict, profile: Profile) -> set[str]:
+    """Apply one profile to the shared upstream snapshot."""
+    ocp_versions = filter_ocp_versions(
+        snapshot[VERSION_OCP],
+        profile.ignored_versions_regex,
+    )
+    gpu_versions = filter_gpu_versions(
+        snapshot[VERSION_GPU_OPERATOR],
+        profile.minimum_gpu_channel,
+    )
+    new_versions = {
+        VERSION_GPU_MAIN_LATEST: snapshot[VERSION_GPU_MAIN_LATEST],
+        VERSION_GPU_OPERATOR: gpu_versions,
+        VERSION_OCP: ocp_versions,
+    }
 
-    # Use the already-filtered diffs for test generation
+    version_file = Path(profile.version_file_path)
+    old_versions = json.loads(version_file.read_text(encoding='utf-8'))
+
+    # Calculate diffs with profile-specific catalog filtering.
+    diffs, gpu_catalog_entries = calculate_diffs(
+        old_versions,
+        new_versions,
+        ocp_versions=ocp_versions,
+        support_matrix=profile.support_matrix,
+        check_catalog=profile.check_catalog_availability,
+    )
+    # Apply the filtered diffs to obtain the final profile version matrix.
+    final_versions = apply_diffs(old_versions, diffs)
+
+    version_file.write_text(
+        json.dumps(final_versions, indent=4),
+        encoding='utf-8',
+    )
+
     ocp_releases = list(ocp_versions.keys())
-    # Use final_versions (after catalog filtering) instead of raw gpu_versions
-    # to ensure tests are only generated for versions actually tracked in versions.json
-    gpu_releases = get_latest_versions(list(final_versions[VERSION_GPU_OPERATOR].keys()), 2)
-
-    # Filter GPU channels to only those >= signed_gpu_min_channel when running in signed mode
-    if settings.signed_gpu_min_channel:
-        min_parts = tuple(int(x) for x in settings.signed_gpu_min_channel.split('.'))
+    # Use final_versions rather than the raw snapshot so commands are generated
+    # only for channels actually tracked in this profile's version file.
+    gpu_releases = get_latest_versions(
+        list(final_versions[VERSION_GPU_OPERATOR].keys()),
+        2,
+    )
+    # Apply the profile's optional minimum GPU channel filter.
+    if profile.minimum_gpu_channel:
         gpu_releases = [
-            g for g in gpu_releases
-            if tuple(int(x) for x in g.split('.')) >= min_parts
+            channel
+            for channel in gpu_releases
+            if _version_tuple(channel) >= _version_tuple(profile.minimum_gpu_channel)
         ]
 
-    tests_commands = create_tests_commands(
+    commands = create_tests_commands(
         diffs,
         ocp_releases,
         gpu_releases,
-        settings.support_matrix,
+        profile.support_matrix,
         gpu_catalog_entries,
-        test_command_suffix=settings.test_command_suffix
+        test_command_template=profile.test_command_template,
     )
-    save_tests_commands(tests_commands, settings.tests_to_trigger_file_path)
+    save_tests_commands(commands, profile.tests_to_trigger_file_path)
+    return commands
+
+
+def _write_lines(path: str | Path, lines: list[str]) -> None:
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(''.join(f'{line}\n' for line in lines), encoding='utf-8')
+
+
+def run(manifest: ProfileManifest, selection: str, now: datetime | None = None) -> list[str]:
+    """Discover upstream versions once and dispatch them to active profiles."""
+    current_time = now or datetime.now(timezone.utc)
+    active_profiles = resolve_profiles(manifest.profiles, selection, current_time)
+    active_names = [profile.name for profile in active_profiles]
+    logger.info(f'Active profiles: {", ".join(active_names) if active_names else "none"}')
+
+    if not active_profiles:
+        _write_lines(manifest.combined_output_file, [])
+        _write_lines(manifest.active_profiles_file, [])
+        return active_names
+
+    snapshot = discover_versions(manifest.request_timeout_sec)
+    commands: set[str] = set()
+
+    for profile in active_profiles:
+        logger.info(f'Processing profile: {profile.name}')
+        commands.update(process_profile(snapshot, profile))
+
+    _write_lines(manifest.combined_output_file, sorted(commands))
+    _write_lines(manifest.active_profiles_file, active_names)
+    return active_names
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Update configured GPU Operator version profiles')
+    parser.add_argument(
+        '--profiles',
+        default='auto',
+        help='auto, all, or a comma-separated profile list (default: auto)',
+    )
+    parser.add_argument(
+        '--manifest',
+        default=str(Path(__file__).with_name('profiles.json')),
+        help='Path to the profile manifest',
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    manifest = load_profiles(args.manifest)
+    run(manifest, args.profiles)
+
 
 if __name__ == '__main__':
     main()

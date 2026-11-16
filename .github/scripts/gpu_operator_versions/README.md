@@ -5,13 +5,14 @@ This workflow automates the process of checking for new versions of OpenShift an
 ## Overview
 
 The version update automation:
-- Fetches the latest OpenShift release versions from the official API
-- Retrieves NVIDIA GPU Operator versions from container registries
+- Fetches the latest OpenShift release versions from the official API once per run
+- Retrieves NVIDIA GPU Operator versions from container registries once per run
+- Dispatches the shared upstream snapshot to configured profiles
 - Validates GPU operator availability in OpenShift catalogs before triggering tests
-- Updates the version matrix in `versions.json`
+- Updates the regular version matrix in `versions.json`
 - Updates the signed/precompiled version matrix in `signed_versions.json`
-- Generates test commands based on the support matrix in `settings.json` and `signed_settings.json`
-- Creates pull requests with version updates
+- Generates test commands from each profile’s support matrix
+- Creates one pull request containing all active profile updates
 
 ## Catalog Availability Checking
 
@@ -26,11 +27,11 @@ New GPU operator images may not immediately appear in all OpenShift operator cat
 
 ### Configuration
 
-Environment variable `CHECK_CATALOG_AVAILABILITY`:
-- `false` (default): Disable catalog checking - all new versions are tracked immediately
+Catalog checking is configured per profile in `profiles.json`:
+- `false`: Disable catalog checking - all new versions are tracked immediately
 - `true`: Enable catalog checking - only versions available in OCP catalogs are tracked
 
-**Note:** The automated CI workflow (`.github/workflows/update-versions.yaml`) sets this to `true` to ensure only catalog-available versions trigger tests.
+**Note:** Both production profiles set this to `true` to ensure only catalog-available versions trigger tests.
 
 ### Manual Check
 
@@ -76,20 +77,53 @@ The workflow requires a `settings.json` file that defines which OpenShift versio
 
 To move a version to maintenance mode, add it to `openshift_support` with status `"maintenance"` and specify which GPU operator versions to pin.
 
-## Signed/Precompiled Driver Testing
+## Profiles and Signed/Precompiled Driver Testing
 
-The workflow also generates test commands for precompiled/signed driver tests. These run alongside regular tests in the same PR but are scoped to a subset of OCP and GPU operator versions.
+Version updates are organized as profiles in `profiles.json`. The workflow discovers upstream versions once and passes the same snapshot to every active profile.
 
-### How it works
+### Profiles
 
-The same `update_versions.py` script runs twice: once for regular tests (using `versions.json` + `settings.json`) and once for signed tests (using `signed_versions.json` + `signed_settings.json`). The signed run uses two additional settings:
+- **regular**: uses `versions.json`, `settings.json`, and the regular Prow command template
+- **signed**: uses `signed_versions.json`, `signed_settings.json`, and the signed Prow command template
 
-- `TEST_COMMAND_SUFFIX` env var: appended to job names (e.g., `-signed` produces `/test 4.22-stable-nvidia-gpu-operator-e2e-26-3-x-signed`)
-- `signed_gpu_min_channel` in `signed_settings.json`: minimum GPU operator channel for signed tests (e.g., `"26.3"`). Channels below this threshold are excluded from both version tracking and test generation.
+For example, the profile command templates are:
 
-The `signed_settings.json` also uses a stricter `ignored_versions_regex` to limit OCP versions to 4.20+ (only versions with signed CI jobs in the release repo).
+```json
+"test_command_template": "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}"
+```
 
-Signed/precompiled test commands are only commented on PRs Monday through Thursday. On Fridays and Sundays (the workflow does not run on Saturdays), only regular tests are triggered. Version tracking still runs on all scheduled days so no updates are missed.
+and:
+
+```json
+"test_command_template": "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}-signed"
+```
+
+The loader validates that each template contains exactly the supported `{ocp_version}` and `{gpu_version}` placeholders.
+
+The signed profile also sets:
+- `minimum_gpu_channel` in `signed_settings.json`: minimum GPU operator channel for signed tests (for example, `"26.3"`)
+- A stricter `ignored_versions_regex` to limit OCP versions to 4.20+ (only versions with signed CI jobs in the release repo)
+
+### Schedules
+
+The workflow uses the union of all profile schedules and resolves the active profiles from each profile’s five-field cron expression:
+
+- regular: `0 0 * * 0-5` (Sunday through Friday)
+- signed: `0 0 * * 2-4` (Tuesday through Thursday)
+
+On Sunday, Monday, and Friday, only the regular profile runs. On Tuesday through Thursday, both profiles run from one upstream discovery pass. The workflow does not run on Saturday.
+
+When the signed profile is inactive in `auto` mode, `signed_versions.json` is not updated and signed test commands are not generated. The unchanged signed tracking file remains the pending state for the next scheduled signed run.
+
+### Manual profile selection
+
+The GitHub workflow accepts a `profiles` input:
+
+- `auto`: use each profile’s cron schedule
+- `all`: run every profile
+- `regular`: run only the regular profile
+- `signed`: run only the signed profile
+- A comma-separated list, such as `regular,signed`
 
 ## Data Sources
 
@@ -110,22 +144,32 @@ pip install -r .github/scripts/gpu_operator_versions/requirements.txt
 
 ### Manual Execution
 
-Run the version update process:
+Run all profiles selected by the current UTC weekday:
 
 ```console
 PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions
 ```
 
+Run a specific profile selection:
+
+```console
+PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions --profiles signed
+```
+
+Use a custom profile manifest:
+
+```console
+PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions \
+  --profiles all \
+  --manifest path/to/profiles.json
+```
+
 ### Environment Variables
 
-The workflow supports several environment variables:
-- `VERSION_FILE_PATH` - Path to versions.json file (Required)
-- `TEST_TO_TRIGGER_FILE_PATH` - Path to generated test commands file (Required)
-- `SETTINGS_FILE_PATH` - Path to settings.json (Optional, defaults to same directory)
-- `TEST_COMMAND_SUFFIX` - Suffix appended to test command job names, e.g., `-signed` (Optional, defaults to empty)
-- `CHECK_CATALOG_AVAILABILITY` - Enable catalog availability checking (Optional, defaults to `false`)
-- `GH_AUTH_TOKEN` - GitHub authentication token (Optional)
-- `REQUEST_TIMEOUT_SECONDS` - Request timeout in seconds (Optional, defaults to 30)
+The profile manifest defines each profile’s version file, settings file, output file, complete `/test` command template, schedule, and catalog-check setting. The remaining environment variables are:
+- `REQUEST_TIMEOUT_SECONDS` - Request timeout in seconds (Optional, defaults to the manifest value or `30`)
+- `OCP_IGNORED_VERSIONS_REGEX` - Fallback OpenShift ignore regex when a settings file omits one
+- `CHECK_CATALOG_AVAILABILITY` - Fallback catalog-check setting when a profile omits one
 
 ### Running Tests
 

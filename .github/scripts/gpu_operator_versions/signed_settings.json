@@ -6,5 +6,5 @@
     }
   },
   "ignored_versions_regex": "^4.[0-9]$|^4.1[0-9]$",
-  "signed_gpu_min_channel": "26.3"
+  "minimum_gpu_channel": "26.3"
 }

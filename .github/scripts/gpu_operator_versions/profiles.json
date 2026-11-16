@@ -1,0 +1,23 @@
+{
+  "request_timeout_sec": 30,
+  "combined_output_file": ".github/scripts/generated-files/tests_to_trigger.txt",
+  "active_profiles_file": ".github/scripts/generated-files/active_profiles.txt",
+  "profiles": {
+    "regular": {
+      "schedule": "0 0 * * 0-5",
+      "version_file_path": ".github/scripts/gpu_operator_versions/versions.json",
+      "settings_file_path": ".github/scripts/gpu_operator_versions/settings.json",
+      "tests_to_trigger_file_path": ".github/scripts/generated-files/regular_tests_to_trigger.txt",
+      "test_command_template": "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}",
+      "check_catalog_availability": true
+    },
+    "signed": {
+      "schedule": "0 0 * * 2-4",
+      "version_file_path": ".github/scripts/gpu_operator_versions/signed_versions.json",
+      "settings_file_path": ".github/scripts/gpu_operator_versions/signed_settings.json",
+      "tests_to_trigger_file_path": ".github/scripts/generated-files/signed_tests_to_trigger.txt",
+      "test_command_template": "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}-signed",
+      "check_catalog_availability": true
+    }
+  }
+}

@@ -30,6 +30,13 @@ default_support_matrix = {
     }
 }
 
+regular_command_template = (
+    "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}"
+)
+signed_command_template = (
+    "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}-signed"
+)
+
 
 class TestCalculateDiffs(unittest.TestCase):
 
@@ -395,28 +402,29 @@ class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
 
 class TestCreateTestsCommands(unittest.TestCase):
 
-    def test_default_no_suffix(self):
-        """Commands without suffix should match existing behavior."""
-        diff = {'ocp': {'4.20': '4.20.36'}}
-        commands = create_tests_commands(
-            diff, ['4.20'], ['26.3'], default_support_matrix)
-        self.assertIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x', commands)
-
-    def test_signed_suffix(self):
-        """Commands with suffix should append it to job names."""
+    def test_regular_command_template(self):
+        """The regular profile template should generate the standard Prow command."""
         diff = {'ocp': {'4.20': '4.20.36'}}
         commands = create_tests_commands(
             diff, ['4.20'], ['26.3'], default_support_matrix,
-            test_command_suffix='-signed')
+            test_command_template=regular_command_template)
+        self.assertIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x', commands)
+
+    def test_signed_command_template(self):
+        """The signed profile template should append -signed to the Prow job name."""
+        diff = {'ocp': {'4.20': '4.20.36'}}
+        commands = create_tests_commands(
+            diff, ['4.20'], ['26.3'], default_support_matrix,
+            test_command_template=signed_command_template)
         self.assertIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x-signed', commands)
         self.assertNotIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x', commands)
 
-    def test_signed_suffix_master(self):
-        """Master bundle changes with suffix should produce master-signed commands."""
+    def test_signed_command_template_master(self):
+        """Master bundle changes should use the signed master Prow job name."""
         diff = {'gpu-main-latest': 'B'}
         commands = create_tests_commands(
             diff, ['4.21', '4.22'], ['26.3'], default_support_matrix,
-            test_command_suffix='-signed')
+            test_command_template=signed_command_template)
         self.assertTrue(
             all('-signed' in cmd for cmd in commands if cmd.startswith('/test')))
         self.assertTrue(
@@ -429,14 +437,15 @@ class TestCreateTestsCommands(unittest.TestCase):
         gpu_releases = ['26.3', '26.7']
 
         commands = create_tests_commands(
-            diff, ocp_releases, gpu_releases, default_support_matrix
+            diff, ocp_releases, gpu_releases, default_support_matrix,
+            test_command_template=regular_command_template
         )
         signed_commands = create_tests_commands(
             diff,
             ocp_releases,
             gpu_releases,
             default_support_matrix,
-            test_command_suffix='-signed',
+            test_command_template=signed_command_template,
         )
 
         self.assertEqual(commands, {
