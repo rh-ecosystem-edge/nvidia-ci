@@ -3715,7 +3715,7 @@
     },
     "4.18": {
         "notes": [
-            "On Red Hat OpenShift 4.18.22 and 4.18.23, the NVIDIA GPU operator is broken. See <a href=\"https://issues.redhat.com/browse/OCPBUGS-60663\">OCPBUGS-60663</a> for details."
+            "On Red Hat OpenShift 4.18.22 and 4.18.23, the NVIDIA GPU operator is broken. See [OCPBUGS-60663](https://issues.redhat.com/browse/OCPBUGS-60663) for details."
         ],
         "bundle_tests": [
             {
@@ -4670,7 +4670,7 @@
     },
     "4.16": {
         "notes": [
-            "On Red Hat OpenShift 4.16.58, the GPU operator fails to run because of a kernel version mismatch in the driver toolkit (DTK) image. See <a href=\"https://redhat.atlassian.net/browse/OCPBUGS-78529\">OCPBUGS-78529</a> for details."
+            "On Red Hat OpenShift 4.16.58, the GPU operator fails to run because of a kernel version mismatch in the driver toolkit (DTK) image. See [OCPBUGS-78529](https://redhat.atlassian.net/browse/OCPBUGS-78529) for details."
         ],
         "bundle_tests": [
             {

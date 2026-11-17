@@ -44,9 +44,36 @@
 
 <div class="toc">
     <div class="ocp-version-header">OpenShift Versions</div>
-    <a href="#ocp-4.22">4.22</a>, <a href="#ocp-4.21">4.21</a>, <a href="#ocp-4.20">4.20</a>
+    <a href="#ocp-5.0">5.0</a>, <a href="#ocp-4.22">4.22</a>, <a href="#ocp-4.21">4.21</a>, <a href="#ocp-4.20">4.20</a>, <a href="#ocp-4.18">4.18</a>, <a href="#ocp-4.16">4.16</a>, <a href="#ocp-4.13">4.13</a>, <a href="#ocp-4.12">4.12</a>
 </div>
-      <a id="ocp-4.22"></a>
+      <a id="ocp-5.0"></a>
+  <div class="ocp-version-container">
+    <div class="ocp-version-header">
+      OpenShift 5.0
+    </div>
+    
+  <div class="section-label">Notes</div>
+  <div class="note-items">
+    <ul>
+      <li class="note-item">On Red Hat OpenShift 5, the default GPU driver image will not work. A RHEL 10-compatible driver image must be explicitly specified in ClusterPolicy.</li>
+    </ul>
+  </div>
+    
+    <div class="section-label">From operator catalog</div>
+    <table id="table-5.0-regular">
+      <thead>
+        <tr>
+          <th>OpenShift</th>
+          <th>NVIDIA GPU Operator</th>
+          <th>Driver branch</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+      </tbody>
+    </table>
+    
+  </div>  <a id="ocp-4.22"></a>
   <div class="ocp-version-container">
     <div class="ocp-version-header">
       OpenShift 4.22
@@ -1186,8 +1213,117 @@
          </span>
     </div>
         </div>
+  </div>  <a id="ocp-4.18"></a>
+  <div class="ocp-version-container">
+    <div class="ocp-version-header">
+      OpenShift 4.18
+    </div>
+    
+  <div class="section-label">Notes</div>
+  <div class="note-items">
+    <ul>
+      <li class="note-item">On Red Hat OpenShift 4.18.22 and 4.18.23, the NVIDIA GPU operator is broken. See <a href="https://issues.redhat.com/browse/OCPBUGS-60663" target="_blank" rel="noopener noreferrer">OCPBUGS-60663</a> for details.</li>
+    </ul>
+  </div>
+    
+    <div class="section-label">From operator catalog</div>
+    <table id="table-4.18-regular">
+      <thead>
+        <tr>
+          <th>OpenShift</th>
+          <th>NVIDIA GPU Operator</th>
+          <th>Driver branch</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+      </tbody>
+    </table>
+    
+  </div>  <a id="ocp-4.16"></a>
+  <div class="ocp-version-container">
+    <div class="ocp-version-header">
+      OpenShift 4.16
+    </div>
+    
+  <div class="section-label">Notes</div>
+  <div class="note-items">
+    <ul>
+      <li class="note-item">On Red Hat OpenShift 4.16.58, the GPU operator fails to run because of a kernel version mismatch in the driver toolkit (DTK) image. See <a href="https://redhat.atlassian.net/browse/OCPBUGS-78529" target="_blank" rel="noopener noreferrer">OCPBUGS-78529</a> for details.</li>
+    </ul>
+  </div>
+    
+    <div class="section-label">From operator catalog</div>
+    <table id="table-4.16-regular">
+      <thead>
+        <tr>
+          <th>OpenShift</th>
+          <th>NVIDIA GPU Operator</th>
+          <th>Driver branch</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+      </tbody>
+    </table>
+    
+  </div>  <a id="ocp-4.13"></a>
+  <div class="ocp-version-container">
+    <div class="ocp-version-header">
+      OpenShift 4.13
+    </div>
+    
+  <div class="section-label">Notes</div>
+  <div class="note-items">
+    <ul>
+      <li class="note-item">Red Hat OpenShift 4.13 is no longer receiving updates of the NVIDIA GPU operator. The last available version is 25.3.2.</li>
+    </ul>
+  </div>
+    
+    <div class="section-label">From operator catalog</div>
+    <table id="table-4.13-regular">
+      <thead>
+        <tr>
+          <th>OpenShift</th>
+          <th>NVIDIA GPU Operator</th>
+          <th>Driver branch</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+      </tbody>
+    </table>
+    
+  </div>  <a id="ocp-4.12"></a>
+  <div class="ocp-version-container">
+    <div class="ocp-version-header">
+      OpenShift 4.12
+    </div>
+    
+  <div class="section-label">Notes</div>
+  <div class="note-items">
+    <ul>
+      <li class="note-item">Red Hat OpenShift 4.12 is no longer receiving updates of the NVIDIA GPU operator. The last available version is 25.3.2.</li>
+<li class="note-item">On Red Hat OpenShift 4.12, starting with the NVIDIA GPU operator v25.3.1, a user must explicitly define a driver image in ClusterPolicy. The default driver image will not work.</li>
+    </ul>
+  </div>
+    
+    <div class="section-label">From operator catalog</div>
+    <table id="table-4.12-regular">
+      <thead>
+        <tr>
+          <th>OpenShift</th>
+          <th>NVIDIA GPU Operator</th>
+          <th>Driver branch</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+      </tbody>
+    </table>
+    
   </div>  <div class="last-updated">
-    Last updated: 2026-11-16 07:32:14 UTC
+    Last updated: 2026-11-17 07:24:44 UTC
   </div>
 </body>
 </html>

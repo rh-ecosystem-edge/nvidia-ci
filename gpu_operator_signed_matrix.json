@@ -1292,5 +1292,46 @@
             "https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.21-stable-nvidia-gpu-operator-e2e-26-7-x-signed",
             "https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.21-stable-nvidia-gpu-operator-e2e-master-signed"
         ]
+    },
+    "4.12": {
+        "notes": [
+            "Red Hat OpenShift 4.12 is no longer receiving updates of the NVIDIA GPU operator. The last available version is 25.3.2.",
+            "On Red Hat OpenShift 4.12, starting with the NVIDIA GPU operator v25.3.1, a user must explicitly define a driver image in ClusterPolicy. The default driver image will not work."
+        ],
+        "bundle_tests": [],
+        "release_tests": [],
+        "job_history_links": []
+    },
+    "4.13": {
+        "notes": [
+            "Red Hat OpenShift 4.13 is no longer receiving updates of the NVIDIA GPU operator. The last available version is 25.3.2."
+        ],
+        "bundle_tests": [],
+        "release_tests": [],
+        "job_history_links": []
+    },
+    "4.16": {
+        "notes": [
+            "On Red Hat OpenShift 4.16.58, the GPU operator fails to run because of a kernel version mismatch in the driver toolkit (DTK) image. See [OCPBUGS-78529](https://redhat.atlassian.net/browse/OCPBUGS-78529) for details."
+        ],
+        "bundle_tests": [],
+        "release_tests": [],
+        "job_history_links": []
+    },
+    "4.18": {
+        "notes": [
+            "On Red Hat OpenShift 4.18.22 and 4.18.23, the NVIDIA GPU operator is broken. See [OCPBUGS-60663](https://issues.redhat.com/browse/OCPBUGS-60663) for details."
+        ],
+        "bundle_tests": [],
+        "release_tests": [],
+        "job_history_links": []
+    },
+    "5.0": {
+        "notes": [
+            "On Red Hat OpenShift 5, the default GPU driver image will not work. A RHEL 10-compatible driver image must be explicitly specified in ClusterPolicy."
+        ],
+        "bundle_tests": [],
+        "release_tests": [],
+        "job_history_links": []
     }
 }
