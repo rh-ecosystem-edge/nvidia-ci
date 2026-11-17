@@ -2,6 +2,7 @@ package manifests
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -34,7 +35,7 @@ spec:
       files:
       - path: /etc/test.rules
         contents:
-          source: data:text/plain;base64,$RULES_BASE64
+          source: data:text/plain;base64,dGVzdA==
 `,
 		"00-first.env-required": "RULES_BASE64\n",
 		"10-second.yml":         "apiVersion: machineconfiguration.openshift.io/v1\nkind: MachineConfig\nmetadata:\n  name: second\n",
@@ -83,7 +84,7 @@ func TestFreshBatchIncludesAdditionalManifests(t *testing.T) {
 				g.Expect(string(event.input)).To(And(ContainSubstring("/etc/test.rules"),
 					ContainSubstring("data:text/plain;base64,dGVzdA==")))
 			}
-		case "wait":
+		case commandWait:
 			if strings.Contains(event.args[2], ".spec.configuration.source") {
 				lastSource = index
 			}
@@ -104,12 +105,22 @@ func TestFreshBatchIncludesAdditionalManifests(t *testing.T) {
 }
 
 func TestBatchFailuresPreservePauseOwnership(t *testing.T) {
-	for _, mode := range []string{
-		"apply-fail", "create-race", "pause-error", "render-timeout", "stale", "cancel", "cancel-apply",
-		"already-paused", "foreign-owner", "version-conflict", "resume-error",
+	for _, test := range []struct{ mode, message string }{
+		{"apply-fail", "oc create --save-config"},
+		{"create-race", "oc create --save-config"},
+		{"pause-error", "oc patch mcp/worker"},
+		{"render-timeout", ".spec.configuration.source"},
+		{"stale", "has not converged"},
+		{"cancel", "context canceled"},
+		{"cancel-apply", "context canceled"},
+		{"already-paused", "is already paused"},
+		{"foreign-owner", "oc patch mcp/worker"},
+		{"version-conflict", "testing value /metadata/resourceVersion failed"},
+		{"resume-error", "could not resume mcp/worker"},
 	} {
-		t.Run(mode, func(t *testing.T) {
+		t.Run(test.mode, func(t *testing.T) {
 			g := NewWithT(t)
+			mode := test.mode
 			r, cluster := testRunner(t, mode)
 			cluster.pool.Spec.Paused = mode == "already-paused"
 			ctx, cancel := context.WithCancel(t.Context())
@@ -117,7 +128,7 @@ func TestBatchFailuresPreservePauseOwnership(t *testing.T) {
 			if strings.HasPrefix(mode, "cancel") {
 				cluster.cancel = cancel
 			}
-			g.Expect(r.run(ctx)).To(HaveOccurred())
+			g.Expect(r.run(ctx)).To(MatchError(ContainSubstring(test.message)))
 			g.Expect(cluster.pool.Spec.Paused).To(Equal(slices.Contains(
 				[]string{"already-paused", "foreign-owner", "resume-error"}, mode)))
 		})
@@ -170,11 +181,12 @@ func TestRenderingUsesExplicitValuesAndFilter(t *testing.T) {
 		{"$ONE ${MISSING}", "literal-$TWO ${TWO}  ${UNCHANGED:-default}"},
 		{"--help", "$ONE ${TWO} $MISSING ${UNCHANGED:-default}"},
 	} {
-		data, err := renderManifest(t.Context(), path, map[string]string{"ONE": "literal-$TWO", "TWO": "two"}, test.filter)
+		r := runner{options: Options{Variables: map[string]string{"ONE": "literal-$TWO", "TWO": "two"}, VariableFilter: test.filter}, command: executeCommand}
+		data, err := r.renderManifest(t.Context(), path)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(string(data)).To(Equal(test.expected))
 	}
-	data, err := renderManifest(t.Context(), path, nil, "")
+	data, err := (runner{command: executeCommand}).renderManifest(t.Context(), path)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(string(data)).To(Equal("   ${UNCHANGED:-default}"))
 }
@@ -182,7 +194,25 @@ func TestRenderingUsesExplicitValuesAndFilter(t *testing.T) {
 func TestMissingEnvsubstFailsBeforeClusterOperations(t *testing.T) {
 	g := NewWithT(t)
 	r, cluster := testRunner(t, "")
+	r.command = func(ctx context.Context, input []byte, environment []string, stdout io.Writer, name string, args ...string) ([]byte, error) {
+		if name == "envsubst" {
+			return executeCommand(ctx, input, environment, stdout, name, args...)
+		}
+
+		return cluster.command(ctx, input, environment, stdout, name, args...)
+	}
 	t.Setenv("PATH", t.TempDir())
 	g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("envsubst")))
+	g.Expect(cluster.events).To(BeEmpty())
+}
+
+func TestRenderFailurePreventsClusterChanges(t *testing.T) {
+	g := NewWithT(t)
+	r, cluster := testRunner(t, "")
+	cluster.renderErr = errSimulated
+	err := r.run(t.Context())
+	g.Expect(err).To(MatchError(ContainSubstring("render ")))
+	g.Expect(err).To(MatchError(ContainSubstring("00-first.yaml")))
+	g.Expect(err).To(MatchError(ContainSubstring(errSimulated.Error())))
 	g.Expect(cluster.events).To(BeEmpty())
 }

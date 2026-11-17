@@ -537,7 +537,7 @@ Rollout settings are command-line flags; the shell wrapper maps the variables be
 - `MANIFEST_DIR` - Directory containing the `*.yaml`/`*.yml` files to apply/delete - Defaults to `manifests/nno` - _optional_
 - `MANIFEST_VARS` - Space-separated list of `$VAR` or `${VAR}` tokens restricting variable substitution to only those variables. If unset, every variable present in the environment is eligible for substitution in every manifest - _optional_
 - `WAIT_FOR_WORKER_MCP` - `{true|false}` - Wait for worker `MachineConfigPool` rollouts during apply. Defaults to `true` in Make, `false` in the script - _optional_
-- `BATCH_WORKER_MCP` - `{true|false}` - With MCP waiting enabled, batches new MachineConfigs into one rollout. Defaults to `true` for `make apply-manifests` with `MANIFEST_DIR=manifests/nno`, otherwise `false`. Existing MachineConfigs and post-apply hooks use per-file waits - _optional_
+- `BATCH_WORKER_MCP` - `{true|false}` - With MCP waiting enabled, batches new MachineConfigs into one rollout. Defaults to `true` for `make apply-manifests` with `MANIFEST_DIR=manifests/nno`, otherwise `false` - _optional_
 - `WORKER_MCP_NAME` - Name of the `MachineConfigPool` to wait on when `WAIT_FOR_WORKER_MCP=true` - Defaults to `worker` - _optional_
 - `WORKER_MCP_ROLLOUT_START_TIMEOUT` - How long to wait for the pool to start updating before checking completion - Defaults to `2m` - _optional_
 - `WORKER_MCP_ROLLOUT_TIMEOUT` - How long to wait for the pool to *finish* updating once it starts (fatal: the whole run aborts if this elapses) - Defaults to `40m` - _optional_
@@ -590,7 +590,9 @@ $ make apply-manifests
 ```
 
 On a fresh cluster, `make apply-manifests` batches the NNO `MachineConfig`s into one worker rollout.
-Use `BATCH_WORKER_MCP=false` for per-file waits when later manifests depend on an earlier rollout.
+Batching allows new MachineConfigs plus ConfigMaps, ServiceAccounts and RoleBindings. Existing
+MachineConfigs, hooks or other kinds switch the entire run to per-file waits. Use
+`BATCH_WORKER_MCP=false` when later manifests depend on an earlier rollout.
 
 To remove everything again:
 

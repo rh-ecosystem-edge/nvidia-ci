@@ -1,9 +1,15 @@
 package manifests
 
 import (
+	"bufio"
+	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -19,6 +25,97 @@ func TestDeleteUsesReverseOrderWithoutPoolChanges(t *testing.T) {
 		g.Expect(event.args[0]).To(Equal(actionDelete))
 	}
 	g.Expect(cluster.changed).To(Equal([]string{"settings", "second", "first"}))
+}
+
+func TestHooksUseSelectedKubeconfig(t *testing.T) {
+	for _, ambient := range []string{"/other/cluster", ""} {
+		t.Run("ambient="+ambient, func(t *testing.T) {
+			g := NewWithT(t)
+			t.Setenv("KUBECONFIG", ambient)
+			if ambient == "" {
+				g.Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
+			}
+			r, cluster := testRunner(t, "")
+			r.options.WaitForMCP = false
+			result := filepath.Join(t.TempDir(), "hook-result")
+			t.Setenv("HOOK_RESULT", result)
+			writeFile(t, filepath.Join(r.options.Directory, "00-first.sh"),
+				`printf '%s' "$KUBECONFIG" > "$HOOK_RESULT"`)
+			r.command = func(ctx context.Context, input []byte, environment []string, stdout io.Writer, name string, args ...string) ([]byte, error) {
+				if name == "bash" {
+					g.Expect(stdout).To(Equal(os.Stdout))
+
+					return executeCommand(ctx, input, environment, stdout, name, args...)
+				}
+
+				return cluster.command(ctx, input, environment, stdout, name, args...)
+			}
+			g.Expect(r.run(t.Context())).To(Succeed())
+			data, err := os.ReadFile(result)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(string(data)).To(Equal(r.options.Kubeconfig))
+		})
+	}
+}
+
+func TestStreamingCommandCancellationDoesNotWaitForBackgroundChild(t *testing.T) {
+	g := NewWithT(t)
+	read, write, err := os.Pipe()
+	g.Expect(err).NotTo(HaveOccurred())
+	t.Cleanup(func() { _ = read.Close() })
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := executeCommand(ctx, nil, nil, write, "bash", "-c", `sleep 30 & printf '%s\n' "$!"; wait`)
+		_ = write.Close()
+		done <- err
+	}()
+	line, err := bufio.NewReader(read).ReadString('\n')
+	g.Expect(err).NotTo(HaveOccurred())
+	pid, err := strconv.Atoi(strings.TrimSpace(line))
+	g.Expect(err).NotTo(HaveOccurred())
+	child, err := os.FindProcess(pid)
+	g.Expect(err).NotTo(HaveOccurred())
+	t.Cleanup(func() { _ = child.Kill() })
+	cancel()
+	select {
+	case err := <-done:
+		g.Expect(err).To(MatchError(ContainSubstring(context.Canceled.Error())))
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled hook is still waiting for its background child")
+	}
+}
+
+func TestUnsupportedKindsUseSequentialWaits(t *testing.T) {
+	for _, test := range []struct{ name, resource string }{
+		{"kubelet", `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"KubeletConfig","metadata":{"name":"kubelet"}}`},
+		{"runtime", `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"ContainerRuntimeConfig","metadata":{"name":"runtime"}}`},
+		{"custom", `{"apiVersion":"example.com/v1","kind":"MachineConfig","metadata":{"name":"custom"}}`},
+		{"mixed-list", `{"apiVersion":"v1","kind":"List","items":[
+{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"MachineConfig","metadata":{"name":"first"}},
+{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"KubeletConfig","metadata":{"name":"kubelet"}}]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			g := NewWithT(t)
+			r, cluster := testRunner(t, "")
+			r.options.Directory = t.TempDir()
+			writeFile(t, filepath.Join(r.options.Directory, "config.yaml"), test.resource)
+			g.Expect(r.run(t.Context())).To(Succeed())
+			applies, waits := 0, 0
+			for _, event := range cluster.events {
+				g.Expect(event.args[0]).NotTo(BeElementOf(commandPatch, commandCreate))
+				switch event.args[0] {
+				case actionApply:
+					applies++
+				case commandWait:
+					waits++
+				}
+			}
+			g.Expect(applies).To(Equal(1))
+			g.Expect(waits).To(Equal(2))
+		})
+	}
 }
 
 func TestHooksRunBeforeRenderingTheNextFile(t *testing.T) {

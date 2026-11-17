@@ -69,7 +69,7 @@ func (r runner) getSettledPool(ctx context.Context) (*poolState, error) {
 
 func (r runner) waitForPool(ctx context.Context, condition string, timeout time.Duration) error {
 	fmt.Printf("Waiting for mcp/%s: %s (timeout: %s)\n", r.options.PoolName, condition, timeout)
-	_, err := r.oc(ctx, nil, "wait", "mcp/"+r.options.PoolName, "--for="+condition, "--timeout="+timeout.String())
+	_, err := r.oc(ctx, nil, commandWait, "mcp/"+r.options.PoolName, "--for="+condition, "--timeout="+timeout.String())
 
 	return err
 }

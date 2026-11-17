@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 
@@ -25,14 +26,15 @@ type operation struct {
 }
 
 type fakeCluster struct {
-	mode    string
-	pool    poolState
-	created []string
-	waited  []string
-	changed []string
-	events  []operation
-	cancel  context.CancelFunc
-	hook    func() error
+	mode      string
+	pool      poolState
+	created   []string
+	waited    []string
+	changed   []string
+	events    []operation
+	cancel    context.CancelFunc
+	hook      func() error
+	renderErr error
 }
 
 func (f *fakeCluster) patch(data string) error {
@@ -82,9 +84,12 @@ func (f *fakeCluster) patch(data string) error {
 	return nil
 }
 
-func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, name string, args ...string) ([]byte, error) {
+func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ io.Writer, name string, args ...string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if name == "envsubst" {
+		return input, f.renderErr
 	}
 	f.events = append(f.events, operation{args: slices.Clone(args), input: slices.Clone(input), paused: f.pool.Spec.Paused})
 	if name == "bash" && f.hook != nil {
@@ -125,7 +130,7 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, nam
 
 			return nil, ctx.Err()
 		}
-	case "wait":
+	case commandWait:
 		condition := args[2]
 		if _, remainder, ok := strings.Cut(condition, `@.name=="`); ok {
 			name, _, _ := strings.Cut(remainder, `"`)

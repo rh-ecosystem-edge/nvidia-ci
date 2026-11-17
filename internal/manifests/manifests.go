@@ -24,6 +24,7 @@ const (
 	actionDelete      = "delete"
 	commandCreate     = "create"
 	commandPatch      = "patch"
+	commandWait       = "wait"
 )
 
 // Options supplies rollout settings and template values without environment lookups.
@@ -35,7 +36,7 @@ type Options struct {
 	StartTimeout, RolloutTimeout            time.Duration
 }
 
-type commandRunner func(context.Context, []byte, []string, string, ...string) ([]byte, error)
+type commandRunner func(context.Context, []byte, []string, io.Writer, string, ...string) ([]byte, error)
 
 type runner struct {
 	options Options
@@ -52,21 +53,31 @@ func Run(ctx context.Context, options Options) error {
 	return (runner{options: options, command: executeCommand}).run(ctx)
 }
 
-func executeCommand(ctx context.Context, input []byte, environment []string, name string, args ...string) ([]byte, error) {
+func executeCommand(ctx context.Context, input []byte, environment []string, stdout io.Writer, name string, args ...string) ([]byte, error) {
 	command := exec.CommandContext(ctx, name, args...)
 	command.Env = environment
 	command.Stdin = bytes.NewReader(input)
 	command.Stderr = os.Stderr
-	output, err := command.Output()
-	if err != nil {
-		return output, fmt.Errorf("%s failed: %w", name, errors.Join(ctx.Err(), err))
+	var output bytes.Buffer
+	if stdout == nil {
+		stdout = &output
+	}
+	command.Stdout = stdout
+	command.WaitDelay = time.Second
+	if err := command.Run(); err != nil {
+		return output.Bytes(), fmt.Errorf("%s failed: %w", name, errors.Join(ctx.Err(), err))
 	}
 
-	return output, nil
+	return output.Bytes(), nil
 }
 
 func (r runner) oc(ctx context.Context, input []byte, args ...string) ([]byte, error) {
-	return r.command(ctx, input, nil, "oc", append(args, "--kubeconfig="+r.options.Kubeconfig)...)
+	output, err := r.command(ctx, input, nil, nil, "oc", append(args, "--kubeconfig="+r.options.Kubeconfig)...)
+	if err != nil {
+		return output, fmt.Errorf("oc %s: %w", strings.Join(args, " "), err)
+	}
+
+	return output, nil
 }
 
 func (r runner) run(ctx context.Context) error {
@@ -152,21 +163,26 @@ func checkRequiredVariables(files []string, variables map[string]string) error {
 	return nil
 }
 
-func renderManifest(ctx context.Context, path string, variables map[string]string, filter string) ([]byte, error) {
+func (r runner) renderManifest(ctx context.Context, path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	environment := make([]string, 0, len(variables))
-	for name, value := range variables {
+	environment := make([]string, 0, len(r.options.Variables))
+	for name, value := range r.options.Variables {
 		environment = append(environment, name+"="+value)
 	}
 	args := []string{"--"}
-	if filter != "" {
-		args = append(args, filter)
+	if r.options.VariableFilter != "" {
+		args = append(args, r.options.VariableFilter)
 	}
 
-	return executeCommand(ctx, data, environment, "envsubst", args...)
+	output, err := r.command(ctx, data, environment, nil, "envsubst", args...)
+	if err != nil {
+		return output, fmt.Errorf("render %s: %w", path, err)
+	}
+
+	return output, nil
 }
 
 func decodeResources(data []byte) ([]unstructured.Unstructured, error) {
@@ -199,6 +215,15 @@ func isMachineConfig(resource unstructured.Unstructured) bool {
 	return resource.GetAPIVersion() == "machineconfiguration.openshift.io/v1" && resource.GetKind() == machineConfigKind
 }
 
+func isBatchCompanion(resource unstructured.Unstructured) bool {
+	switch resource.GetAPIVersion() + "/" + resource.GetKind() {
+	case "v1/ServiceAccount", "v1/ConfigMap", "rbac.authorization.k8s.io/v1/RoleBinding":
+		return true
+	default:
+		return false
+	}
+}
+
 func (r runner) prepareBatch(ctx context.Context, files []string) (*batch, error) {
 	if !r.options.WaitForMCP || !r.options.BatchMCP {
 		return nil, nil
@@ -213,7 +238,7 @@ func (r runner) prepareBatch(ctx context.Context, files []string) (*batch, error
 	prepared := &batch{}
 	names := make(map[string]bool)
 	for _, path := range files {
-		data, err := renderManifest(ctx, path, r.options.Variables, r.options.VariableFilter)
+		data, err := r.renderManifest(ctx, path)
 		if err != nil {
 			return nil, err
 		}
@@ -224,6 +249,11 @@ func (r runner) prepareBatch(ctx context.Context, files []string) (*batch, error
 		prepared.resources = append(prepared.resources, items...)
 		for _, resource := range items {
 			if !isMachineConfig(resource) {
+				if !isBatchCompanion(resource) {
+					fmt.Printf("Resource kind %s is not eligible for batching; using per-file rollout waits.\n", resource.GroupVersionKind())
+
+					return nil, nil
+				}
 				continue
 			}
 			name := resource.GetName()
@@ -276,7 +306,7 @@ func (r runner) changeFiles(ctx context.Context, files []string) error {
 		args = append(args, "--ignore-not-found=true")
 	}
 	for _, path := range files {
-		data, err := renderManifest(ctx, path, r.options.Variables, r.options.VariableFilter)
+		data, err := r.renderManifest(ctx, path)
 		if err != nil {
 			return err
 		}
@@ -293,10 +323,10 @@ func (r runner) changeFiles(ctx context.Context, files []string) error {
 		}
 		hook := sibling(path, ".sh")
 		if _, err := os.Stat(hook); err == nil {
-			output, err := r.command(ctx, nil, nil, "bash", hook)
-			fmt.Print(string(output))
+			environment := append(os.Environ(), "KUBECONFIG="+r.options.Kubeconfig)
+			_, err := r.command(ctx, nil, environment, os.Stdout, "bash", hook)
 			if err != nil {
-				return err
+				return fmt.Errorf("hook %s: %w", hook, err)
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
