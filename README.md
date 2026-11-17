@@ -528,13 +528,14 @@ cluster, via the `make apply-manifests` / `make delete-manifests` targets. This 
 one-off, day-2 cluster configuration (e.g. worker `MachineConfig`s, `ServiceAccount`s) that isn't
 part of a Ginkgo test flow.
 
-Requires Python 3, `oc`, and `envsubst` (included in the CI image).
+Requires `oc` and GNU `envsubst`. The CI image includes both and the Go executable; local runs build it with Go.
+Rollout settings are command-line flags; the shell wrapper maps the variables below to flags.
 
 ### Environment variables
 
 - `KUBECONFIG` - Path to kubeconfig file - _required_ (same variable used everywhere else in this repo)
 - `MANIFEST_DIR` - Directory containing the `*.yaml`/`*.yml` files to apply/delete - Defaults to `manifests/nno` - _optional_
-- `MANIFEST_VARS` - Space-separated list of `$VAR` tokens (`envsubst`'s own filter syntax) restricting variable substitution to only those variables. If unset, every variable present in the environment is eligible for substitution in every manifest - _optional_
+- `MANIFEST_VARS` - Space-separated list of `$VAR` or `${VAR}` tokens restricting variable substitution to only those variables. If unset, every variable present in the environment is eligible for substitution in every manifest - _optional_
 - `WAIT_FOR_WORKER_MCP` - `{true|false}` - Wait for worker `MachineConfigPool` rollouts during apply. Defaults to `true` in Make, `false` in the script - _optional_
 - `BATCH_WORKER_MCP` - `{true|false}` - With MCP waiting enabled, batches new MachineConfigs into one rollout. Defaults to `true` for `make apply-manifests` with `MANIFEST_DIR=manifests/nno`, otherwise `false`. Existing MachineConfigs and post-apply hooks use per-file waits - _optional_
 - `WORKER_MCP_NAME` - Name of the `MachineConfigPool` to wait on when `WAIT_FOR_WORKER_MCP=true` - Defaults to `worker` - _optional_
@@ -546,8 +547,7 @@ Requires Python 3, `oc`, and `envsubst` (included in the CI image).
 - **Ordering**: files are applied in lexical filename order (reverse order on delete), so prefix
   files with numbers (`00-`, `10-`, `20-`, ...) to control ordering when one manifest depends on
   another (e.g. a namespace before objects created in it).
-- **Templating**: manifests may contain `${VAR}` / `$VAR` placeholders, substituted from the
-  current environment via `envsubst` before being applied.
+- **Templating**: GNU `envsubst` replaces `${VAR}` / `$VAR` using the template values supplied to the Go helper. The command supplies the current environment.
 - **Required variables** (`<name>.env-required`): if a sibling file with the same base name and
   a `.env-required` extension exists next to a manifest (e.g. `10-foo.yaml` ->
   `10-foo.env-required`, one variable name per line, blank lines and `#`-comments ignored), the

@@ -7,3 +7,4 @@ scripts/gpu-operator-must-gather.sh
 scripts/nfd-must-gather.sh
 .DS_Store
 .vscode/
+.bin/

@@ -27,8 +27,11 @@ COPY --chown=1001:0 vendor/ ./vendor/
 COPY --chown=1001:0 go.mod go.sum ./
 COPY --chown=1001:0 Makefile ./
 COPY --chown=1001:0 scripts/install-ginkgo.sh ./scripts/install-ginkgo.sh
+COPY --chown=1001:0 cmd/apply-manifests/ ./cmd/apply-manifests/
+COPY --chown=1001:0 internal/manifests/ ./internal/manifests/
 
-RUN make install-ginkgo
+RUN make install-ginkgo && \
+    go build -o /opt/app-root/apply-manifests ./cmd/apply-manifests
 
 FROM registry.access.redhat.com/ubi9/go-toolset:${GO_TOOLSET_VERSION}
 
@@ -45,9 +48,10 @@ USER root
 COPY --from=oc-cli /usr/bin/oc /usr/bin/oc
 COPY --from=operator-sdk /usr/local/bin/operator-sdk /usr/local/bin/operator-sdk
 COPY --from=regctl /regctl /usr/local/bin/regctl
+COPY --from=ginkgo-builder /opt/app-root/apply-manifests /usr/local/bin/apply-manifests
 
 # Install dependencies combined into single layer to reduce image size
-RUN dnf install -y jq gettext skopeo python3 && \
+RUN dnf install -y jq gettext skopeo && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum
 
