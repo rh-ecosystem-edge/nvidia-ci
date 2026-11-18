@@ -7322,6 +7322,68 @@
       "source_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2122729010612932608/artifacts/nno-signed-auto/dpf-hypervisor-deploy-cluster/finished.json"
     },
     {
+      "build_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2122970818622263296",
+      "pairs": [],
+      "run": {
+        "build_id": "2122970818622263296",
+        "discovery": {
+          "build_id": "2122970818622263296",
+          "finished_at": "2026-11-18T08:37:10.154861+00:00",
+          "job_name": "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto",
+          "outcome": "no_work",
+          "reason": "no_eligible_image",
+          "schema_version": 1,
+          "selected": null,
+          "started_at": "2026-11-18T08:37:00.553192+00:00"
+        },
+        "environment": "",
+        "gpu_operator_version": "",
+        "job_name": "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto",
+        "kind": "periodic",
+        "ocp_version": "",
+        "planned_modes": [
+          "signed"
+        ],
+        "provenance": {},
+        "prow_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2122970818622263296",
+        "source": "automatic",
+        "started_at": "2026-11-18T08:31:05Z",
+        "status": "success"
+      },
+      "source_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2122970818622263296/artifacts/nno-signed-auto/dpf-hypervisor-deploy-cluster/finished.json"
+    },
+    {
+      "build_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2123091428123873280",
+      "pairs": [],
+      "run": {
+        "build_id": "2123091428123873280",
+        "discovery": {
+          "build_id": "2123091428123873280",
+          "finished_at": "2026-11-18T16:44:50.450451+00:00",
+          "job_name": "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto",
+          "outcome": "no_work",
+          "reason": "no_eligible_image",
+          "schema_version": 1,
+          "selected": null,
+          "started_at": "2026-11-18T16:44:37.387855+00:00"
+        },
+        "environment": "",
+        "gpu_operator_version": "",
+        "job_name": "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto",
+        "kind": "periodic",
+        "ocp_version": "",
+        "planned_modes": [
+          "signed"
+        ],
+        "provenance": {},
+        "prow_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2123091428123873280",
+        "source": "automatic",
+        "started_at": "2026-11-18T16:30:21Z",
+        "status": "success"
+      },
+      "source_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2123091428123873280/artifacts/nno-signed-auto/dpf-hypervisor-deploy-cluster/finished.json"
+    },
+    {
       "build_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-nno-4.19-nno-e2e/2116326895371948032",
       "pairs": [
         {
