@@ -209,33 +209,14 @@ func decodeResources(data []byte) ([]unstructured.Unstructured, error) {
 		} else if err != nil {
 			return nil, err
 		}
-		pending := []unstructured.Unstructured{resource}
-		for len(pending) > 0 {
-			resource, pending = pending[0], pending[1:]
-			if resource.IsList() {
-				data, err := resource.MarshalJSON()
-				if err != nil {
-					return nil, err
-				}
-				var list unstructured.UnstructuredList
-				if err := list.UnmarshalJSON(data); err != nil {
-					return nil, err
-				}
-				pending = append(list.Items, pending...)
-			} else if resource.Object != nil {
-				resources = append(resources, resource)
-			}
+		if resource.Object != nil {
+			resources = append(resources, resource)
 		}
 	}
 }
 
 func isMachineConfig(resource unstructured.Unstructured) bool {
 	return resource.GetAPIVersion() == "machineconfiguration.openshift.io/v1" && resource.GetKind() == machineConfigKind
-}
-
-func isPoolConfiguration(resource unstructured.Unstructured) bool {
-	return resource.GetAPIVersion() == "machineconfiguration.openshift.io/v1" &&
-		slices.Contains([]string{machineConfigKind, "KubeletConfig", "ContainerRuntimeConfig"}, resource.GetKind())
 }
 
 func isBatchCompanion(resource unstructured.Unstructured) bool {
@@ -284,7 +265,6 @@ func (r runner) prepareBatch(ctx context.Context, files []string) (*batch, error
 			if err != nil {
 				return nil, err
 			}
-			// Existing MC names cannot prove updated contents have rendered.
 			if names[name] || len(bytes.TrimSpace(existing)) > 0 {
 				fmt.Println("Existing or repeated MachineConfig found; using per-file rollout waits.")
 
@@ -323,65 +303,6 @@ func (r runner) changeResource(ctx context.Context, data []byte, args ...string)
 	return err
 }
 
-func (r runner) applyFile(ctx context.Context, data []byte) error {
-	resources, err := decodeResources(data)
-	if err != nil {
-		return err
-	}
-	before, pool, err := r.readPoolInputs(ctx, resources)
-	if err != nil {
-		return err
-	}
-	if len(before) == 0 {
-		if err := r.changeResource(ctx, data, actionApply, "-f", "-"); err != nil {
-			return err
-		}
-
-		return r.waitForRollout(ctx, "")
-	}
-	output, err := r.oc(ctx, data, actionApply, "-f", "-", "-o", "json")
-	if err != nil {
-		return err
-	}
-	applied, err := decodeResources(output)
-	if err != nil {
-		return fmt.Errorf("decode apply response: %w", err)
-	}
-	after := make(map[string]unstructured.Unstructured)
-	for _, resource := range applied {
-		fmt.Printf("%s/%s applied\n", resource.GetKind(), resource.GetName())
-		if isPoolConfiguration(resource) {
-			after[poolResourceName(resource)] = resource
-		}
-	}
-	affected := false
-	for name, resource := range before {
-		updated, found := after[name]
-		if !found {
-			return fmt.Errorf("apply response is missing %s", name)
-		}
-		selectedInput := false
-		for _, input := range []unstructured.Unstructured{resource, updated} {
-			selected, err := targetsPool(input, pool)
-			if err != nil {
-				return fmt.Errorf("%s pool selector: %w", name, err)
-			}
-			selectedInput = selectedInput || selected
-		}
-		affected = affected || selectedInput
-		if selectedInput && !isMachineConfig(updated) {
-			if err := r.waitForGeneratedInput(ctx, updated); err != nil {
-				return err
-			}
-		}
-	}
-	if affected {
-		return r.confirmRenderedInputs(ctx, pool)
-	}
-	_, err = r.getSettledPool(ctx)
-	return err
-}
-
 func (r runner) changeFiles(ctx context.Context, files []string) error {
 	args := []string{r.options.Action, "-f", "-"}
 	if r.options.Action == actionDelete {
@@ -392,15 +313,16 @@ func (r runner) changeFiles(ctx context.Context, files []string) error {
 		if err != nil {
 			return err
 		}
-		if r.options.Action == actionApply && r.options.WaitForMCP {
-			if err := r.applyFile(ctx, data); err != nil {
-				return err
-			}
-		} else if err := r.changeResource(ctx, data, args...); err != nil {
+		if err := r.changeResource(ctx, data, args...); err != nil {
 			return err
 		}
 		if r.options.Action == actionDelete {
 			continue
+		}
+		if r.options.WaitForMCP {
+			if err := r.waitForRollout(ctx, ""); err != nil {
+				return err
+			}
 		}
 		hook := sibling(path, ".sh")
 		if _, err := os.Stat(hook); err == nil {

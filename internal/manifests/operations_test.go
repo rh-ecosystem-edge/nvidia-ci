@@ -12,7 +12,6 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func TestDeleteUsesReverseOrderWithoutPoolChanges(t *testing.T) {
@@ -95,9 +94,9 @@ func TestUnsupportedKindsUseSequentialWaits(t *testing.T) {
 		{"kubelet", `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"KubeletConfig","metadata":{"name":"kubelet"},"spec":{"machineConfigPoolSelector":{"matchLabels":{"pool":"worker"}}}}`},
 		{"runtime", `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"ContainerRuntimeConfig","metadata":{"name":"runtime"},"spec":{"machineConfigPoolSelector":{"matchLabels":{"pool":"worker"}}}}`},
 		{"custom", `{"apiVersion":"example.com/v1","kind":"MachineConfig","metadata":{"name":"custom"}}`},
-		{"mixed-list", `{"apiVersion":"v1","kind":"List","items":[
-{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"MachineConfig","metadata":{"name":"first","labels":{"role":"worker"}}},
-{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"KubeletConfig","metadata":{"name":"kubelet"},"spec":{"machineConfigPoolSelector":{"matchLabels":{"pool":"worker"}}}}]}`},
+		{"list", `{"apiVersion":"v1","kind":"List","items":[
+{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"MachineConfig","metadata":{"name":"listed"}}]}`},
+		{"typed-list", `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"MachineConfigList","items":[{"metadata":{"name":"listed"}}]}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
@@ -107,13 +106,11 @@ func TestUnsupportedKindsUseSequentialWaits(t *testing.T) {
 			g.Expect(r.run(t.Context())).To(Succeed())
 			applies, waits := 0, 0
 			for _, event := range cluster.events {
-				g.Expect(event.args[0]).NotTo(Equal(commandPatch))
-				if event.args[0] == commandCreate {
-					g.Expect(string(event.input)).To(ContainSubstring("zz-nvidia-ci-render-"))
-				}
+				g.Expect(event.args[0]).NotTo(BeElementOf(commandPatch, commandCreate))
 				switch event.args[0] {
 				case actionApply:
 					applies++
+					g.Expect(string(event.input)).To(Equal(test.resource))
 				case commandWait:
 					waits++
 				}
@@ -161,38 +158,4 @@ func TestUnrelatedResourcesAndDisabledWaitsDoNotTouchPool(t *testing.T) {
 			g.Expect([]string{actionApply, commandCreate}).To(ContainElement(event.args[0]))
 		}
 	}
-}
-
-func TestListsCannotHideMachineConfigs(t *testing.T) {
-	g := NewWithT(t)
-	resources, err := decodeResources([]byte(`{"apiVersion":"v1","kind":"List","items":[
-{"apiVersion":"v1","kind":"List","items":[{"apiVersion":"machineconfiguration.openshift.io/v1",
-"kind":"MachineConfig","metadata":{"name":"nested"},"spec":{"kernelArguments":["test"]}}]},
-{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"sibling"}}]}`))
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(resources).To(HaveLen(2))
-	g.Expect(isMachineConfig(resources[0])).To(BeTrue())
-	g.Expect(resources[0].GetName()).To(Equal("nested"))
-	g.Expect(resources[1].GetName()).To(Equal("sibling"))
-	arguments, _, err := unstructured.NestedStringSlice(resources[0].Object, "spec", "kernelArguments")
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(arguments).To(Equal([]string{"test"}))
-}
-
-func TestTypedListsInheritMissingItemTypes(t *testing.T) {
-	g := NewWithT(t)
-	resources, err := decodeResources([]byte(`{"apiVersion":"v1","kind":"List","items":[
-{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"MachineConfigList","items":[
-{"metadata":{"name":"inherited"},"spec":{"kernelArguments":["preserved"]}},
-{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"explicit"}}]}]}`))
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(resources).To(HaveLen(2))
-	g.Expect(isMachineConfig(resources[0])).To(BeTrue())
-	g.Expect(resources[0].GetName()).To(Equal("inherited"))
-	arguments, _, err := unstructured.NestedStringSlice(resources[0].Object, "spec", "kernelArguments")
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(arguments).To(Equal([]string{"preserved"}))
-	g.Expect(resources[1].GetAPIVersion()).To(Equal("v1"))
-	g.Expect(resources[1].GetKind()).To(Equal("ConfigMap"))
-	g.Expect(resources[1].GetName()).To(Equal("explicit"))
 }

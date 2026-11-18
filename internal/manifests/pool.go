@@ -6,16 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
-	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -67,21 +63,13 @@ func (r runner) getPool(ctx context.Context) (*poolState, error) {
 	return &pool, err
 }
 
-func poolHasCurrentConfiguration(pool *poolState) bool {
+func poolIsSettled(pool *poolState) bool {
 	return meta.IsStatusConditionTrue(pool.Status.Conditions, "Updated") &&
 		!meta.IsStatusConditionTrue(pool.Status.Conditions, "Updating") &&
 		!pool.Spec.Paused && pool.Status.ObservedGeneration >= pool.Generation &&
-		pool.Spec.Configuration.Name != "" && pool.Spec.Configuration.Name == pool.Status.Configuration.Name
-}
-
-func poolIsSettled(pool *poolState) bool {
-	return poolHasCurrentConfiguration(pool) &&
+		pool.Spec.Configuration.Name != "" && pool.Spec.Configuration.Name == pool.Status.Configuration.Name &&
 		!meta.IsStatusConditionTrue(pool.Status.Conditions, "Degraded") &&
 		!meta.IsStatusConditionTrue(pool.Status.Conditions, "RenderDegraded")
-}
-
-func poolResourceName(resource unstructured.Unstructured) string {
-	return strings.ToLower(resource.GetKind()) + "." + resource.GroupVersionKind().Group + "/" + resource.GetName()
 }
 
 func poolSelector(pool *poolState) (labels.Selector, error) {
@@ -94,65 +82,6 @@ func poolSelector(pool *poolState) (labels.Selector, error) {
 	}
 
 	return selector, nil
-}
-
-func targetsPool(resource unstructured.Unstructured, pool *poolState) (bool, error) {
-	if resource.Object == nil {
-		return false, nil
-	}
-	if isMachineConfig(resource) {
-		selector, err := poolSelector(pool)
-		return err == nil && selector.Matches(labels.Set(resource.GetLabels())), err
-	}
-	data, _, err := unstructured.NestedMap(resource.Object, "spec", "machineConfigPoolSelector")
-	if err != nil || len(data) == 0 {
-		return false, err
-	}
-	var selection metav1.LabelSelector
-	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(data, &selection); err != nil {
-		return false, err
-	}
-	selector, err := metav1.LabelSelectorAsSelector(&selection)
-	return err == nil && selector.Matches(labels.Set(pool.Labels)), err
-}
-
-func (r runner) readPoolInputs(ctx context.Context, resources []unstructured.Unstructured) (map[string]unstructured.Unstructured, *poolState, error) {
-	if !slices.ContainsFunc(resources, isPoolConfiguration) {
-		return nil, nil, nil
-	}
-	pool, err := r.getPool(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	if !poolHasCurrentConfiguration(pool) {
-		return nil, nil, fmt.Errorf("mcp/%s must finish its current rollout before applying pool inputs", r.options.PoolName)
-	}
-	if _, err := poolSelector(pool); err != nil {
-		return nil, nil, err
-	}
-	inputs := make(map[string]unstructured.Unstructured)
-	for _, resource := range resources {
-		if !isPoolConfiguration(resource) {
-			continue
-		}
-		if _, err := targetsPool(resource, pool); err != nil {
-			return nil, nil, err
-		}
-		name := poolResourceName(resource)
-		data, err := r.oc(ctx, nil, commandGet, name, "--ignore-not-found", "-o", "json")
-		if err != nil {
-			return nil, nil, err
-		}
-		var current unstructured.Unstructured
-		if len(data) > 0 {
-			if err := json.Unmarshal(data, &current); err != nil {
-				return nil, nil, err
-			}
-		}
-		inputs[name] = current
-	}
-
-	return inputs, pool, nil
 }
 
 func (r runner) getSettledPool(ctx context.Context) (*poolState, error) {
@@ -313,114 +242,33 @@ func (r runner) waitForRender(ctx context.Context, machineConfigs []string) (str
 }
 
 func (r runner) waitForRollout(ctx context.Context, target string) error {
-	if target != "" {
-		fmt.Printf("Waiting for mcp/%s to converge to %s (timeout: %s)\n", r.options.PoolName, target, r.options.RolloutTimeout)
-		return r.pollPool(ctx, r.options.RolloutTimeout, func(pool *poolState) (bool, error) {
-			if pool.Spec.Configuration.Name != target {
-				return false, fmt.Errorf("mcp/%s targets %s instead of captured target %s", r.options.PoolName, pool.Spec.Configuration.Name, target)
-			}
-			return poolIsSettled(pool), nil
-		})
-	}
-	_ = r.waitForPool(ctx, "condition=Updating=True", r.options.StartTimeout)
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	if err := r.waitForPool(ctx, "condition=Updated=True", r.options.RolloutTimeout); err != nil {
+	if target == "" {
+		_ = r.waitForPool(ctx, "condition=Updating=True", r.options.StartTimeout)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err := r.waitForPool(ctx, "condition=Updated=True", r.options.RolloutTimeout); err != nil {
+			return err
+		}
+		_, err := r.getSettledPool(ctx)
 		return err
 	}
-	_, err := r.getSettledPool(ctx)
-	return err
-}
-
-func (r runner) pollPool(ctx context.Context, timeout time.Duration, ready func(*poolState) (bool, error)) error {
-	err := wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+	fmt.Printf("Waiting for mcp/%s to converge to %s (timeout: %s)\n", r.options.PoolName, target, r.options.RolloutTimeout)
+	err := wait.PollUntilContextTimeout(ctx, time.Second, r.options.RolloutTimeout, true, func(ctx context.Context) (bool, error) {
 		pool, err := r.getPool(ctx)
 		if err != nil {
 			return false, err
 		}
+		if pool.Spec.Configuration.Name != target {
+			return false, fmt.Errorf("mcp/%s targets %s instead of captured target %s", r.options.PoolName, pool.Spec.Configuration.Name, target)
+		}
 		if condition := meta.FindStatusCondition(pool.Status.Conditions, "RenderDegraded"); condition != nil && condition.Status == metav1.ConditionTrue {
 			return false, fmt.Errorf("mcp/%s render failed: %s", r.options.PoolName, condition.Message)
 		}
-		return ready(pool)
+		return poolIsSettled(pool), nil
 	})
 	if err != nil {
 		return fmt.Errorf("mcp/%s has not converged: %w", r.options.PoolName, err)
-	}
-	return nil
-}
-
-func (r runner) confirmRenderedInputs(ctx context.Context, pool *poolState) (err error) {
-	selector, err := poolSelector(pool)
-	if err != nil {
-		return err
-	}
-	data, err := r.oc(ctx, nil, commandGet, "machineconfig", "-l", selector.String(), "-o", "json")
-	if err != nil {
-		return err
-	}
-	resources, err := decodeResources(data)
-	if err != nil {
-		return err
-	}
-	if len(resources) == 0 {
-		return fmt.Errorf("cannot find a MachineConfig selected by mcp/%s", r.options.PoolName)
-	}
-	marker := unstructured.Unstructured{Object: map[string]any{"apiVersion": "machineconfiguration.openshift.io/v1", "kind": machineConfigKind, "spec": map[string]any{}}}
-	marker.SetName("zz-nvidia-ci-render-" + strings.ToLower(rand.Text()))
-	marker.SetLabels(resources[0].GetLabels())
-	defer func() {
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
-		defer cancel()
-		_, deleteErr := r.oc(cleanupCtx, nil, actionDelete, "machineconfig/"+marker.GetName(), "--ignore-not-found=true", "--wait=false")
-		if deleteErr == nil && err == nil {
-			deleteErr = r.pollPool(cleanupCtx, cleanupTimeout, func(pool *poolState) (bool, error) {
-				return !pool.Spec.Configuration.hasSource(marker.GetName()) && poolIsSettled(pool), nil
-			})
-		}
-		if deleteErr != nil {
-			err = errors.Join(err, fmt.Errorf("remove render marker MachineConfig/%s: %w", marker.GetName(), deleteErr))
-		}
-	}()
-	data, err = marker.MarshalJSON()
-	if err != nil {
-		return err
-	}
-	// MC informer events are ordered: observing this new source includes earlier MC writes.
-	if _, err := r.oc(ctx, data, commandCreate, "-f", "-"); err != nil {
-		return err
-	}
-	target, err := r.waitForRender(ctx, []string{marker.GetName()})
-	if err != nil {
-		return fmt.Errorf("render confirmation for mcp/%s: %w", r.options.PoolName, err)
-	}
-	return r.waitForRollout(ctx, target)
-}
-
-func (r runner) waitForGeneratedInput(ctx context.Context, resource unstructured.Unstructured) error {
-	name := poolResourceName(resource)
-	condition := fmt.Sprintf("--for=jsonpath={.status.observedGeneration}=%d", resource.GetGeneration())
-	if _, err := r.oc(ctx, nil, commandWait, name, condition, "--timeout="+r.options.StartTimeout.String()); err != nil {
-		return err
-	}
-	data, err := r.oc(ctx, nil, commandGet, name, "-o", "json")
-	if err != nil {
-		return err
-	}
-	var current unstructured.Unstructured
-	if err := current.UnmarshalJSON(data); err != nil {
-		return err
-	}
-	conditions, _, err := unstructured.NestedSlice(current.Object, "status", "conditions")
-	if err != nil || len(conditions) == 0 {
-		return fmt.Errorf("%s has no generation result: %v", name, err)
-	}
-	last, ok := conditions[len(conditions)-1].(map[string]any)
-	observed, _, observedErr := unstructured.NestedInt64(current.Object, "status", "observedGeneration")
-	if !ok || last["type"] != "Success" || last["status"] != "True" ||
-		observedErr != nil || observed < resource.GetGeneration() || current.GetGeneration() != resource.GetGeneration() ||
-		current.GetUID() != resource.GetUID() || !reflect.DeepEqual(current.Object["spec"], resource.Object["spec"]) {
-		return fmt.Errorf("%s has not successfully generated the applied configuration", name)
 	}
 	return nil
 }
