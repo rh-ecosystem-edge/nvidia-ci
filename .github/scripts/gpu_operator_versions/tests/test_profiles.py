@@ -10,13 +10,17 @@ from unittest.mock import patch
 from gpu_operator_versions.profiles import (
     Profile,
     ProfileManifest,
+    Weekday,
     load_profiles,
     partition_profiles,
     profile_is_active,
     validate_test_command_template,
 )
 from gpu_operator_versions.update_versions import (
+    CatalogLookup,
     ProfileUpdate,
+    fetch_catalog_lookup,
+    finalize_profile,
     prepare_profile,
     render_test_comments,
     run,
@@ -36,11 +40,11 @@ SIGNED_TEST_COMMAND_TEMPLATE = (
     "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}-signed"
 )
 
-ALL_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-SIGNED_WEEKDAYS = ["Tue", "Wed", "Thu"]
+ALL_WEEKDAYS = list(Weekday)
+SIGNED_WEEKDAYS = [Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY]
 
 
-def make_profile(name: str, weekdays: list[str], **overrides) -> Profile:
+def make_profile(name: str, weekdays: list[Weekday], **overrides) -> Profile:
     values = {
         "name": name,
         "active_weekdays": frozenset(weekdays),
@@ -124,32 +128,29 @@ class TestProfileManifestLoading(unittest.TestCase):
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
         return manifest_path
 
-    def test_load_profiles_accepts_common_weekday_spellings(self):
+    def test_load_profiles_accepts_canonical_weekdays(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             manifest_path = self._write_manifest(
-                Path(temp_dir), ["Su", "TUES", "wednesday", "Thurs"]
+                Path(temp_dir), ["Sun", "Tue", "Wed", "Thu"]
             )
             loaded = load_profiles(manifest_path)
             profile = loaded.profiles["profile"]
-            self.assertEqual(profile.active_weekdays, {"Sun", "Tue", "Wed", "Thu"})
+            self.assertEqual(
+                profile.active_weekdays,
+                {Weekday.SUNDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY},
+            )
             self.assertEqual(
                 loaded.tests_to_trigger_file_path,
                 str(Path(temp_dir) / "tests_to_trigger.txt"),
             )
 
-    def test_load_profiles_accepts_all_weekdays_value(self):
-        for weekdays in ("all", "ALL", ["all"]):
-            with tempfile.TemporaryDirectory() as temp_dir:
-                manifest_path = self._write_manifest(Path(temp_dir), weekdays)
-                loaded = load_profiles(manifest_path)
-                profile = loaded.profiles["profile"]
-                self.assertEqual(profile.active_weekdays, set(ALL_WEEKDAYS))
-
-    def test_load_profiles_rejects_all_combined_with_weekdays(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            manifest_path = self._write_manifest(Path(temp_dir), ["all", "Mon"])
-            with self.assertRaises(ValueError):
-                load_profiles(manifest_path)
+    def test_load_profiles_rejects_noncanonical_weekday(self):
+        for weekdays in ("all", ["ALL"], ["Sunday"], ["Su"], ["Notaday"]):
+            with self.subTest(weekdays=weekdays):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    manifest_path = self._write_manifest(Path(temp_dir), weekdays)
+                    with self.assertRaises(ValueError):
+                        load_profiles(manifest_path)
 
     def test_load_profiles_rejects_missing_weekdays(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -161,12 +162,6 @@ class TestProfileManifestLoading(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_profiles(manifest_path)
 
-    def test_load_profiles_rejects_invalid_weekday(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            manifest_path = self._write_manifest(Path(temp_dir), ["Notaday"])
-            with self.assertRaises(ValueError):
-                load_profiles(manifest_path)
-
     def test_load_profiles_rejects_empty_weekdays(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             manifest_path = self._write_manifest(Path(temp_dir), [])
@@ -175,7 +170,7 @@ class TestProfileManifestLoading(unittest.TestCase):
 
     def test_load_profiles_rejects_duplicate_weekdays(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            manifest_path = self._write_manifest(Path(temp_dir), ["Sun", "Sunday"])
+            manifest_path = self._write_manifest(Path(temp_dir), ["Mon", "Mon"])
             with self.assertRaises(ValueError):
                 load_profiles(manifest_path)
 
@@ -211,14 +206,170 @@ class TestAtomicProfileUpdates(unittest.TestCase):
             "regular",
             ALL_WEEKDAYS,
             version_file_path=str(root / "regular-versions.json"),
+            check_catalog_availability=True,
         )
         signed = make_profile(
             "signed",
             SIGNED_WEEKDAYS,
             version_file_path=str(root / "signed-versions.json"),
             test_command_template=SIGNED_TEST_COMMAND_TEMPLATE,
+            ignored_versions_regex="^4.19$",
+            minimum_gpu_channel="26.3",
+            check_catalog_availability=True,
         )
         return regular, signed
+
+    def _write_versions(self, root: Path) -> None:
+        (root / "regular-versions.json").write_text(json.dumps({
+            "gpu-main-latest": "old-sha",
+            "gpu-operator": {"25.3": "25.3.0"},
+            "ocp": {"4.19": "4.19.0", "4.20": "4.20.0"},
+        }), encoding="utf-8")
+        (root / "signed-versions.json").write_text(json.dumps({
+            "gpu-main-latest": "old-sha",
+            "gpu-operator": {"26.3": "26.3.0"},
+            "ocp": {"4.20": "4.20.0"},
+        }), encoding="utf-8")
+
+    def _snapshot(self) -> dict:
+        return {
+            "gpu-main-latest": "old-sha",
+            "gpu-operator": {
+                "25.3": "25.3.1",
+                "26.3": "26.3.1",
+            },
+            "ocp": ["4.19.0", "4.20.0"],
+        }
+
+    def test_run_uses_one_shared_catalog_lookup(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            regular, signed = self._make_profiles(root)
+            manifest = self._make_manifest(root, regular, signed)
+            self._write_versions(root)
+            catalog_entries = [
+                {"version": "25.3.1", "ocp_version": "4.19"},
+                {"version": "25.3.1", "ocp_version": "4.20"},
+            ]
+
+            with patch(
+                "gpu_operator_versions.update_versions.discover_versions",
+                return_value=self._snapshot(),
+            ), patch(
+                "gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries",
+                return_value=catalog_entries,
+            ) as fetch_catalog:
+                active_names = run(
+                    manifest,
+                    datetime(2026, 11, 10, tzinfo=timezone.utc),
+                )
+
+            self.assertEqual(active_names, ["regular", "signed"])
+            self.assertEqual(fetch_catalog.call_count, 1)
+            self.assertEqual(
+                fetch_catalog.call_args.kwargs["gpu_versions"],
+                ["25.3.1", "26.3.1"],
+            )
+            self.assertEqual(
+                fetch_catalog.call_args.kwargs["ocp_versions"],
+                ["4.19", "4.20"],
+            )
+            self.assertEqual(
+                json.loads(
+                    (root / "regular-versions.json").read_text(encoding="utf-8")
+                )["gpu-operator"],
+                {"25.3": "25.3.1"},
+            )
+            self.assertEqual(
+                json.loads(
+                    (root / "signed-versions.json").read_text(encoding="utf-8")
+                )["gpu-operator"],
+                {"26.3": "26.3.0"},
+            )
+            commands = (root / "tests_to_trigger.txt").read_text(encoding="utf-8")
+            self.assertIn("/test 4.19-stable-nvidia-gpu-operator-e2e-25-3-x", commands)
+            self.assertNotIn("-signed", commands)
+            comments = (root / "test_comments.txt").read_text(encoding="utf-8")
+            self.assertIn(
+                "Checked GPU Operator catalog availability for versions "
+                "25.3.1, 26.3.1 across OCP 4.19, 4.20.",
+                comments,
+            )
+
+    def test_run_skips_catalog_lookup_when_no_profile_needs_it(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            regular, signed = self._make_profiles(root)
+            regular = make_profile(
+                "regular",
+                ALL_WEEKDAYS,
+                version_file_path=regular.version_file_path,
+            )
+            signed = make_profile(
+                "signed",
+                SIGNED_WEEKDAYS,
+                version_file_path=signed.version_file_path,
+                test_command_template=SIGNED_TEST_COMMAND_TEMPLATE,
+                ignored_versions_regex="^4.19$",
+                minimum_gpu_channel="26.3",
+            )
+            manifest = self._make_manifest(root, regular, signed)
+            self._write_versions(root)
+            snapshot = self._snapshot()
+            snapshot["gpu-operator"] = {
+                "25.3": "25.3.0",
+                "26.3": "26.3.0",
+            }
+
+            with patch(
+                "gpu_operator_versions.update_versions.discover_versions",
+                return_value=snapshot,
+            ), patch(
+                "gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries",
+            ) as fetch_catalog:
+                run(manifest, datetime(2026, 11, 10, tzinfo=timezone.utc))
+
+            fetch_catalog.assert_not_called()
+            self.assertEqual(
+                (root / "new_gpu_channels.txt").read_text(encoding="utf-8"),
+                "26.3\n",
+            )
+
+    def test_run_writes_nothing_when_shared_catalog_lookup_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            regular, signed = self._make_profiles(root)
+            manifest = self._make_manifest(root, regular, signed)
+            self._write_versions(root)
+
+            with patch(
+                "gpu_operator_versions.update_versions.discover_versions",
+                return_value=self._snapshot(),
+            ), patch(
+                "gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries",
+                side_effect=RuntimeError("catalog unavailable"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    run(manifest, datetime(2026, 11, 10, tzinfo=timezone.utc))
+
+            self.assertEqual(
+                json.loads(
+                    (root / "regular-versions.json").read_text(encoding="utf-8")
+                )["gpu-operator"],
+                {"25.3": "25.3.0"},
+            )
+            self.assertEqual(
+                json.loads(
+                    (root / "signed-versions.json").read_text(encoding="utf-8")
+                )["gpu-operator"],
+                {"26.3": "26.3.0"},
+            )
+            for output in (
+                "tests_to_trigger.txt",
+                "test_comments.txt",
+                "new_gpu_channels.txt",
+            ):
+                self.assertFalse((root / output).exists())
 
     def test_run_with_no_active_profiles_writes_schedule_information(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -259,181 +410,36 @@ class TestAtomicProfileUpdates(unittest.TestCase):
                 comments,
             )
 
-    def test_run_calculates_all_profiles_before_writing_any(self):
+    def test_finalize_profile_uses_shared_catalog_results(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            regular, signed = self._make_profiles(root)
-            manifest = self._make_manifest(root, regular, signed)
-            regular_update = ProfileUpdate(
-                profile=regular,
-                final_versions={"gpu-main-latest": "sha"},
-                commands={"/test regular"},
-                comments={"**regular:** WARNING: example"},
-                new_gpu_channels={"26.7"},
-            )
-            signed_update = ProfileUpdate(
-                profile=signed,
-                final_versions={"gpu-main-latest": "sha"},
-                commands={"/test signed"},
-                comments=set(),
-                new_gpu_channels=set(),
-            )
-            snapshot = {"gpu-main-latest": "sha", "gpu-operator": {}, "ocp": []}
-
-            with patch(
-                "gpu_operator_versions.update_versions.discover_versions",
-                return_value=snapshot,
-            ) as discover, patch(
-                "gpu_operator_versions.update_versions.prepare_profile",
-                side_effect=[regular_update, signed_update],
-            ) as prepare, patch(
-                "gpu_operator_versions.update_versions.write_profile_update",
-            ) as write:
-                active_names = run(
-                    manifest,
-                    datetime(2026, 11, 10, tzinfo=timezone.utc),
-                )
-
-            self.assertEqual(active_names, ["regular", "signed"])
-            self.assertEqual(discover.call_count, 1)
-            self.assertIs(prepare.call_args_list[0].args[0], snapshot)
-            self.assertIs(prepare.call_args_list[1].args[0], snapshot)
-            self.assertEqual(write.call_count, 2)
-            self.assertEqual(
-                (root / "tests_to_trigger.txt").read_text(encoding="utf-8"),
-                "/test regular\n/test signed\n",
-            )
-            self.assertIn(
-                "**regular:** WARNING: example",
-                (root / "test_comments.txt").read_text(encoding="utf-8"),
-            )
-            self.assertEqual(
-                (root / "new_gpu_channels.txt").read_text(encoding="utf-8"),
-                "26.7\n",
-            )
-
-    def test_run_separates_commands_from_schedule_information(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            regular, signed = self._make_profiles(root)
-            manifest = self._make_manifest(root, regular, signed)
-            regular_update = ProfileUpdate(
-                profile=regular,
-                final_versions={"gpu-main-latest": "sha"},
-                commands={"/test regular"},
-                comments=set(),
-                new_gpu_channels=set(),
-            )
-            snapshot = {"gpu-main-latest": "sha", "gpu-operator": {}, "ocp": []}
-
-            with patch(
-                "gpu_operator_versions.update_versions.discover_versions",
-                return_value=snapshot,
-            ), patch(
-                "gpu_operator_versions.update_versions.prepare_profile",
-                return_value=regular_update,
-            ), patch(
-                "gpu_operator_versions.update_versions.write_profile_update",
-            ):
-                active_names = run(
-                    manifest,
-                    datetime(2026, 11, 14, tzinfo=timezone.utc),
-                )
-
-            self.assertEqual(active_names, ["regular"])
-            self.assertEqual(
-                (root / "tests_to_trigger.txt").read_text(encoding="utf-8"),
-                "/test regular\n",
-            )
-            comments = (root / "test_comments.txt").read_text(encoding="utf-8")
-            self.assertNotIn("/test regular", comments)
-            self.assertIn(
-                "INFO: **signed** was not run because Saturday is outside "
-                "its configured weekdays (Tue, Wed, Thu).",
-                comments,
-            )
-
-    def test_run_writes_nothing_when_any_profile_calculation_fails(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            regular, signed = self._make_profiles(root)
-            manifest = self._make_manifest(root, regular, signed)
-            (root / "regular-versions.json").write_text("original regular", encoding="utf-8")
-            (root / "signed-versions.json").write_text("original signed", encoding="utf-8")
-            regular_update = ProfileUpdate(
-                profile=regular,
-                final_versions={"gpu-main-latest": "new"},
-                commands={"/test regular"},
-                comments=set(),
-                new_gpu_channels={"26.7"},
-            )
-            snapshot = {"gpu-main-latest": "sha", "gpu-operator": {}, "ocp": []}
-
-            with patch(
-                "gpu_operator_versions.update_versions.discover_versions",
-                return_value=snapshot,
-            ), patch(
-                "gpu_operator_versions.update_versions.prepare_profile",
-                side_effect=[regular_update, RuntimeError("signed profile failed")],
-            ):
-                with self.assertRaises(RuntimeError):
-                    run(manifest, datetime(2026, 11, 10, tzinfo=timezone.utc))
-
-            self.assertEqual(
-                (root / "regular-versions.json").read_text(encoding="utf-8"),
-                "original regular",
-            )
-            self.assertEqual(
-                (root / "signed-versions.json").read_text(encoding="utf-8"),
-                "original signed",
-            )
-            for output in (
-                "tests_to_trigger.txt",
-                "test_comments.txt",
-                "new_gpu_channels.txt",
-            ):
-                self.assertFalse((root / output).exists())
-
-    def test_prepare_profile_separates_commands_comments_and_channels(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            version_file = root / "versions.json"
-            version_file.write_text(json.dumps({
+            regular, _ = self._make_profiles(root)
+            (root / "regular-versions.json").write_text(json.dumps({
                 "gpu-main-latest": "old-sha",
-                "gpu-operator": {"26.3": "26.3.0"},
-                "ocp": {"4.20": "4.20.0"},
+                "gpu-operator": {"25.3": "25.3.0"},
+                "ocp": {"4.19": "4.19.0"},
             }), encoding="utf-8")
-
-            profile = make_profile(
-                "signed",
-                SIGNED_WEEKDAYS,
-                version_file_path=str(version_file),
-                test_command_template=SIGNED_TEST_COMMAND_TEMPLATE,
-                ignored_versions_regex="^4.19$",
-                minimum_gpu_channel="26.3",
+            snapshot = self._snapshot()
+            plan = prepare_profile(snapshot, regular)
+            lookup = CatalogLookup(
+                entries=({"version": "25.3.1", "ocp_version": "4.19"},),
+                gpu_versions=("25.3.1",),
+                ocp_versions=("4.19",),
             )
-            snapshot = {
-                "gpu-main-latest": "new-sha",
-                "gpu-operator": {
-                    "25.3": "25.3.0",
-                    "26.3": "26.3.1",
-                    "26.7": "26.7.0",
-                },
-                "ocp": ["4.19.9", "4.20.1", "4.20.2", "4.21.0"],
-            }
 
-            update = prepare_profile(snapshot, profile)
+            update = finalize_profile(plan, lookup)
+            write_profile_update(update)
+
+            self.assertEqual(
+                json.loads(
+                    (root / "regular-versions.json").read_text(encoding="utf-8")
+                )["gpu-operator"],
+                {"25.3": "25.3.1"},
+            )
             self.assertTrue(update.commands)
             self.assertTrue(all(command.startswith("/test ") for command in update.commands))
-            self.assertEqual(update.new_gpu_channels, {"26.7"})
 
-            write_profile_update(update)
-            self.assertEqual(
-                json.loads(version_file.read_text(encoding="utf-8"))["gpu-operator"],
-                {"26.3": "26.3.1", "26.7": "26.7.0"},
-            )
-
-    def test_render_test_comments_uses_github_friendly_profile_prefixes(self):
+    def test_render_test_comments_includes_shared_catalog_and_schedule_info(self):
         regular = make_profile("regular", ALL_WEEKDAYS)
         signed = make_profile(
             "signed",
@@ -444,10 +450,20 @@ class TestAtomicProfileUpdates(unittest.TestCase):
             {"**signed:** WARNING: example"},
             [signed],
             datetime(2026, 11, 14, tzinfo=timezone.utc),
+            CatalogLookup(
+                entries=(),
+                gpu_versions=("26.3.1",),
+                ocp_versions=("4.19", "4.20"),
+            ),
         )
-
         rendered = "\n".join(comments)
+
         self.assertIn("- **signed:** WARNING: example", rendered)
+        self.assertIn(
+            "Checked GPU Operator catalog availability for versions 26.3.1 "
+            "across OCP 4.19, 4.20.",
+            rendered,
+        )
         self.assertIn("INFO: **signed** was not run", rendered)
         self.assertIsNotNone(regular)
 

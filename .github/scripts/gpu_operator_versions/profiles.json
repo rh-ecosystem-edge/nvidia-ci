@@ -9,7 +9,15 @@
       "settings_file_path": ".github/scripts/gpu_operator_versions/settings.json",
       "test_command_template": "/test {ocp_version}-stable-nvidia-gpu-operator-e2e-{gpu_version}",
       "check_catalog_availability": true,
-      "active_weekdays": "all"
+      "active_weekdays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+      ]
     },
     "signed": {
       "version_file_path": ".github/scripts/gpu_operator_versions/signed_versions.json",

@@ -43,68 +43,68 @@ class TestCalculateDiffs(unittest.TestCase):
     def test_bundle_key_created(self):
         old_versions = {}
         new_versions = {'gpu-main-latest': 'XYZ'}
-        diff, _ = calculate_diffs(old_versions, new_versions)
+        diff = calculate_diffs(old_versions, new_versions)
         self.assertEqual(diff, {'gpu-main-latest': 'XYZ'})
 
     def test_bundle_changed(self):
         old_versions = base_versions
         new_versions = copy.deepcopy(old_versions)
         new_versions['gpu-main-latest'] = 'B'
-        diff, _ = calculate_diffs(old_versions, new_versions)
+        diff = calculate_diffs(old_versions, new_versions)
         self.assertEqual(diff, {'gpu-main-latest': 'B'})
 
     def test_gpu_versions_key_created(self):
         old_versions = {}
         new_versions = {'gpu-operator': {'25.1': '25.1.1'}}
-        diff, _ = calculate_diffs(old_versions, new_versions)
+        diff = calculate_diffs(old_versions, new_versions)
         self.assertEqual(diff, {'gpu-operator': {'25.1': '25.1.1'}})
 
     def test_gpu_version_changed(self):
         old_versions = base_versions
         new_versions = copy.deepcopy(old_versions)
         new_versions['gpu-operator']['25.1'] = '25.1.1'
-        diff, _ = calculate_diffs(old_versions, new_versions)
+        diff = calculate_diffs(old_versions, new_versions)
         self.assertEqual(diff, {'gpu-operator': {'25.1': '25.1.1'}})
 
     def test_gpu_version_added(self):
         old_versions = base_versions
         new_versions = copy.deepcopy(old_versions)
         new_versions['gpu-operator']['25.3'] = '25.3.0'
-        diff, _ = calculate_diffs(old_versions, new_versions)
+        diff = calculate_diffs(old_versions, new_versions)
         self.assertEqual(diff, {'gpu-operator': {'25.3': '25.3.0'}})
 
     def test_gpu_version_removed(self):
         old_versions = base_versions
         new_versions = copy.deepcopy(old_versions)
         del new_versions['gpu-operator']['25.2']
-        diff, _ = calculate_diffs(old_versions, new_versions)
+        diff = calculate_diffs(old_versions, new_versions)
         self.assertEqual(diff, {})
 
     def test_ocp_version_key_created(self):
         old_versions = {}
         new_versions = {'ocp': {'4.12': '4.12.2'}}
-        diff, _ = calculate_diffs(old_versions, new_versions)
+        diff = calculate_diffs(old_versions, new_versions)
         self.assertEqual(diff, {'ocp': {'4.12': '4.12.2'}})
 
     def test_ocp_version_changed(self):
         old_versions = base_versions
         new_versions = copy.deepcopy(old_versions)
         new_versions['ocp']['4.12'] = '4.12.2'
-        diff, _ = calculate_diffs(old_versions, new_versions)
+        diff = calculate_diffs(old_versions, new_versions)
         self.assertEqual(diff, {'ocp': {'4.12': '4.12.2'}})
 
     def test_ocp_version_added(self):
         old_versions = base_versions
         new_versions = copy.deepcopy(old_versions)
         new_versions['ocp']['4.15'] = '4.15.0'
-        diff, _ = calculate_diffs(old_versions, new_versions)
+        diff = calculate_diffs(old_versions, new_versions)
         self.assertEqual(diff, {'ocp': {'4.15': '4.15.0'}})
 
     def test_ocp_version_removed(self):
         old_versions = base_versions
         new_versions = copy.deepcopy(old_versions)
         del new_versions['ocp']['4.14']
-        diff, _ = calculate_diffs(old_versions, new_versions)
+        diff = calculate_diffs(old_versions, new_versions)
         self.assertEqual(diff, {})
 
 
@@ -229,175 +229,137 @@ class TestCreateTestsMatrix(unittest.TestCase):
 
 
 class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
-    """Tests for catalog availability filtering."""
+    """Tests for filtering with already-fetched catalog entries."""
 
     def test_filters_out_unavailable_in_catalog(self):
-        """Versions not in any catalog should be excluded."""
         gpu_diffs = {
-            '25.3': '25.3.1',  # Not in catalog
-            '25.2': '25.2.8',  # In catalog
+            '25.3': '25.3.1',
+            '25.2': '25.2.8',
         }
         ocp_versions = {'4.19': '4.19.0', '4.20': '4.20.0'}
-        support_matrix = default_support_matrix
-
-        # Mock catalog entries that show only 25.2 is available
-        mock_entries = [
+        catalog_entries = [
             {'version': '25.2.8', 'ocp_version': '4.19'},
             {'version': '25.2.8', 'ocp_version': '4.20'},
         ]
 
-        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
-                  return_value=mock_entries):
-            filtered, _ = filter_new_gpu_versions_by_catalog(
-                gpu_diffs, ocp_versions, support_matrix
-            )
+        filtered, entries = filter_new_gpu_versions_by_catalog(
+            gpu_diffs,
+            ocp_versions,
+            default_support_matrix,
+            catalog_entries,
+        )
 
-        # Only 25.2 should be included (available in catalog)
         self.assertEqual(filtered, {'25.2': '25.2.8'})
+        self.assertEqual(entries, catalog_entries)
 
     def test_includes_all_versions_in_catalog(self):
-        """All versions in catalog should be included regardless of minor version."""
         gpu_diffs = {
-            '24.1': '24.1.5',  # Older version but in catalog
-            '25.3': '25.3.1',  # Newer version and in catalog
-            '25.2': '25.2.8',  # Another version in catalog
+            '24.1': '24.1.5',
+            '25.3': '25.3.1',
+            '25.2': '25.2.8',
         }
         ocp_versions = {'4.19': '4.19.0', '4.20': '4.20.0'}
-        support_matrix = default_support_matrix
-
-        # Mock catalog entries showing all versions are available
-        mock_entries = [
+        catalog_entries = [
             {'version': '24.1.5', 'ocp_version': '4.19'},
             {'version': '25.3.1', 'ocp_version': '4.19'},
             {'version': '25.2.8', 'ocp_version': '4.20'},
         ]
 
-        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
-                  return_value=mock_entries):
-            filtered, _ = filter_new_gpu_versions_by_catalog(
-                gpu_diffs, ocp_versions, support_matrix
-            )
+        filtered, _ = filter_new_gpu_versions_by_catalog(
+            gpu_diffs,
+            ocp_versions,
+            default_support_matrix,
+            catalog_entries,
+        )
 
-        # All versions in catalog should be included
-        self.assertEqual(filtered, {
-            '24.1': '24.1.5',
-            '25.3': '25.3.1',
-            '25.2': '25.2.8',
-        })
+        self.assertEqual(filtered, gpu_diffs)
 
     def test_excludes_all_when_not_in_catalog(self):
-        """Versions not in any catalog should all be excluded."""
         gpu_diffs = {
-            '25.3': '25.3.1',  # Not in catalog
-            '25.2': '25.2.8',  # Not in catalog
+            '25.3': '25.3.1',
+            '25.2': '25.2.8',
         }
         ocp_versions = {'4.19': '4.19.0', '4.20': '4.20.0'}
-        support_matrix = default_support_matrix
 
-        # Mock empty catalog entries
-        mock_entries = []
+        filtered, _ = filter_new_gpu_versions_by_catalog(
+            gpu_diffs,
+            ocp_versions,
+            default_support_matrix,
+            [],
+        )
 
-        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
-                  return_value=mock_entries):
-            filtered, _ = filter_new_gpu_versions_by_catalog(
-                gpu_diffs, ocp_versions, support_matrix
-            )
-
-        # Nothing should be included
         self.assertEqual(filtered, {})
 
     def test_available_in_at_least_one_ocp(self):
-        """Version available in at least one OCP catalog should be included."""
-        gpu_diffs = {
-            '25.3': '25.3.1',
-        }
+        gpu_diffs = {'25.3': '25.3.1'}
         ocp_versions = {'4.19': '4.19.0', '4.20': '4.20.0'}
-        support_matrix = default_support_matrix
-
-        # Mock catalog showing version only in 4.20, not 4.19
-        mock_entries = [
+        catalog_entries = [
             {'version': '25.3.1', 'ocp_version': '4.20'},
         ]
 
-        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
-                  return_value=mock_entries):
-            filtered, _ = filter_new_gpu_versions_by_catalog(
-                gpu_diffs, ocp_versions, support_matrix
-            )
+        filtered, _ = filter_new_gpu_versions_by_catalog(
+            gpu_diffs,
+            ocp_versions,
+            default_support_matrix,
+            catalog_entries,
+        )
 
-        # Should be included since it's in at least one catalog
         self.assertEqual(filtered, {'25.3': '25.3.1'})
 
     def test_empty_gpu_diffs_returns_empty(self):
-        """Empty diffs should return empty without calling catalog API."""
-        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries') as mock_fetch:
-            filtered, entries = filter_new_gpu_versions_by_catalog(
-                {}, {'4.19': '4.19.0'}, default_support_matrix
-            )
+        filtered, entries = filter_new_gpu_versions_by_catalog(
+            {},
+            {'4.19': '4.19.0'},
+            default_support_matrix,
+            [],
+        )
         self.assertEqual(filtered, {})
         self.assertEqual(entries, [])
-        mock_fetch.assert_not_called()
 
     def test_no_active_ocp_returns_all_gpu_diffs(self):
-        """When no active OCP versions exist, all GPU diffs should be kept."""
         gpu_diffs = {
             '25.3': '25.3.1',
             '25.2': '25.2.8',
         }
         ocp_versions = {'4.19': '4.19.0'}
-        # Support matrix with only maintenance (no active) OCP versions
         support_matrix_no_active = {
-            "openshift_support": {
-                '4.19': {'status': 'maintenance', 'pinned_gpu_operator': '24.6'}
-            }
+            'openshift_support': {
+                '4.19': {'status': 'maintenance', 'pinned_gpu_operator': '24.6'},
+            },
         }
 
-        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries') as mock_fetch:
-            filtered, entries = filter_new_gpu_versions_by_catalog(
-                gpu_diffs, ocp_versions, support_matrix_no_active
-            )
+        filtered, entries = filter_new_gpu_versions_by_catalog(
+            gpu_diffs,
+            ocp_versions,
+            support_matrix_no_active,
+            [],
+        )
 
-        # All GPU diffs should be kept when there are no active OCPs
         self.assertEqual(filtered, gpu_diffs)
         self.assertEqual(entries, [])
-        # Catalog API should not be called
-        mock_fetch.assert_not_called()
 
-    def test_catalog_filtering_in_calculate_diffs(self):
-        """Catalog filtering should remove unavailable GPU versions from diffs."""
+    def test_calculate_diffs_remains_raw(self):
         old_versions = {
             'gpu-operator': {
                 '25.1': '25.1.0',
-                '25.2': '25.2.0'
+                '25.2': '25.2.0',
             }
         }
         new_versions = {
             'gpu-operator': {
                 '25.1': '25.1.0',
                 '25.2': '25.2.0',
-                '25.3': '25.3.1',  # New version, but not in catalog
-                '25.4': '25.4.0',  # New version, in catalog
+                '25.3': '25.3.1',
+                '25.4': '25.4.0',
             }
         }
-        ocp_versions = {'4.19': '4.19.0', '4.20': '4.20.0'}
-        support_matrix = default_support_matrix
 
-        # Mock catalog with only 25.4 available
-        mock_entries = [
-            {'version': '25.4.0', 'ocp_version': '4.19'},
-            {'version': '25.4.0', 'ocp_version': '4.20'},
-        ]
+        diffs = calculate_diffs(old_versions, new_versions)
 
-        with patch('gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
-                  return_value=mock_entries):
-            diffs, _ = calculate_diffs(
-                old_versions, new_versions, ocp_versions, support_matrix, check_catalog=True
-            )
-
-        # Only 25.4 should be in diffs (25.3 filtered out due to catalog unavailability)
-        self.assertIn('gpu-operator', diffs)
-        self.assertEqual(diffs['gpu-operator'], {'25.4': '25.4.0'})
-        self.assertNotIn('25.3', diffs['gpu-operator'])
+        self.assertEqual(
+            diffs['gpu-operator'],
+            {'25.3': '25.3.1', '25.4': '25.4.0'},
+        )
 
 
 class TestCreateTestsCommands(unittest.TestCase):

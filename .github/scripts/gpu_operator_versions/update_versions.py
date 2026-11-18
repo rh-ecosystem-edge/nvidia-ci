@@ -230,22 +230,14 @@ def create_tests_commands(diffs: dict, ocp_releases: list, gpu_releases: list,
     return tests_commands
 
 
-def calculate_diffs(old_versions: dict, new_versions: dict, ocp_versions: dict | None = None,
-                    support_matrix: dict | None = None, check_catalog: bool = False) -> tuple[dict, list[dict]]:
-    """
-    Calculate differences between old and new versions.
-
-    Returns:
-        Tuple of (diffs, gpu_catalog_entries) where gpu_catalog_entries are NVIDIA GPU
-        operator catalog entries that can be used for warnings
-    """
+def calculate_diffs(old_versions: dict, new_versions: dict) -> dict:
+    """Calculate raw differences between two version snapshots."""
     diffs = {}
-    gpu_catalog_entries = []
 
     for key, value in new_versions.items():
         if isinstance(value, dict):
             logger.info(f'Comparing versions under "{key}"')
-            sub_diff, _ = calculate_diffs(old_versions.get(key, {}), value)
+            sub_diff = calculate_diffs(old_versions.get(key, {}), value)
             if sub_diff:
                 diffs[key] = sub_diff
         else:
@@ -253,21 +245,7 @@ def calculate_diffs(old_versions: dict, new_versions: dict, ocp_versions: dict |
                 logger.info(f'Key "{key}" has changed: {old_versions.get(key)} > {value}')
                 diffs[key] = value
 
-    # Filter GPU operator diffs by catalog availability
-    if check_catalog and VERSION_GPU_OPERATOR in diffs and ocp_versions and support_matrix:
-        gpu_diffs = diffs[VERSION_GPU_OPERATOR]
-        if gpu_diffs:
-            filtered, gpu_catalog_entries = filter_new_gpu_versions_by_catalog(
-                gpu_diffs,
-                ocp_versions,
-                support_matrix
-            )
-            if filtered:
-                diffs[VERSION_GPU_OPERATOR] = filtered
-            else:
-                del diffs[VERSION_GPU_OPERATOR]
-
-    return diffs, gpu_catalog_entries
+    return diffs
 
 
 def version2suffix(v: str):
@@ -277,10 +255,11 @@ def version2suffix(v: str):
 def filter_new_gpu_versions_by_catalog(
     gpu_diffs: dict,
     ocp_versions: dict,
-    support_matrix: dict
+    support_matrix: dict,
+    gpu_catalog_entries: list[dict] | tuple[dict, ...],
 ) -> tuple[dict, list[dict]]:
     """
-    Filter out new GPU versions that aren't in any active OCP catalog.
+    Filter new GPU versions using already-fetched catalog entries.
 
     Returns:
         Tuple of (filtered_diffs, gpu_catalog_entries) where gpu_catalog_entries are
@@ -292,21 +271,12 @@ def filter_new_gpu_versions_by_catalog(
     ocp_releases = list(ocp_versions.keys())
     active_ocp_versions = get_active_ocp_versions(ocp_releases, support_matrix)
 
-    # If there are no active OCP versions, keep all new GPU versions as-is
+    # If there are no active OCP versions, keep all new GPU versions as-is.
     if not active_ocp_versions:
         logger.info('No active OCP versions - skipping catalog availability check')
         return gpu_diffs, []
 
-    # Fetch GPU operator catalog entries using FULL patch versions
-    full_patch_versions = [gpu_diffs[v] for v in gpu_diffs.keys()]
-    logger.info(f'Checking catalog availability for {len(gpu_diffs)} new GPU version(s)')
-    gpu_catalog_entries = fetch_gpu_operator_catalog_entries(
-        gpu_versions=full_patch_versions,
-        ocp_versions=active_ocp_versions,
-        operator_package="gpu-operator-certified"
-    )
-
-    # Filter out versions not in any catalog
+    # Filter out versions not in any catalog.
     filtered_diffs = {}
     for gpu_version, gpu_full_version in gpu_diffs.items():
         available_in_any = any(
@@ -322,7 +292,7 @@ def filter_new_gpu_versions_by_catalog(
         else:
             filtered_diffs[gpu_version] = gpu_full_version
 
-    return filtered_diffs, gpu_catalog_entries
+    return filtered_diffs, list(gpu_catalog_entries)
 
 
 def apply_diffs(old_versions: dict, diffs: dict) -> dict:
@@ -335,7 +305,6 @@ def apply_diffs(old_versions: dict, diffs: dict) -> dict:
         else:
             updated[key] = value
     return updated
-
 
 
 def _version_tuple(version: str) -> tuple[int, ...]:
@@ -365,6 +334,27 @@ def discover_versions(request_timeout_sec: int) -> dict:
 
 
 @dataclass(frozen=True)
+class ProfilePlan:
+    """A raw profile calculation and its catalog lookup requirements."""
+
+    profile: Profile
+    old_versions: dict
+    ocp_versions: dict
+    raw_diffs: dict
+    catalog_gpu_versions: frozenset[str]
+    catalog_ocp_versions: frozenset[str]
+
+
+@dataclass(frozen=True)
+class CatalogLookup:
+    """The result of one shared catalog lookup for all active profiles."""
+
+    entries: tuple[dict, ...]
+    gpu_versions: tuple[str, ...]
+    ocp_versions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ProfileUpdate:
     """A fully calculated profile update, prior to writing any files."""
 
@@ -375,8 +365,8 @@ class ProfileUpdate:
     new_gpu_channels: set[str]
 
 
-def prepare_profile(snapshot: dict, profile: Profile) -> ProfileUpdate:
-    """Calculate one profile update without writing any files."""
+def prepare_profile(snapshot: dict, profile: Profile) -> ProfilePlan:
+    """Calculate raw profile differences without performing catalog I/O."""
     ocp_versions = filter_ocp_versions(
         snapshot[VERSION_OCP],
         profile.ignored_versions_regex,
@@ -393,19 +383,87 @@ def prepare_profile(snapshot: dict, profile: Profile) -> ProfileUpdate:
 
     version_file = Path(profile.version_file_path)
     old_versions = json.loads(version_file.read_text(encoding='utf-8'))
+    raw_diffs = calculate_diffs(old_versions, new_versions)
 
-    # Calculate diffs with profile-specific catalog filtering.
-    diffs, gpu_catalog_entries = calculate_diffs(
-        old_versions,
-        new_versions,
-        ocp_versions=ocp_versions,
-        support_matrix=profile.support_matrix,
-        check_catalog=profile.check_catalog_availability,
+    active_ocp_versions = get_active_ocp_versions(
+        list(ocp_versions.keys()),
+        profile.support_matrix,
     )
-    # Apply the filtered diffs to obtain the final profile version matrix.
-    final_versions = apply_diffs(old_versions, diffs)
+    needs_catalog = (
+        profile.check_catalog_availability
+        and bool(raw_diffs.get(VERSION_GPU_OPERATOR, {}))
+        and bool(active_ocp_versions)
+    )
+    catalog_gpu_versions = (
+        frozenset(raw_diffs.get(VERSION_GPU_OPERATOR, {}).values())
+        if needs_catalog
+        else frozenset()
+    )
+    catalog_ocp_versions = frozenset(active_ocp_versions) if needs_catalog else frozenset()
 
-    ocp_releases = list(ocp_versions.keys())
+    return ProfilePlan(
+        profile=profile,
+        old_versions=old_versions,
+        ocp_versions=ocp_versions,
+        raw_diffs=raw_diffs,
+        catalog_gpu_versions=catalog_gpu_versions,
+        catalog_ocp_versions=catalog_ocp_versions,
+    )
+
+
+def fetch_catalog_lookup(plans: list[ProfilePlan]) -> CatalogLookup:
+    """Fetch one catalog lookup containing the union of all profile requirements."""
+    gpu_versions = set().union(
+        *(plan.catalog_gpu_versions for plan in plans)
+    ) if plans else set()
+    ocp_versions = set().union(
+        *(plan.catalog_ocp_versions for plan in plans)
+    ) if plans else set()
+
+    if not gpu_versions or not ocp_versions:
+        return CatalogLookup(
+            entries=(),
+            gpu_versions=(),
+            ocp_versions=(),
+        )
+
+    logger.info(
+        f'Checking catalog availability for {len(gpu_versions)} GPU version(s) '
+        f'across {len(ocp_versions)} active OCP version(s)'
+    )
+    entries = fetch_gpu_operator_catalog_entries(
+        gpu_versions=sorted(gpu_versions),
+        ocp_versions=sorted(ocp_versions),
+        operator_package='gpu-operator-certified',
+    )
+    return CatalogLookup(
+        entries=tuple(entries),
+        gpu_versions=tuple(sorted(gpu_versions)),
+        ocp_versions=tuple(sorted(ocp_versions)),
+    )
+
+
+def finalize_profile(plan: ProfilePlan, catalog_lookup: CatalogLookup) -> ProfileUpdate:
+    """Apply a shared catalog lookup to one raw profile plan."""
+    profile = plan.profile
+    diffs = dict(plan.raw_diffs)
+    gpu_catalog_entries: list[dict] = []
+
+    if plan.catalog_gpu_versions and plan.catalog_ocp_versions:
+        filtered, gpu_catalog_entries = filter_new_gpu_versions_by_catalog(
+            diffs.get(VERSION_GPU_OPERATOR, {}),
+            plan.ocp_versions,
+            profile.support_matrix,
+            catalog_lookup.entries,
+        )
+        if filtered:
+            diffs[VERSION_GPU_OPERATOR] = filtered
+        else:
+            diffs.pop(VERSION_GPU_OPERATOR, None)
+
+    final_versions = apply_diffs(plan.old_versions, diffs)
+
+    ocp_releases = list(plan.ocp_versions.keys())
     # Use final_versions rather than the raw snapshot so commands are generated
     # only for channels actually tracked in this profile's version file.
     gpu_releases = get_latest_versions(
@@ -438,7 +496,7 @@ def prepare_profile(snapshot: dict, profile: Profile) -> ProfileUpdate:
     }
     new_gpu_channels = (
         set(final_versions[VERSION_GPU_OPERATOR])
-        - set(old_versions.get(VERSION_GPU_OPERATOR, {}))
+        - set(plan.old_versions.get(VERSION_GPU_OPERATOR, {}))
     )
     return ProfileUpdate(
         profile=profile,
@@ -472,9 +530,16 @@ def render_test_comments(
     comments: set[str],
     skipped_profiles: list[Profile],
     now: datetime,
+    catalog_lookup: CatalogLookup,
 ) -> list[str]:
     """Render aggregate warnings and non-actionable schedule information."""
     lines = [f'- {comment}' for comment in sorted(comments)]
+    if catalog_lookup.gpu_versions and catalog_lookup.ocp_versions:
+        lines.append(
+            f'- INFO: Checked GPU Operator catalog availability for versions '
+            f'{", ".join(catalog_lookup.gpu_versions)} across OCP '
+            f'{", ".join(catalog_lookup.ocp_versions)}.'
+        )
     lines.extend(
         f'- INFO: **{profile.name}** was not run because '
         f'{current_weekday_name(now)} is outside its configured weekdays '
@@ -498,17 +563,25 @@ def run(manifest: ProfileManifest, now: datetime | None = None) -> list[str]:
         _write_lines(manifest.tests_to_trigger_file_path, [])
         _write_lines(
             manifest.test_comments_file_path,
-            render_test_comments(set(), skipped_profiles, current_time),
+            render_test_comments(
+                set(),
+                skipped_profiles,
+                current_time,
+                CatalogLookup((), (), ()),
+            ),
         )
         _write_lines(manifest.new_gpu_channels_file, [])
         return active_names
 
     snapshot = discover_versions(manifest.request_timeout_sec)
 
-    updates: list[ProfileUpdate] = []
+    plans: list[ProfilePlan] = []
     for profile in active_profiles:
         logger.info(f'Calculating profile: {profile.name}')
-        updates.append(prepare_profile(snapshot, profile))
+        plans.append(prepare_profile(snapshot, profile))
+
+    catalog_lookup = fetch_catalog_lookup(plans)
+    updates = [finalize_profile(plan, catalog_lookup) for plan in plans]
 
     commands: set[str] = set()
     comments: set[str] = set()
@@ -523,7 +596,12 @@ def run(manifest: ProfileManifest, now: datetime | None = None) -> list[str]:
     _write_lines(manifest.tests_to_trigger_file_path, sorted(commands))
     _write_lines(
         manifest.test_comments_file_path,
-        render_test_comments(comments, skipped_profiles, current_time),
+        render_test_comments(
+            comments,
+            skipped_profiles,
+            current_time,
+            catalog_lookup,
+        ),
     )
     _write_lines(manifest.new_gpu_channels_file, sorted(new_gpu_channels))
     return active_names

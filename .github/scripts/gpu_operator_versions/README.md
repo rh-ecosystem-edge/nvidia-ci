@@ -106,9 +106,9 @@ The signed profile also sets:
 
 ### Schedules
 
-Profile activation is based only on the current UTC weekday. The profile manifest uses an explicit `active_weekdays` setting. Its value may be the case-insensitive special value `all`, or a nonempty list of common weekday spellings. Two-letter abbreviations, three-letter abbreviations, and full names are accepted case-insensitively; for example, `Su`, `Sun`, and `Sunday` are equivalent.
+Profile activation is based only on the current UTC weekday. The profile manifest uses an explicit `active_weekdays` list containing canonical three-letter abbreviations: `Mon`, `Tue`, `Wed`, `Thu`, `Fri`, `Sat`, and `Sun`. Values are case-sensitive, and no other spellings are accepted.
 
-- regular: `all`
+- regular: every day
 - signed: Tuesday through Thursday
 
 The workflow’s own cron schedule determines when the workflow starts. A profile runs only when the workflow is started **and** the profile is active for the current UTC weekday. In other words, the effective schedule is the intersection of the workflow schedule and the profile’s weekday list.
@@ -124,8 +124,10 @@ A manually dispatched run still respects the weekday restrictions configured in 
 The updater aggregates output from all active profiles:
 
 - `tests_to_trigger_file_path` contains only `/test` commands.
-- `test_comments_file_path` contains warnings and non-actionable schedule information.
+- `test_comments_file_path` contains warnings, shared catalog-lookup information, and non-actionable schedule information.
 - `new_gpu_channels_file` contains the union of newly detected GPU operator channels.
+
+Catalog availability is also aggregated. Each active profile first reports the GPU operator versions and active OpenShift versions it needs. The updater performs one shared catalog lookup for the union of those requirements, records that lookup in the aggregate comments, and passes the results back to every profile before it filters versions and generates test commands.
 
 The GitHub workflow consumes these generic outputs without knowing which profiles exist.
 

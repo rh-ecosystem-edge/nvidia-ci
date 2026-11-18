@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 import json
 import os
 from pathlib import Path
@@ -11,10 +12,25 @@ import re
 from typing import Iterable
 
 
+class Weekday(Enum):
+    """Canonical profile schedule weekdays."""
+
+    MONDAY = 'Mon'
+    TUESDAY = 'Tue'
+    WEDNESDAY = 'Wed'
+    THURSDAY = 'Thu'
+    FRIDAY = 'Fri'
+    SATURDAY = 'Sat'
+    SUNDAY = 'Sun'
+
+
+WEEKDAYS = tuple(Weekday)
+
+
 @dataclass(frozen=True)
 class Profile:
     name: str
-    active_weekdays: frozenset[str]
+    active_weekdays: frozenset[Weekday]
     version_file_path: str
     settings_file_path: str
     test_command_template: str
@@ -37,21 +53,6 @@ class ProfileManifest:
 COMMAND_PLACEHOLDER_RE = re.compile(r'\{([A-Za-z_][A-Za-z0-9_]*)\}')
 SUPPORTED_COMMAND_PLACEHOLDERS = {'ocp_version', 'gpu_version'}
 
-WEEKDAY_ABBREVIATIONS = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
-WEEKDAY_FULL_NAMES = (
-    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
-)
-WEEKDAY_ALIASES = {
-    'mo': 'Mon', 'mon': 'Mon', 'monday': 'Mon',
-    'tu': 'Tue', 'tue': 'Tue', 'tues': 'Tue', 'tuesday': 'Tue',
-    'we': 'Wed', 'wed': 'Wed', 'weds': 'Wed', 'wednesday': 'Wed',
-    'th': 'Thu', 'thu': 'Thu', 'thur': 'Thu', 'thurs': 'Thu', 'thursday': 'Thu',
-    'fr': 'Fri', 'fri': 'Fri', 'friday': 'Fri',
-    'sa': 'Sat', 'sat': 'Sat', 'saturday': 'Sat',
-    'su': 'Sun', 'sun': 'Sun', 'sunday': 'Sun',
-}
-
-
 def validate_test_command_template(template: str) -> None:
     """Validate placeholders in a profile's complete /test command template."""
     placeholders = set(COMMAND_PLACEHOLDER_RE.findall(template))
@@ -68,43 +69,26 @@ def _load_json(path: Path) -> dict:
         return json.load(json_file)
 
 
-def _normalize_weekday(token: str) -> str:
-    """Normalize a common weekday spelling to its three-letter form."""
-    if not isinstance(token, str):
-        raise ValueError(f'Invalid weekday: {token!r}. Expected a weekday or "all".')
-
-    normalized = WEEKDAY_ALIASES.get(token.lower())
-    if normalized is None:
+def _parse_active_weekdays(value: object, profile_name: str) -> frozenset[Weekday]:
+    """Parse a nonempty list of canonical weekday abbreviations."""
+    if not isinstance(value, list) or not value:
         raise ValueError(
-            f'Invalid weekday: {token!r}. Expected a common weekday spelling or "all".'
-        )
-    return normalized
-
-
-def _parse_active_weekdays(value: object, profile_name: str) -> frozenset[str]:
-    """Parse a weekday list, or the special value "all", into canonical weekdays."""
-    if isinstance(value, str):
-        tokens = [value]
-    elif isinstance(value, list):
-        tokens = value
-    else:
-        raise ValueError(
-            f'Profile {profile_name!r} active_weekdays must be "all" or a nonempty list'
+            f'Profile {profile_name!r} must define a nonempty active_weekdays list'
         )
 
-    if not tokens:
-        raise ValueError(f'Profile {profile_name!r} must define a nonempty active_weekdays list')
+    weekdays: list[Weekday] = []
+    for token in value:
+        try:
+            weekdays.append(Weekday(token))
+        except ValueError as exc:
+            raise ValueError(
+                f'Invalid weekday for profile {profile_name!r}: {token!r}. '
+                f'Expected one of: {", ".join(day.value for day in WEEKDAYS)}.'
+            ) from exc
 
-    if any(isinstance(token, str) and token.lower() == 'all' for token in tokens):
-        if len(tokens) != 1:
-            raise ValueError(f'Profile {profile_name!r} cannot combine "all" with other weekdays')
-        return frozenset(WEEKDAY_ABBREVIATIONS)
-
-    weekdays = [_normalize_weekday(token) for token in tokens]
     if len(weekdays) != len(set(weekdays)):
         raise ValueError(f'Profile {profile_name!r} contains duplicate active weekdays')
     return frozenset(weekdays)
-
 
 def load_profiles(manifest_path: str | Path) -> ProfileManifest:
     """Load all version-update profiles from a manifest."""
@@ -167,19 +151,19 @@ def load_profiles(manifest_path: str | Path) -> ProfileManifest:
     )
 
 
-def _current_weekday(now: datetime) -> str:
-    """Return the locale-independent three-letter weekday abbreviation."""
-    return WEEKDAY_ABBREVIATIONS[now.weekday()]
+def _current_weekday(now: datetime) -> Weekday:
+    """Return the locale-independent weekday for now."""
+    return WEEKDAYS[now.weekday()]
 
 
 def current_weekday_name(now: datetime) -> str:
     """Return the locale-independent full weekday name."""
-    return WEEKDAY_FULL_NAMES[now.weekday()]
+    return _current_weekday(now).name.capitalize()
 
 
-def format_weekdays(weekdays: Iterable[str]) -> str:
-    """Format canonical weekday abbreviations in weekday order."""
-    return ', '.join(sorted(weekdays, key=WEEKDAY_ABBREVIATIONS.index))
+def format_weekdays(weekdays: Iterable[Weekday]) -> str:
+    """Format weekdays in weekday order."""
+    return ', '.join(day.value for day in sorted(weekdays, key=WEEKDAYS.index))
 
 
 def profile_is_active(profile: Profile, now: datetime) -> bool:
