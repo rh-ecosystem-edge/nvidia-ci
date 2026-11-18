@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -55,6 +56,15 @@ func Run(ctx context.Context, options Options) error {
 
 func executeCommand(ctx context.Context, input []byte, environment []string, stdout io.Writer, name string, args ...string) ([]byte, error) {
 	command := exec.CommandContext(ctx, name, args...)
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.Cancel = func() error {
+		err := syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		if errors.Is(err, syscall.ESRCH) {
+			return os.ErrProcessDone
+		}
+
+		return err
+	}
 	command.Env = environment
 	command.Stdin = bytes.NewReader(input)
 	command.Stderr = os.Stderr
@@ -112,6 +122,9 @@ func (r runner) validate() error {
 	}
 	if r.options.Kubeconfig == "" {
 		return fmt.Errorf("kubeconfig must be supplied explicitly")
+	}
+	if len(filepath.SplitList(r.options.Kubeconfig)) > 1 {
+		return fmt.Errorf("kubeconfig must name a single file; list values are not supported")
 	}
 	if r.options.Action == actionApply && r.options.WaitForMCP &&
 		(r.options.PoolName == "" || r.options.StartTimeout <= 0 || r.options.RolloutTimeout <= 0) {
@@ -199,8 +212,12 @@ func decodeResources(data []byte) ([]unstructured.Unstructured, error) {
 		for len(pending) > 0 {
 			resource, pending = pending[0], pending[1:]
 			if resource.IsList() {
-				list, err := resource.ToList()
+				data, err := resource.MarshalJSON()
 				if err != nil {
+					return nil, err
+				}
+				var list unstructured.UnstructuredList
+				if err := list.UnmarshalJSON(data); err != nil {
 					return nil, err
 				}
 				pending = append(list.Items, pending...)
@@ -213,6 +230,11 @@ func decodeResources(data []byte) ([]unstructured.Unstructured, error) {
 
 func isMachineConfig(resource unstructured.Unstructured) bool {
 	return resource.GetAPIVersion() == "machineconfiguration.openshift.io/v1" && resource.GetKind() == machineConfigKind
+}
+
+func isPoolConfiguration(resource unstructured.Unstructured) bool {
+	return resource.GetAPIVersion() == "machineconfiguration.openshift.io/v1" &&
+		slices.Contains([]string{machineConfigKind, "KubeletConfig", "ContainerRuntimeConfig"}, resource.GetKind())
 }
 
 func isBatchCompanion(resource unstructured.Unstructured) bool {
@@ -285,7 +307,7 @@ func (r runner) applyResources(ctx context.Context, resources []unstructured.Uns
 		if isMachineConfig(resource) {
 			args = []string{commandCreate, "--save-config", "-f", "-"}
 		}
-		if err := r.changeResource(ctx, data, args...); err != nil {
+		if _, err := r.changeResource(ctx, data, args...); err != nil {
 			return err
 		}
 	}
@@ -293,11 +315,21 @@ func (r runner) applyResources(ctx context.Context, resources []unstructured.Uns
 	return nil
 }
 
-func (r runner) changeResource(ctx context.Context, data []byte, args ...string) error {
+func (r runner) changeResource(ctx context.Context, data []byte, args ...string) ([]byte, error) {
 	output, err := r.oc(ctx, data, args...)
 	fmt.Print(string(output))
 
-	return err
+	return output, err
+}
+
+func allUnchanged(output []byte) bool {
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if !strings.HasSuffix(line, " unchanged") {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (r runner) changeFiles(ctx context.Context, files []string) error {
@@ -310,14 +342,32 @@ func (r runner) changeFiles(ctx context.Context, files []string) error {
 		if err != nil {
 			return err
 		}
-		if err := r.changeResource(ctx, data, args...); err != nil {
+		previousTarget := ""
+		if r.options.Action == actionApply && r.options.WaitForMCP {
+			resources, err := decodeResources(data)
+			if err != nil {
+				return err
+			}
+			if slices.ContainsFunc(resources, isPoolConfiguration) {
+				pool, err := r.getPool(ctx)
+				if err != nil {
+					return err
+				}
+				previousTarget = pool.Spec.Configuration.Name
+			}
+		}
+		output, err := r.changeResource(ctx, data, args...)
+		if err != nil {
 			return err
 		}
 		if r.options.Action == actionDelete {
 			continue
 		}
 		if r.options.WaitForMCP {
-			if err := r.waitForRollout(ctx, ""); err != nil {
+			if allUnchanged(output) {
+				previousTarget = ""
+			}
+			if err := r.waitForRollout(ctx, "", previousTarget); err != nil {
 				return err
 			}
 		}

@@ -85,6 +85,9 @@ func TestStreamingCommandCancellationDoesNotWaitForBackgroundChild(t *testing.T)
 	case <-time.After(2 * time.Second):
 		t.Fatal("canceled hook is still waiting for its background child")
 	}
+	g.Expect(read.SetReadDeadline(time.Now().Add(time.Second))).To(Succeed())
+	_, err = read.Read(make([]byte, 1))
+	g.Expect(err).To(MatchError(io.EOF))
 }
 
 func TestUnsupportedKindsUseSequentialWaits(t *testing.T) {
@@ -171,4 +174,22 @@ func TestListsCannotHideMachineConfigs(t *testing.T) {
 	arguments, _, err := unstructured.NestedStringSlice(resources[0].Object, "spec", "kernelArguments")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(arguments).To(Equal([]string{"test"}))
+}
+
+func TestTypedListsInheritMissingItemTypes(t *testing.T) {
+	g := NewWithT(t)
+	resources, err := decodeResources([]byte(`{"apiVersion":"v1","kind":"List","items":[
+{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"MachineConfigList","items":[
+{"metadata":{"name":"inherited"},"spec":{"kernelArguments":["preserved"]}},
+{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"explicit"}}]}]}`))
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(resources).To(HaveLen(2))
+	g.Expect(isMachineConfig(resources[0])).To(BeTrue())
+	g.Expect(resources[0].GetName()).To(Equal("inherited"))
+	arguments, _, err := unstructured.NestedStringSlice(resources[0].Object, "spec", "kernelArguments")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(arguments).To(Equal([]string{"preserved"}))
+	g.Expect(resources[1].GetAPIVersion()).To(Equal("v1"))
+	g.Expect(resources[1].GetKind()).To(Equal("ConfigMap"))
+	g.Expect(resources[1].GetName()).To(Equal("explicit"))
 }

@@ -26,15 +26,19 @@ type operation struct {
 }
 
 type fakeCluster struct {
-	mode      string
-	pool      poolState
-	created   []string
-	waited    []string
-	changed   []string
-	events    []operation
-	cancel    context.CancelFunc
-	hook      func() error
-	renderErr error
+	mode           string
+	pool           poolState
+	created        []string
+	waited         []string
+	changed        []string
+	events         []operation
+	cancel         context.CancelFunc
+	hook           func() error
+	renderErr      error
+	startErr       error
+	applyUnchanged bool
+	afterApply     func()
+	beforePoolRead func()
 }
 
 func (f *fakeCluster) patch(data string) error {
@@ -108,6 +112,9 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ i
 			return nil, nil
 		}
 
+		if f.beforePoolRead != nil {
+			f.beforePoolRead()
+		}
 		return json.Marshal(f.pool)
 	case commandPatch:
 		return nil, f.patch(args[slices.Index(args, "-p")+1])
@@ -119,25 +126,40 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ i
 		if err != nil {
 			return nil, err
 		}
+		var output strings.Builder
 		for _, resource := range resources {
 			f.changed = append(f.changed, resource.GetName())
 			if isMachineConfig(resource) && args[0] != actionDelete {
 				f.created = append(f.created, resource.GetName())
 			}
+			status := "configured"
+			if f.applyUnchanged {
+				status = "unchanged"
+			}
+			fmt.Fprintf(&output, "%s/%s %s\n", resource.GetKind(), resource.GetName(), status)
 		}
 		if f.mode == "cancel-apply" && f.cancel != nil {
 			f.cancel()
 
 			return nil, ctx.Err()
 		}
+		if f.afterApply != nil {
+			f.afterApply()
+		}
+
+		return []byte(output.String()), nil
 	case commandWait:
 		condition := args[2]
+		if condition == "--for=condition=Updating=True" {
+			return nil, f.startErr
+		}
 		if _, remainder, ok := strings.Cut(condition, `@.name=="`); ok {
 			name, _, _ := strings.Cut(remainder, `"`)
 			if !f.pool.Spec.Paused || !slices.Contains(f.created, name) {
 				return nil, fmt.Errorf("invalid source wait: %s", condition)
 			}
 			f.waited = append(f.waited, name)
+			f.pool.Spec.Configuration.Source = append(f.pool.Spec.Configuration.Source, poolSource{Name: name})
 			if f.mode == "render-timeout" {
 				return nil, errSimulated
 			}
