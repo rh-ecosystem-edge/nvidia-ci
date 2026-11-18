@@ -1,7 +1,7 @@
 name: Check for new versions
 on:
   schedule:
-    - cron: '0 0 * * 0-5'
+    - cron: '0 0 * * 2-5'
   workflow_dispatch:
     inputs:
       branch:
@@ -112,13 +112,7 @@ jobs:
           TEST_TRIGGERS: ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
           TEST_TRIGGERS_SIGNED: ${{ steps.read_signed_tests.outputs.TEST_TRIGGERS_SIGNED }}
         run: |
-          DAY_OF_WEEK=$(date +%u)
-          if [ "${DAY_OF_WEEK}" -ge 2 ] && [ "${DAY_OF_WEEK}" -le 5 ]; then
-            ALL_TRIGGERS="${TEST_TRIGGERS}"$'\n'"${TEST_TRIGGERS_SIGNED}"
-          else
-            echo "Skipping signed/precompiled tests (only triggered Tue-Fri)."
-            ALL_TRIGGERS="${TEST_TRIGGERS}"
-          fi
+          ALL_TRIGGERS="${TEST_TRIGGERS}"$'\n'"${TEST_TRIGGERS_SIGNED}"
           if [ -z "${ALL_TRIGGERS//[[:space:]]/}" ]; then
             echo "No test triggers to comment; skipping."
             exit 0
@@ -158,124 +152,6 @@ jobs:
                 console.log(`Issue already exists for channel v${channel}: #${existingIssue.number}`);
               }
             }
-
-      - name: Tuesday catch-up for weekend-skipped signed tests
-        env:
-          GH_TOKEN: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
-          CURRENT_PR: ${{ steps.create-pr.outputs.pull-request-number }}
-        run: |
-          DAY_OF_WEEK=$(date +%u)
-          if [ "${DAY_OF_WEEK}" -ne 2 ]; then
-            exit 0
-          fi
-
-          echo "Tuesday catch-up: looking for weekend/Monday PRs missing signed tests..."
-          CUTOFF=$(date -d '3 days ago' +%Y-%m-%d)
-          SEARCH="in:title \"[Automatic] Update versions\" created:>=${CUTOFF}"
-
-          # Collect triggers already posted on today's PR (if any) for deduplication
-          TUESDAY_TRIGGERS=""
-          if [ -n "${CURRENT_PR}" ]; then
-            TUESDAY_TRIGGERS=$(gh pr view "${CURRENT_PR}" --json comments --jq '.comments[].body' 2>/dev/null || true)
-          fi
-
-          ALL_MERGED_TRIGGERS=""
-          MERGED_SOURCE_PRS=""
-
-          for STATE in open merged; do
-            PRS=$(gh pr list --search "${SEARCH}" --state "${STATE}" --json number --jq '.[].number')
-
-            for PR in ${PRS}; do
-              if [ -n "${CURRENT_PR}" ] && [ "${PR}" = "${CURRENT_PR}" ]; then
-                continue
-              fi
-
-              # Extract signed /test commands from the PR description
-              TRIGGERS=$(gh pr view "${PR}" --json body --jq '.body' | grep -oE '/test [^ ]*-signed' || true)
-              if [ -z "${TRIGGERS}" ]; then
-                continue
-              fi
-
-              # Remove triggers already posted as comments on this PR
-              PR_COMMENTS=$(gh pr view "${PR}" --json comments --jq '.comments[].body')
-              TRIGGERS=$(echo "${TRIGGERS}" | while read -r line; do
-                [ -z "${line}" ] && continue
-                echo "${PR_COMMENTS}" | grep -qF "${line}" || echo "${line}"
-              done)
-              if [ -z "${TRIGGERS}" ]; then
-                echo "PR #${PR}: all signed triggers already posted."
-                continue
-              fi
-
-              # Remove triggers already covered by today's Tuesday PR
-              if [ -n "${TUESDAY_TRIGGERS}" ]; then
-                TRIGGERS=$(echo "${TRIGGERS}" | while read -r line; do
-                  [ -z "${line}" ] && continue
-                  echo "${TUESDAY_TRIGGERS}" | grep -qF "${line}" || echo "${line}"
-                done)
-              fi
-              if [ -z "${TRIGGERS}" ]; then
-                echo "PR #${PR}: all signed triggers already covered by Tuesday PR #${CURRENT_PR}."
-                continue
-              fi
-
-              if [ "${STATE}" = "open" ]; then
-                echo "Posting signed triggers on open weekend PR #${PR}"
-                gh pr comment "${PR}" --body "${TRIGGERS}"
-              else
-                echo "Collecting signed triggers from merged weekend PR #${PR}"
-                ALL_MERGED_TRIGGERS=$(printf '%s\n%s' "${ALL_MERGED_TRIGGERS}" "${TRIGGERS}")
-                MERGED_SOURCE_PRS="${MERGED_SOURCE_PRS} #${PR}"
-              fi
-            done
-          done
-
-          # Deduplicate and create a single catch-up PR for all merged weekend PRs
-          ALL_MERGED_TRIGGERS=$(echo "${ALL_MERGED_TRIGGERS}" | grep -v '^$' | sort -u)
-          if [ -z "${ALL_MERGED_TRIGGERS}" ]; then
-            echo "No merged weekend PRs need signed test catch-up."
-            exit 0
-          fi
-
-          MERGED_SOURCE_PRS=$(echo "${MERGED_SOURCE_PRS}" | xargs)
-          echo "Creating single catch-up PR for merged weekend PRs: ${MERGED_SOURCE_PRS}"
-          BRANCH="update-versions/${{ github.run_id }}-signed-tuesday"
-
-          # Reuse existing catch-up PR if one already exists (e.g., workflow re-run)
-          CATCHUP_NUMBER=$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number' 2>/dev/null || true)
-
-          if [ -z "${CATCHUP_NUMBER}" ]; then
-            MAIN_SHA=$(gh api repos/{owner}/{repo}/git/ref/heads/main --jq '.object.sha')
-
-            if ! gh api repos/{owner}/{repo}/git/ref/heads/"${BRANCH}" > /dev/null 2>&1; then
-              TREE_SHA=$(gh api repos/{owner}/{repo}/git/commits/"${MAIN_SHA}" --jq '.tree.sha')
-              COMMIT_SHA=$(gh api repos/{owner}/{repo}/git/commits -X POST \
-                -f message="Signed test catch-up for weekend PRs ${MERGED_SOURCE_PRS}" \
-                -f "tree=${TREE_SHA}" -f "parents[]=${MAIN_SHA}" --jq '.sha')
-              gh api repos/{owner}/{repo}/git/refs -X POST \
-                -f ref="refs/heads/${BRANCH}" -f sha="${COMMIT_SHA}"
-            else
-              BRANCH_SHA=$(gh api repos/{owner}/{repo}/git/ref/heads/"${BRANCH}" --jq '.object.sha')
-              if [ "${BRANCH_SHA}" = "${MAIN_SHA}" ]; then
-                TREE_SHA=$(gh api repos/{owner}/{repo}/git/commits/"${MAIN_SHA}" --jq '.tree.sha')
-                COMMIT_SHA=$(gh api repos/{owner}/{repo}/git/commits -X POST \
-                  -f message="Signed test catch-up for weekend PRs ${MERGED_SOURCE_PRS}" \
-                  -f "tree=${TREE_SHA}" -f "parents[]=${MAIN_SHA}" --jq '.sha')
-                gh api repos/{owner}/{repo}/git/refs/heads/"${BRANCH}" -X PATCH \
-                  -f sha="${COMMIT_SHA}"
-              fi
-            fi
-
-            PR_BODY=$(printf 'Catch-up PR for signed tests skipped on weekend PRs %s.\n\nSigned triggers:\n```\n%s\n```' "${MERGED_SOURCE_PRS}" "${ALL_MERGED_TRIGGERS}")
-            CATCHUP_URL=$(gh pr create \
-              --title "[Automatic] Update versions, run ID: ${{ github.run_id }} / signed_tuesday" \
-              --body "${PR_BODY}" \
-              --base main --head "${BRANCH}")
-            CATCHUP_NUMBER=$(echo "${CATCHUP_URL}" | grep -oE '[0-9]+$')
-          fi
-
-          echo "Posting signed triggers on catch-up PR #${CATCHUP_NUMBER}"
-          gh pr comment "${CATCHUP_NUMBER}" --body "${ALL_MERGED_TRIGGERS}"
 
       - name: Notify on failure
         if: failure()

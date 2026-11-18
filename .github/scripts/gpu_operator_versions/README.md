@@ -89,7 +89,7 @@ The same `update_versions.py` script runs twice: once for regular tests (using `
 
 The `signed_settings.json` also uses a stricter `ignored_versions_regex` to limit OCP versions to 4.20+ (only versions with signed CI jobs in the release repo).
 
-Signed/precompiled test commands are only commented on PRs Monday through Thursday. On Fridays and Sundays (the workflow does not run on Saturdays), only regular tests are triggered. Version tracking still runs on all scheduled days so no updates are missed.
+The version-update workflow is scheduled Tuesday through Friday and comments with both regular and signed/precompiled test commands. No weekend catch-up is needed.
 
 ## Data Sources
 
@@ -137,5 +137,5 @@ PYTHONPATH=.github/scripts python -m pytest .github/scripts/gpu_operator_version
 
 ## GitHub Actions Integration
 
-- **Scheduled**: Runs nightly to check for new versions and creates pull requests when updates are detected
+- **Scheduled**: Runs Tuesday through Friday to check for new versions and creates pull requests when updates are detected
 - **Manual**: Can be triggered manually via GitHub Actions workflow dispatch
