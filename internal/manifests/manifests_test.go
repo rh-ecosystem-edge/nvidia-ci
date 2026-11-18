@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-const noRenderMessage = "has not rendered the changed pool inputs"
+const noRenderMessage = "render confirmation"
 
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
@@ -53,16 +53,21 @@ spec:
 	options := Options{
 		Action: actionApply, Directory: directory, Kubeconfig: "/explicit/kubeconfig", PoolName: "worker",
 		Variables:  map[string]string{"RULES_BASE64": "dGVzdA=="},
-		WaitForMCP: true, BatchMCP: true, StartTimeout: time.Minute, RolloutTimeout: time.Hour,
+		WaitForMCP: true, BatchMCP: true, StartTimeout: time.Minute, RolloutTimeout: 20 * time.Millisecond,
 	}
 	cluster := &fakeCluster{mode: mode}
 	cluster.pool.Name = options.PoolName
+	cluster.pool.Labels = map[string]string{"pool": "worker"}
 	cluster.pool.Generation, cluster.pool.ResourceVersion = 1, "1"
 	cluster.pool.Spec.Configuration.Name = oldConfiguration
 	cluster.pool.Spec.MachineConfigSelector = &metav1.LabelSelector{MatchLabels: map[string]string{"role": "worker"}}
 	cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
 	cluster.pool.Status.ObservedGeneration = 1
 	cluster.pool.Status.Conditions = []metav1.Condition{{Type: "Updated", Status: metav1.ConditionTrue}}
+	base := unstructured.Unstructured{Object: map[string]any{"apiVersion": "machineconfiguration.openshift.io/v1", "kind": machineConfigKind}}
+	base.SetName("00-base")
+	base.SetLabels(map[string]string{"role": "worker"})
+	cluster.store(base)
 
 	return runner{options: options, command: cluster.command}, cluster
 }
@@ -100,14 +105,14 @@ func TestFreshBatchIncludesAdditionalManifests(t *testing.T) {
 			if event.args[2] == "--for=condition=Updating=True" {
 				starts++
 			}
-		case "get":
+		case commandGet:
 			if lastSource >= 0 && event.paused {
 				capture = index
 			}
 		}
 	}
 	g.Expect(cluster.changed).To(Equal([]string{"first", "second", "settings", "extra", "extra-settings"}))
-	if patches != 2 || starts != 1 || lastSource < 0 || lastSource >= capture || capture >= resume {
+	if patches != 2 || starts != 0 || lastSource < 0 || lastSource >= capture || capture >= resume {
 		t.Fatalf("bad ordering: patches=%d starts=%d source=%d capture=%d resume=%d",
 			patches, starts, lastSource, capture, resume)
 	}
@@ -160,7 +165,7 @@ func TestExistingConfigsUseSequentialWaits(t *testing.T) {
 		}
 	}
 	g.Expect(applies).To(BeNumerically(">", 0))
-	g.Expect(starts).To(Equal(applies))
+	g.Expect(starts).To(Equal(1))
 }
 
 func TestRequiredInputsDoNotReadAmbientEnvironment(t *testing.T) {
@@ -290,7 +295,8 @@ func TestSequentialChangesRequireRenderEvidence(t *testing.T) {
 		{name: "render-failure", kind: machineConfigKind, degraded: true, message: "render failed: invalid config"},
 		{name: "unprocessed-change", kind: machineConfigKind, message: noRenderMessage},
 		{name: "updating-but-old-render", kind: machineConfigKind, observedStart: true, message: noRenderMessage},
-		{name: "unchanged", kind: machineConfigKind, unchanged: true},
+		{name: "unchanged-pending-render", kind: machineConfigKind, unchanged: true, message: noRenderMessage},
+		{name: "unchanged-settled-render", kind: machineConfigKind, unchanged: true, rendered: true},
 		{name: "fast-rollout", kind: machineConfigKind, rendered: true},
 		{name: "repair-degraded-config", kind: machineConfigKind, initiallyDegraded: true, rendered: true},
 		{name: "unchanged-but-degraded", kind: machineConfigKind, unchanged: true, degraded: true, message: "render failed: invalid config"},
@@ -303,6 +309,9 @@ func TestSequentialChangesRequireRenderEvidence(t *testing.T) {
 			r.options.BatchMCP = false
 			r.options.Directory = t.TempDir()
 			contents := "apiVersion: machineconfiguration.openshift.io/v1\nkind: " + test.kind + "\nmetadata:\n  name: config\n  labels:\n    role: worker\n"
+			if test.kind != machineConfigKind {
+				contents += "spec:\n  machineConfigPoolSelector:\n    matchLabels:\n      pool: worker\n"
+			}
 			writeFile(t, filepath.Join(r.options.Directory, "config.yaml"), contents)
 			if test.unchanged {
 				resources, err := decodeResources([]byte(contents))
@@ -327,6 +336,7 @@ func TestSequentialChangesRequireRenderEvidence(t *testing.T) {
 						metav1.Condition{Type: "RenderDegraded", Status: metav1.ConditionTrue, Message: "invalid config"})
 				}
 				if test.rendered {
+					cluster.holdRender = false
 					cluster.pool.Spec.Configuration.Name = newConfiguration
 					cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
 				}
@@ -386,7 +396,8 @@ data:
 			writeFile(t, sibling(path, ".sh"), "hook")
 			hookRan := false
 			cluster.hook = func() error { hookRan = true; return nil }
-			cluster.holdRender, cluster.startErr = true, errSimulated
+			cluster.holdRender, cluster.startErr = test.poolChanged, errSimulated
+			cluster.reuseTarget = !test.poolChanged
 			err = r.run(t.Context())
 			if test.poolChanged {
 				g.Expect(err).To(MatchError(ContainSubstring(noRenderMessage)))
@@ -443,7 +454,8 @@ func TestMetadataChangesUseActualRenderInputs(t *testing.T) {
 			}
 			cluster.store(*before)
 			cluster.mutateApplied = test.admit
-			cluster.holdRender, cluster.startErr = true, errSimulated
+			cluster.holdRender, cluster.startErr = test.needsRender, errSimulated
+			cluster.reuseTarget = !test.needsRender
 			data, err := desired.MarshalJSON()
 			g.Expect(err).NotTo(HaveOccurred())
 			writeFile(t, filepath.Join(r.options.Directory, "config.yaml"), string(data))
@@ -527,4 +539,132 @@ func TestCleanupKeepsCancellationAndResumeError(t *testing.T) {
 	g.Expect(errors.Is(err, errSimulated)).To(BeTrue())
 	g.Expect(err).To(MatchError(ContainSubstring("check the pool before retrying")))
 	g.Expect(cluster.pool.Spec.Paused).To(BeTrue())
+}
+
+func TestRenderConfirmationPrecedesHooks(t *testing.T) {
+	for _, test := range []struct {
+		name                          string
+		unchanged, unrelated, confirm bool
+	}{
+		{name: "retry-before-render", unchanged: true},
+		{name: "unrelated-concurrent-render", unrelated: true},
+		{name: "effective-no-op", confirm: true},
+		{name: "unchanged-and-confirmed", unchanged: true, confirm: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			g := NewWithT(t)
+			r, cluster := testRunner(t, "")
+			r.options.Directory, r.options.BatchMCP = t.TempDir(), false
+			contents := `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"MachineConfig","metadata":{"name":"input","labels":{"role":"worker"}},"spec":{"kernelArguments":["requested"]}}`
+			if test.unchanged {
+				resources, err := decodeResources([]byte(contents))
+				g.Expect(err).NotTo(HaveOccurred())
+				cluster.store(resources[0])
+			}
+			path := filepath.Join(r.options.Directory, "input.yaml")
+			writeFile(t, path, contents)
+			writeFile(t, sibling(path, ".sh"), "hook")
+			hookRan := false
+			cluster.hook = func() error { hookRan = true; return nil }
+			cluster.holdRender, cluster.reuseTarget = !test.confirm, true
+			cluster.afterApply = func() {
+				if test.unrelated {
+					cluster.pool.Spec.Configuration.Name = "rendered-concurrent"
+					cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
+				}
+			}
+			err := r.run(t.Context())
+			if test.confirm {
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(cluster.pool.Spec.Configuration.Name).To(Equal(oldConfiguration))
+			} else {
+				g.Expect(err).To(MatchError(ContainSubstring(noRenderMessage)))
+			}
+			g.Expect(hookRan).To(Equal(test.confirm))
+			for _, resource := range cluster.objects {
+				g.Expect(resource.GetName()).NotTo(HavePrefix("zz-nvidia-ci-render-"))
+			}
+		})
+	}
+}
+
+func TestGeneratedInputsRespectPoolSelection(t *testing.T) {
+	for _, kind := range []string{"KubeletConfig", "ContainerRuntimeConfig"} {
+		for _, test := range []struct {
+			name, before, after string
+			pending, confirm    bool
+		}{
+			{name: "other-pool", before: "master", after: "master"},
+			{name: "this-pool", before: "worker", after: "worker", confirm: true},
+			{name: "leaving-pool", before: "worker", after: "master", confirm: true},
+			{name: "pending-generation", before: "worker", after: "worker", pending: true},
+		} {
+			t.Run(kind+"/"+test.name, func(t *testing.T) {
+				g := NewWithT(t)
+				r, cluster := testRunner(t, "")
+				r.options.Directory = t.TempDir()
+				resource := unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "machineconfiguration.openshift.io/v1", "kind": kind,
+					"metadata": map[string]any{"name": "generated"},
+					"spec": map[string]any{"machineConfigPoolSelector": map[string]any{"matchExpressions": []any{map[string]any{
+						"key": "pool", "operator": "In", "values": []any{test.before},
+					}}}},
+				}}
+				resource.SetGeneration(1)
+				cluster.store(resource)
+				resource.Object["spec"] = map[string]any{"machineConfigPoolSelector": map[string]any{"matchLabels": map[string]any{"pool": test.after}}}
+				data, err := resource.MarshalJSON()
+				g.Expect(err).NotTo(HaveOccurred())
+				writeFile(t, filepath.Join(r.options.Directory, "config.yaml"), string(data))
+				cluster.holdGenerated = test.pending
+				err = r.run(t.Context())
+				if cluster.holdGenerated {
+					g.Expect(err).To(MatchError(ContainSubstring("status.observedGeneration")))
+				} else {
+					g.Expect(err).NotTo(HaveOccurred())
+				}
+				confirmed := false
+				for _, event := range cluster.events {
+					confirmed = confirmed || event.args[0] == commandCreate
+				}
+				g.Expect(confirmed).To(Equal(test.confirm))
+			})
+		}
+	}
+}
+
+func TestLatePauseCannotOutliveCleanup(t *testing.T) {
+	for _, lateWins := range []bool{false, true} {
+		t.Run(map[bool]string{false: "fence-first", true: "pause-after-cleanup-read"}[lateWins], func(t *testing.T) {
+			g := NewWithT(t)
+			r, cluster := testRunner(t, "")
+			var pending string
+			attemptedLateCommit := false
+			r.command = func(ctx context.Context, input []byte, environment []string, stdout io.Writer, name string, args ...string) ([]byte, error) {
+				if name == "oc" && args[0] == commandPatch && pending == "" {
+					pending = args[slices.Index(args, "-p")+1]
+					return nil, errSimulated
+				}
+				output, err := cluster.command(ctx, input, environment, stdout, name, args...)
+				if name == "oc" && pending != "" && !attemptedLateCommit &&
+					((lateWins && args[0] == commandGet) || (!lateWins && args[0] == commandPatch)) {
+					attemptedLateCommit = true
+					lateErr := cluster.patch(pending)
+					if lateWins {
+						g.Expect(lateErr).NotTo(HaveOccurred())
+					} else {
+						g.Expect(lateErr).To(MatchError(ContainSubstring("resourceVersion")))
+					}
+				}
+				return output, err
+			}
+			err := r.run(t.Context())
+			g.Expect(errors.Is(err, errSimulated)).To(BeTrue())
+			g.Expect(err.Error()).NotTo(ContainSubstring("could not resume"))
+			g.Expect(attemptedLateCommit).To(BeTrue())
+			g.Expect(cluster.pool.Spec.Paused).To(BeFalse())
+			g.Expect(cluster.pool.Annotations).NotTo(HaveKey(pauseOwner))
+			g.Expect(cluster.changed).To(BeEmpty())
+		})
+	}
 }

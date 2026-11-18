@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 const (
@@ -39,6 +42,8 @@ type fakeCluster struct {
 	startErr       error
 	objects        map[string]unstructured.Unstructured
 	holdRender     bool
+	holdGenerated  bool
+	reuseTarget    bool
 	afterApply     func()
 	mutateApplied  func(*unstructured.Unstructured)
 	beforePoolRead func()
@@ -76,6 +81,8 @@ func (f *fakeCluster) patch(data string) error {
 	if wasPaused && f.mode == "resume-error" {
 		return errSimulated
 	}
+	version, _ := strconv.Atoi(f.pool.ResourceVersion)
+	updated.ResourceVersion = strconv.Itoa(version + 1)
 	f.pool = updated
 	if !wasPaused && f.pool.Spec.Paused {
 		if f.mode == "foreign-owner" {
@@ -113,7 +120,20 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ i
 		return nil, fmt.Errorf("unexpected command or implicit kubeconfig: %s %v", name, args)
 	}
 	switch args[0] {
-	case "get":
+	case commandGet:
+		if args[1] == "machineconfig" {
+			selector, err := labels.Parse(args[slices.Index(args, "-l")+1])
+			if err != nil {
+				return nil, err
+			}
+			list := unstructured.UnstructuredList{Object: map[string]any{"apiVersion": "v1", "kind": "List"}}
+			for _, resource := range f.objects {
+				if isMachineConfig(resource) && selector.Matches(labels.Set(resource.GetLabels())) {
+					list.Items = append(list.Items, resource)
+				}
+			}
+			return list.MarshalJSON()
+		}
 		if strings.HasPrefix(args[1], "machineconfig/") {
 			if f.mode == "existing" {
 				return []byte(args[1]), nil
@@ -136,6 +156,13 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ i
 	case commandPatch:
 		return nil, f.patch(args[slices.Index(args, "-p")+1])
 	case actionApply, commandCreate, actionDelete:
+		if args[0] == actionDelete && strings.HasPrefix(args[1], "machineconfig/zz-nvidia-ci-render-") {
+			marker := strings.TrimPrefix(args[1], "machineconfig/")
+			delete(f.objects, "machineconfig.machineconfiguration.openshift.io/"+marker)
+			f.pool.Spec.Configuration.Source = slices.DeleteFunc(f.pool.Spec.Configuration.Source, func(source poolSource) bool { return source.Name == marker })
+			f.pool.Status.Configuration = f.pool.Spec.Configuration
+			return nil, nil
+		}
 		if f.mode == "apply-fail" || (args[0] == commandCreate && f.mode == "create-race") {
 			return nil, errSimulated
 		}
@@ -144,28 +171,43 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ i
 			return nil, err
 		}
 		var output strings.Builder
-		for _, resource := range resources {
+		for index := range resources {
+			resource := &resources[index]
+			if strings.HasPrefix(resource.GetName(), "zz-nvidia-ci-render-") {
+				f.store(*resource)
+				if !f.holdRender {
+					f.pool.Spec.Configuration.Source = append(f.pool.Spec.Configuration.Source, poolSource{Name: resource.GetName()})
+					f.pool.Status.Configuration = f.pool.Spec.Configuration
+				}
+				continue
+			}
+			previous := f.objects[poolResourceName(*resource)]
 			if resource.GetUID() == "" {
-				previous := f.objects[poolResourceName(resource)]
 				resource.SetUID(previous.GetUID())
+				if resource.GetUID() == "" {
+					resource.SetUID("uid-" + previous.GetUID())
+				}
+			}
+			resource.SetGeneration(previous.GetGeneration())
+			if previous.Object == nil || !reflect.DeepEqual(previous.Object["spec"], resource.Object["spec"]) {
+				resource.SetGeneration(resource.GetGeneration() + 1)
 			}
 			if f.mutateApplied != nil {
-				f.mutateApplied(&resource)
+				f.mutateApplied(resource)
 			}
 			f.changed = append(f.changed, resource.GetName())
-			if isMachineConfig(resource) && args[0] != actionDelete {
+			if isMachineConfig(*resource) && args[0] != actionDelete {
 				f.created = append(f.created, resource.GetName())
 			}
-			f.store(resource)
-			if !f.pool.Spec.Paused && !f.holdRender && isPoolConfiguration(resource) {
+			if isPoolConfiguration(*resource) && !isMachineConfig(*resource) && !f.holdGenerated {
+				resource.Object["status"] = map[string]any{"observedGeneration": resource.GetGeneration(), "conditions": []any{map[string]any{"type": "Success", "status": "True"}}}
+			}
+			f.store(*resource)
+			if !f.pool.Spec.Paused && !f.holdRender && !f.reuseTarget && isPoolConfiguration(*resource) {
 				f.pool.Spec.Configuration.Name = newConfiguration + "-" + resource.GetName()
 				f.pool.Status.Configuration = f.pool.Spec.Configuration
 			}
-			if slices.Contains(args, "json") {
-				if err := json.NewEncoder(&output).Encode(resource.Object); err != nil {
-					return nil, err
-				}
-			} else {
+			if !slices.Contains(args, "json") {
 				fmt.Fprintf(&output, "%s/%s configured\n", resource.GetKind(), resource.GetName())
 			}
 		}
@@ -174,18 +216,36 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ i
 
 			return nil, ctx.Err()
 		}
-		if f.afterApply != nil {
+		if f.afterApply != nil && !strings.HasPrefix(resources[0].GetName(), "zz-nvidia-ci-render-") {
 			f.afterApply()
+		}
+		if slices.Contains(args, "json") {
+			if len(resources) == 1 {
+				return resources[0].MarshalJSON()
+			}
+			return json.Marshal(map[string]any{"apiVersion": "v1", "kind": "List", "items": resources})
 		}
 
 		return []byte(output.String()), nil
 	case commandWait:
 		condition := args[2]
+		if !strings.HasPrefix(args[1], "mcp/") {
+			if f.holdGenerated {
+				return nil, errSimulated
+			}
+			return nil, nil
+		}
 		if condition == "--for=condition=Updating=True" {
 			return nil, f.startErr
 		}
 		if _, remainder, ok := strings.Cut(condition, `@.name=="`); ok {
 			name, _, _ := strings.Cut(remainder, `"`)
+			if strings.HasPrefix(name, "zz-nvidia-ci-render-") {
+				if !f.pool.Spec.Configuration.hasSource(name) {
+					return nil, errSimulated
+				}
+				return nil, nil
+			}
 			if !f.pool.Spec.Paused || !slices.Contains(f.created, name) {
 				return nil, fmt.Errorf("invalid source wait: %s", condition)
 			}

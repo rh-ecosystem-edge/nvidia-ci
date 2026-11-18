@@ -92,12 +92,12 @@ func TestStreamingCommandCancellationDoesNotWaitForBackgroundChild(t *testing.T)
 
 func TestUnsupportedKindsUseSequentialWaits(t *testing.T) {
 	for _, test := range []struct{ name, resource string }{
-		{"kubelet", `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"KubeletConfig","metadata":{"name":"kubelet"}}`},
-		{"runtime", `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"ContainerRuntimeConfig","metadata":{"name":"runtime"}}`},
+		{"kubelet", `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"KubeletConfig","metadata":{"name":"kubelet"},"spec":{"machineConfigPoolSelector":{"matchLabels":{"pool":"worker"}}}}`},
+		{"runtime", `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"ContainerRuntimeConfig","metadata":{"name":"runtime"},"spec":{"machineConfigPoolSelector":{"matchLabels":{"pool":"worker"}}}}`},
 		{"custom", `{"apiVersion":"example.com/v1","kind":"MachineConfig","metadata":{"name":"custom"}}`},
 		{"mixed-list", `{"apiVersion":"v1","kind":"List","items":[
-{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"MachineConfig","metadata":{"name":"first"}},
-{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"KubeletConfig","metadata":{"name":"kubelet"}}]}`},
+{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"MachineConfig","metadata":{"name":"first","labels":{"role":"worker"}}},
+{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"KubeletConfig","metadata":{"name":"kubelet"},"spec":{"machineConfigPoolSelector":{"matchLabels":{"pool":"worker"}}}}]}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
@@ -107,7 +107,10 @@ func TestUnsupportedKindsUseSequentialWaits(t *testing.T) {
 			g.Expect(r.run(t.Context())).To(Succeed())
 			applies, waits := 0, 0
 			for _, event := range cluster.events {
-				g.Expect(event.args[0]).NotTo(BeElementOf(commandPatch, commandCreate))
+				g.Expect(event.args[0]).NotTo(Equal(commandPatch))
+				if event.args[0] == commandCreate {
+					g.Expect(string(event.input)).To(ContainSubstring("zz-nvidia-ci-render-"))
+				}
 				switch event.args[0] {
 				case actionApply:
 					applies++

@@ -24,6 +24,7 @@ const (
 	actionApply       = "apply"
 	actionDelete      = "delete"
 	commandCreate     = "create"
+	commandGet        = "get"
 	commandPatch      = "patch"
 	commandWait       = "wait"
 )
@@ -279,7 +280,7 @@ func (r runner) prepareBatch(ctx context.Context, files []string) (*batch, error
 				continue
 			}
 			name := resource.GetName()
-			existing, err := r.oc(ctx, nil, "get", "machineconfig/"+name, "--ignore-not-found", "-o", "name")
+			existing, err := r.oc(ctx, nil, commandGet, "machineconfig/"+name, "--ignore-not-found", "-o", "name")
 			if err != nil {
 				return nil, err
 			}
@@ -336,11 +337,7 @@ func (r runner) applyFile(ctx context.Context, data []byte) error {
 			return err
 		}
 
-		return r.waitForRollout(ctx, "", "")
-	}
-	selector, err := poolSelector(pool)
-	if err != nil {
-		return err
+		return r.waitForRollout(ctx, "")
 	}
 	output, err := r.oc(ctx, data, actionApply, "-f", "-", "-o", "json")
 	if err != nil {
@@ -357,20 +354,32 @@ func (r runner) applyFile(ctx context.Context, data []byte) error {
 			after[poolResourceName(resource)] = resource
 		}
 	}
-	changed := false
+	affected := false
 	for name, resource := range before {
 		updated, found := after[name]
 		if !found {
 			return fmt.Errorf("apply response is missing %s", name)
 		}
-		changed = changed || !samePoolInput(resource, updated, selector)
+		selectedInput := false
+		for _, input := range []unstructured.Unstructured{resource, updated} {
+			selected, err := targetsPool(input, pool)
+			if err != nil {
+				return fmt.Errorf("%s pool selector: %w", name, err)
+			}
+			selectedInput = selectedInput || selected
+		}
+		affected = affected || selectedInput
+		if selectedInput && !isMachineConfig(updated) {
+			if err := r.waitForGeneratedInput(ctx, updated); err != nil {
+				return err
+			}
+		}
 	}
-	previousTarget := pool.Spec.Configuration.Name
-	if !changed {
-		previousTarget = ""
+	if affected {
+		return r.confirmRenderedInputs(ctx, pool)
 	}
-
-	return r.waitForRollout(ctx, "", previousTarget)
+	_, err = r.getSettledPool(ctx)
+	return err
 }
 
 func (r runner) changeFiles(ctx context.Context, files []string) error {

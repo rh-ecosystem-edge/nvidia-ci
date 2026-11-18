@@ -15,6 +15,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 const (
@@ -56,7 +58,7 @@ type patchOperation struct {
 }
 
 func (r runner) getPool(ctx context.Context) (*poolState, error) {
-	data, err := r.oc(ctx, nil, "get", "mcp/"+r.options.PoolName, "-o", "json")
+	data, err := r.oc(ctx, nil, commandGet, "mcp/"+r.options.PoolName, "-o", "json")
 	if err != nil {
 		return nil, err
 	}
@@ -94,30 +96,24 @@ func poolSelector(pool *poolState) (labels.Selector, error) {
 	return selector, nil
 }
 
-func samePoolInput(before, after unstructured.Unstructured, selector labels.Selector) bool {
-	if isMachineConfig(after) {
-		selectedBefore := before.Object != nil && selector.Matches(labels.Set(before.GetLabels()))
-		selectedAfter := selector.Matches(labels.Set(after.GetLabels()))
-		if selectedBefore != selectedAfter {
-			return false
-		}
-		if !selectedBefore {
-			return true
-		}
+func targetsPool(resource unstructured.Unstructured, pool *poolState) (bool, error) {
+	if resource.Object == nil {
+		return false, nil
 	}
-	if before.Object == nil || before.GetUID() != after.GetUID() ||
-		!reflect.DeepEqual(before.Object["spec"], after.Object["spec"]) {
-		return false
+	if isMachineConfig(resource) {
+		selector, err := poolSelector(pool)
+		return err == nil && selector.Matches(labels.Set(resource.GetLabels())), err
 	}
-	for _, resource := range []unstructured.Unstructured{before, after} {
-		for name := range resource.GetAnnotations() {
-			if strings.HasPrefix(name, "machineconfiguration.openshift.io/") && before.GetAnnotations()[name] != after.GetAnnotations()[name] {
-				return false
-			}
-		}
+	data, _, err := unstructured.NestedMap(resource.Object, "spec", "machineConfigPoolSelector")
+	if err != nil || len(data) == 0 {
+		return false, err
 	}
-
-	return true
+	var selection metav1.LabelSelector
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(data, &selection); err != nil {
+		return false, err
+	}
+	selector, err := metav1.LabelSelectorAsSelector(&selection)
+	return err == nil && selector.Matches(labels.Set(pool.Labels)), err
 }
 
 func (r runner) readPoolInputs(ctx context.Context, resources []unstructured.Unstructured) (map[string]unstructured.Unstructured, *poolState, error) {
@@ -131,13 +127,19 @@ func (r runner) readPoolInputs(ctx context.Context, resources []unstructured.Uns
 	if !poolHasCurrentConfiguration(pool) {
 		return nil, nil, fmt.Errorf("mcp/%s must finish its current rollout before applying pool inputs", r.options.PoolName)
 	}
+	if _, err := poolSelector(pool); err != nil {
+		return nil, nil, err
+	}
 	inputs := make(map[string]unstructured.Unstructured)
 	for _, resource := range resources {
 		if !isPoolConfiguration(resource) {
 			continue
 		}
+		if _, err := targetsPool(resource, pool); err != nil {
+			return nil, nil, err
+		}
 		name := poolResourceName(resource)
-		data, err := r.oc(ctx, nil, "get", name, "--ignore-not-found", "-o", "json")
+		data, err := r.oc(ctx, nil, commandGet, name, "--ignore-not-found", "-o", "json")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -199,8 +201,7 @@ func (r runner) patchPool(ctx context.Context, operations []patchOperation) erro
 	return err
 }
 
-func (r runner) pausePool(ctx context.Context, pool *poolState, owner string) error {
-	fmt.Printf("Pausing mcp/%s\n", r.options.PoolName)
+func (r runner) setPoolPause(ctx context.Context, pool *poolState, owner string, paused bool) error {
 	annotations := pool.Annotations
 	if annotations == nil {
 		annotations = make(map[string]string)
@@ -210,11 +211,11 @@ func (r runner) pausePool(ctx context.Context, pool *poolState, owner string) er
 	return r.patchPool(ctx, []patchOperation{
 		{Op: "test", Path: "/metadata/resourceVersion", Value: pool.ResourceVersion},
 		{Op: "add", Path: "/metadata/annotations", Value: annotations},
-		{Op: "add", Path: "/spec/paused", Value: true},
+		{Op: "add", Path: "/spec/paused", Value: paused},
 	})
 }
 
-func (r runner) resumePool(ctx context.Context, owner string, required bool) error {
+func (r runner) resumePool(ctx context.Context, owner, originalVersion string, required bool) error {
 	pool, err := r.getPool(ctx)
 	if err != nil {
 		return err
@@ -222,6 +223,13 @@ func (r runner) resumePool(ctx context.Context, owner string, required bool) err
 	if pool.Annotations[pauseOwner] != owner {
 		if required {
 			return fmt.Errorf("pause ownership changed; refusing to resume another caller's pause")
+		}
+		if pool.ResourceVersion == originalVersion {
+			// Commit a new version so a delayed pause cannot pass its version test.
+			fenceErr := r.setPoolPause(ctx, pool, owner, false)
+			if err := r.resumePool(ctx, owner, originalVersion, true); err != nil {
+				return errors.Join(fenceErr, err)
+			}
 		}
 
 		return nil
@@ -259,14 +267,15 @@ func (r runner) applyPaused(ctx context.Context, prepared *batch) (target string
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
 		defer cancel()
 		// A failed pause client can still have committed its ownership token.
-		if resumeErr := r.resumePool(cleanupCtx, owner, paused); resumeErr != nil {
+		if resumeErr := r.resumePool(cleanupCtx, owner, pool.ResourceVersion, paused); resumeErr != nil {
 			err = errors.Join(err, fmt.Errorf("could not resume mcp/%s; check the pool before retrying: %w",
 				r.options.PoolName, resumeErr))
 		}
 	}()
 	// Let an in-flight pause finish before cancellation starts cleanup.
 	pauseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
-	err = r.pausePool(pauseCtx, pool, owner)
+	fmt.Printf("Pausing mcp/%s\n", r.options.PoolName)
+	err = r.setPoolPause(pauseCtx, pool, owner, true)
 	cancel()
 	if err != nil {
 		return "", err
@@ -283,7 +292,8 @@ func (r runner) waitForRender(ctx context.Context, machineConfigs []string) (str
 	for _, name := range machineConfigs {
 		condition := fmt.Sprintf(`jsonpath={.spec.configuration.source[?(@.name=="%s")].name}=%s`, name, name)
 		if err := r.waitForPool(ctx, condition, r.options.StartTimeout); err != nil {
-			return "", err
+			_, poolErr := r.getSettledPool(ctx)
+			return "", errors.Join(err, poolErr)
 		}
 	}
 	pool, err := r.getPool(ctx)
@@ -302,30 +312,116 @@ func (r runner) waitForRender(ctx context.Context, machineConfigs []string) (str
 	return pool.Spec.Configuration.Name, nil
 }
 
-func (r runner) waitForRollout(ctx context.Context, target, previousTarget string) error {
-	startErr := r.waitForPool(ctx, "condition=Updating=True", r.options.StartTimeout)
+func (r runner) waitForRollout(ctx context.Context, target string) error {
+	if target != "" {
+		fmt.Printf("Waiting for mcp/%s to converge to %s (timeout: %s)\n", r.options.PoolName, target, r.options.RolloutTimeout)
+		return r.pollPool(ctx, r.options.RolloutTimeout, func(pool *poolState) (bool, error) {
+			if pool.Spec.Configuration.Name != target {
+				return false, fmt.Errorf("mcp/%s targets %s instead of captured target %s", r.options.PoolName, pool.Spec.Configuration.Name, target)
+			}
+			return poolIsSettled(pool), nil
+		})
+	}
+	_ = r.waitForPool(ctx, "condition=Updating=True", r.options.StartTimeout)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 	if err := r.waitForPool(ctx, "condition=Updated=True", r.options.RolloutTimeout); err != nil {
 		return err
 	}
-	if target != "" {
-		if err := r.waitForPool(ctx, "jsonpath={.status.configuration.name}="+target, r.options.RolloutTimeout); err != nil {
-			return err
+	_, err := r.getSettledPool(ctx)
+	return err
+}
+
+func (r runner) pollPool(ctx context.Context, timeout time.Duration, ready func(*poolState) (bool, error)) error {
+	err := wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		pool, err := r.getPool(ctx)
+		if err != nil {
+			return false, err
 		}
+		if condition := meta.FindStatusCondition(pool.Status.Conditions, "RenderDegraded"); condition != nil && condition.Status == metav1.ConditionTrue {
+			return false, fmt.Errorf("mcp/%s render failed: %s", r.options.PoolName, condition.Message)
+		}
+		return ready(pool)
+	})
+	if err != nil {
+		return fmt.Errorf("mcp/%s has not converged: %w", r.options.PoolName, err)
 	}
-	pool, err := r.getSettledPool(ctx)
+	return nil
+}
+
+func (r runner) confirmRenderedInputs(ctx context.Context, pool *poolState) (err error) {
+	selector, err := poolSelector(pool)
 	if err != nil {
 		return err
 	}
-	if target != "" && pool.Spec.Configuration.Name != target {
-		return fmt.Errorf("mcp/%s settled on %s instead of captured target %s", r.options.PoolName, pool.Spec.Configuration.Name, target)
+	data, err := r.oc(ctx, nil, commandGet, "machineconfig", "-l", selector.String(), "-o", "json")
+	if err != nil {
+		return err
 	}
-	if previousTarget != "" && pool.Spec.Configuration.Name == previousTarget {
-		return errors.Join(fmt.Errorf("mcp/%s has not rendered the changed pool inputs", r.options.PoolName), startErr)
+	resources, err := decodeResources(data)
+	if err != nil {
+		return err
 	}
+	if len(resources) == 0 {
+		return fmt.Errorf("cannot find a MachineConfig selected by mcp/%s", r.options.PoolName)
+	}
+	marker := unstructured.Unstructured{Object: map[string]any{"apiVersion": "machineconfiguration.openshift.io/v1", "kind": machineConfigKind, "spec": map[string]any{}}}
+	marker.SetName("zz-nvidia-ci-render-" + strings.ToLower(rand.Text()))
+	marker.SetLabels(resources[0].GetLabels())
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+		defer cancel()
+		_, deleteErr := r.oc(cleanupCtx, nil, actionDelete, "machineconfig/"+marker.GetName(), "--ignore-not-found=true", "--wait=false")
+		if deleteErr == nil && err == nil {
+			deleteErr = r.pollPool(cleanupCtx, cleanupTimeout, func(pool *poolState) (bool, error) {
+				return !pool.Spec.Configuration.hasSource(marker.GetName()) && poolIsSettled(pool), nil
+			})
+		}
+		if deleteErr != nil {
+			err = errors.Join(err, fmt.Errorf("remove render marker MachineConfig/%s: %w", marker.GetName(), deleteErr))
+		}
+	}()
+	data, err = marker.MarshalJSON()
+	if err != nil {
+		return err
+	}
+	// MC informer events are ordered: observing this new source includes earlier MC writes.
+	if _, err := r.oc(ctx, data, commandCreate, "-f", "-"); err != nil {
+		return err
+	}
+	target, err := r.waitForRender(ctx, []string{marker.GetName()})
+	if err != nil {
+		return fmt.Errorf("render confirmation for mcp/%s: %w", r.options.PoolName, err)
+	}
+	return r.waitForRollout(ctx, target)
+}
 
+func (r runner) waitForGeneratedInput(ctx context.Context, resource unstructured.Unstructured) error {
+	name := poolResourceName(resource)
+	condition := fmt.Sprintf("--for=jsonpath={.status.observedGeneration}=%d", resource.GetGeneration())
+	if _, err := r.oc(ctx, nil, commandWait, name, condition, "--timeout="+r.options.StartTimeout.String()); err != nil {
+		return err
+	}
+	data, err := r.oc(ctx, nil, commandGet, name, "-o", "json")
+	if err != nil {
+		return err
+	}
+	var current unstructured.Unstructured
+	if err := current.UnmarshalJSON(data); err != nil {
+		return err
+	}
+	conditions, _, err := unstructured.NestedSlice(current.Object, "status", "conditions")
+	if err != nil || len(conditions) == 0 {
+		return fmt.Errorf("%s has no generation result: %v", name, err)
+	}
+	last, ok := conditions[len(conditions)-1].(map[string]any)
+	observed, _, observedErr := unstructured.NestedInt64(current.Object, "status", "observedGeneration")
+	if !ok || last["type"] != "Success" || last["status"] != "True" ||
+		observedErr != nil || observed < resource.GetGeneration() || current.GetGeneration() != resource.GetGeneration() ||
+		current.GetUID() != resource.GetUID() || !reflect.DeepEqual(current.Object["spec"], resource.Object["spec"]) {
+		return fmt.Errorf("%s has not successfully generated the applied configuration", name)
+	}
 	return nil
 }
 
@@ -338,5 +434,5 @@ func (r runner) applyBatch(ctx context.Context, prepared *batch) error {
 		return err
 	}
 
-	return r.waitForRollout(ctx, target, "")
+	return r.waitForRollout(ctx, target)
 }
