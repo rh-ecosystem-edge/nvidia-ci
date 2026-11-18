@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const (
@@ -36,9 +37,18 @@ type fakeCluster struct {
 	hook           func() error
 	renderErr      error
 	startErr       error
-	applyUnchanged bool
+	objects        map[string]unstructured.Unstructured
+	holdRender     bool
 	afterApply     func()
+	mutateApplied  func(*unstructured.Unstructured)
 	beforePoolRead func()
+}
+
+func (f *fakeCluster) store(resource unstructured.Unstructured) {
+	if f.objects == nil {
+		f.objects = make(map[string]unstructured.Unstructured)
+	}
+	f.objects[poolResourceName(resource)] = *resource.DeepCopy()
 }
 
 func (f *fakeCluster) patch(data string) error {
@@ -111,6 +121,13 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ i
 
 			return nil, nil
 		}
+		if !strings.HasPrefix(args[1], "mcp/") {
+			if resource, found := f.objects[args[1]]; found {
+				return json.Marshal(resource.Object)
+			}
+
+			return nil, nil
+		}
 
 		if f.beforePoolRead != nil {
 			f.beforePoolRead()
@@ -128,15 +145,29 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ i
 		}
 		var output strings.Builder
 		for _, resource := range resources {
+			if resource.GetUID() == "" {
+				previous := f.objects[poolResourceName(resource)]
+				resource.SetUID(previous.GetUID())
+			}
+			if f.mutateApplied != nil {
+				f.mutateApplied(&resource)
+			}
 			f.changed = append(f.changed, resource.GetName())
 			if isMachineConfig(resource) && args[0] != actionDelete {
 				f.created = append(f.created, resource.GetName())
 			}
-			status := "configured"
-			if f.applyUnchanged {
-				status = "unchanged"
+			f.store(resource)
+			if !f.pool.Spec.Paused && !f.holdRender && isPoolConfiguration(resource) {
+				f.pool.Spec.Configuration.Name = newConfiguration + "-" + resource.GetName()
+				f.pool.Status.Configuration = f.pool.Spec.Configuration
 			}
-			fmt.Fprintf(&output, "%s/%s %s\n", resource.GetKind(), resource.GetName(), status)
+			if slices.Contains(args, "json") {
+				if err := json.NewEncoder(&output).Encode(resource.Object); err != nil {
+					return nil, err
+				}
+			} else {
+				fmt.Fprintf(&output, "%s/%s configured\n", resource.GetKind(), resource.GetName())
+			}
 		}
 		if f.mode == "cancel-apply" && f.cancel != nil {
 			f.cancel()

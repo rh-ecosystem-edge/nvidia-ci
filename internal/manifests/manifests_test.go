@@ -14,7 +14,10 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+const noRenderMessage = "has not rendered the changed pool inputs"
 
 func writeFile(t *testing.T, path, contents string) {
 	t.Helper()
@@ -53,6 +56,7 @@ spec:
 		WaitForMCP: true, BatchMCP: true, StartTimeout: time.Minute, RolloutTimeout: time.Hour,
 	}
 	cluster := &fakeCluster{mode: mode}
+	cluster.pool.Name = options.PoolName
 	cluster.pool.Generation, cluster.pool.ResourceVersion = 1, "1"
 	cluster.pool.Spec.Configuration.Name = oldConfiguration
 	cluster.pool.Spec.MachineConfigSelector = &metav1.LabelSelector{MatchLabels: map[string]string{"role": "worker"}}
@@ -234,25 +238,26 @@ func TestBatchChecksPoolSelectorBeforeWriting(t *testing.T) {
 	for _, test := range []struct {
 		name     string
 		selector *metav1.LabelSelector
-		matches  bool
+		message  string
 	}{
-		{"missing-selector", nil, false},
-		{"wrong-pool", &metav1.LabelSelector{MatchLabels: map[string]string{"role": "master"}}, false},
+		{"missing-selector", nil, "empty machineConfigSelector"},
+		{"empty-selector", &metav1.LabelSelector{}, "empty machineConfigSelector"},
+		{"wrong-pool", &metav1.LabelSelector{MatchLabels: map[string]string{"role": "master"}}, "is not selected by mcp/worker"},
 		{"matching-expression", &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{
 			{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{"worker"}},
-		}}, true},
+		}}, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			r, cluster := testRunner(t, "")
 			cluster.pool.Spec.MachineConfigSelector = test.selector
 			err := r.run(t.Context())
-			if test.matches {
+			if test.message == "" {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(cluster.created).To(HaveLen(2))
 				return
 			}
-			g.Expect(err).To(MatchError(ContainSubstring("is not selected by mcp/worker")))
+			g.Expect(err).To(MatchError(ContainSubstring(test.message)))
 			g.Expect(cluster.changed).To(BeEmpty())
 			for _, event := range cluster.events {
 				g.Expect(event.args[0]).NotTo(Equal(commandPatch))
@@ -277,33 +282,38 @@ func TestCapturedRenderMustStillIncludeEverySource(t *testing.T) {
 	}
 }
 
-func TestSequentialNoStartRequiresRenderEvidence(t *testing.T) {
+func TestSequentialChangesRequireRenderEvidence(t *testing.T) {
 	for _, test := range []struct {
-		name, kind, message                              string
-		unchanged, degraded, rendered, initiallyDegraded bool
+		name, kind, message                                             string
+		unchanged, degraded, rendered, initiallyDegraded, observedStart bool
 	}{
 		{name: "render-failure", kind: machineConfigKind, degraded: true, message: "render failed: invalid config"},
-		{name: "unprocessed-change", kind: machineConfigKind, message: "no new rendered configuration or rollout observed"},
+		{name: "unprocessed-change", kind: machineConfigKind, message: noRenderMessage},
+		{name: "updating-but-old-render", kind: machineConfigKind, observedStart: true, message: noRenderMessage},
 		{name: "unchanged", kind: machineConfigKind, unchanged: true},
 		{name: "fast-rollout", kind: machineConfigKind, rendered: true},
 		{name: "repair-degraded-config", kind: machineConfigKind, initiallyDegraded: true, rendered: true},
 		{name: "unchanged-but-degraded", kind: machineConfigKind, unchanged: true, degraded: true, message: "render failed: invalid config"},
-		{name: "kubelet-not-rendered", kind: "KubeletConfig", message: "no new rendered configuration or rollout observed"},
-		{name: "runtime-not-rendered", kind: "ContainerRuntimeConfig", message: "no new rendered configuration or rollout observed"},
-		{name: "mixed-changed-and-unchanged", kind: machineConfigKind, message: "no new rendered configuration or rollout observed"},
+		{name: "kubelet-not-rendered", kind: "KubeletConfig", message: noRenderMessage},
+		{name: "runtime-not-rendered", kind: "ContainerRuntimeConfig", message: noRenderMessage},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			r, cluster := testRunner(t, "")
 			r.options.BatchMCP = false
 			r.options.Directory = t.TempDir()
-			contents := "apiVersion: machineconfiguration.openshift.io/v1\nkind: " + test.kind + "\nmetadata:\n  name: config\n"
-			if test.name == "mixed-changed-and-unchanged" {
-				contents += "---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: companion\n"
-			}
+			contents := "apiVersion: machineconfiguration.openshift.io/v1\nkind: " + test.kind + "\nmetadata:\n  name: config\n  labels:\n    role: worker\n"
 			writeFile(t, filepath.Join(r.options.Directory, "config.yaml"), contents)
+			if test.unchanged {
+				resources, err := decodeResources([]byte(contents))
+				g.Expect(err).NotTo(HaveOccurred())
+				cluster.store(resources[0])
+			}
 			cluster.startErr = errSimulated
-			cluster.applyUnchanged = test.unchanged
+			if test.observedStart {
+				cluster.startErr = nil
+			}
+			cluster.holdRender = true
 			if test.initiallyDegraded {
 				cluster.pool.Status.Conditions = append(cluster.pool.Status.Conditions,
 					metav1.Condition{Type: "RenderDegraded", Status: metav1.ConditionTrue, Message: "old invalid config"})
@@ -321,15 +331,6 @@ func TestSequentialNoStartRequiresRenderEvidence(t *testing.T) {
 					cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
 				}
 			}
-			if test.name == "mixed-changed-and-unchanged" {
-				r.command = func(ctx context.Context, input []byte, environment []string, stdout io.Writer, name string, args ...string) ([]byte, error) {
-					output, err := cluster.command(ctx, input, environment, stdout, name, args...)
-					if name == "oc" && args[0] == actionApply {
-						output = []byte("machineconfig/config configured\nconfigmap/companion unchanged\n")
-					}
-					return output, err
-				}
-			}
 			err := r.run(t.Context())
 			g.Expect(cluster.changed).NotTo(BeEmpty())
 			if test.message == "" {
@@ -339,6 +340,180 @@ func TestSequentialNoStartRequiresRenderEvidence(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMixedFileOnlyRequiresRenderForPoolChanges(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		poolChanged bool
+	}{
+		{"configmap-changed", false},
+		{"machineconfig-changed", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			g := NewWithT(t)
+			r, cluster := testRunner(t, "")
+			r.options.BatchMCP = false
+			r.options.Directory = t.TempDir()
+			contents := `apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: mixed
+  labels:
+    role: worker
+spec:
+  kernelArguments: [new]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: companion
+data:
+  value: new
+`
+			resources, err := decodeResources([]byte(contents))
+			g.Expect(err).NotTo(HaveOccurred())
+			if test.poolChanged {
+				resources[0].Object["spec"] = map[string]any{"kernelArguments": []any{"old"}}
+			} else {
+				resources[1].Object["data"] = map[string]any{"value": "old"}
+			}
+			for _, resource := range resources {
+				cluster.store(resource)
+			}
+			path := filepath.Join(r.options.Directory, "config.yaml")
+			writeFile(t, path, contents)
+			writeFile(t, sibling(path, ".sh"), "hook")
+			hookRan := false
+			cluster.hook = func() error { hookRan = true; return nil }
+			cluster.holdRender, cluster.startErr = true, errSimulated
+			err = r.run(t.Context())
+			if test.poolChanged {
+				g.Expect(err).To(MatchError(ContainSubstring(noRenderMessage)))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			g.Expect(hookRan).To(Equal(!test.poolChanged))
+			g.Expect(cluster.changed).To(Equal([]string{"mixed", "companion"}))
+		})
+	}
+}
+
+func TestMetadataChangesUseActualRenderInputs(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		prepare     func(*unstructured.Unstructured, *unstructured.Unstructured)
+		admit       func(*unstructured.Unstructured)
+		needsRender bool
+	}{
+		{name: "irrelevant-annotation"},
+		{name: "irrelevant-label", prepare: func(_, after *unstructured.Unstructured) {
+			after.SetLabels(map[string]string{"role": "worker", "example.com/report": "yes"})
+		}},
+		{name: "api-defaults", prepare: func(before, _ *unstructured.Unstructured) {
+			before.Object["spec"].(map[string]any)["fips"] = false
+		}, admit: func(resource *unstructured.Unstructured) { resource.Object["spec"].(map[string]any)["fips"] = false }},
+		{name: "controller-annotation", needsRender: true, prepare: func(before, after *unstructured.Unstructured) {
+			before.SetAnnotations(map[string]string{"machineconfiguration.openshift.io/generated-by-controller-version": "old"})
+			after.SetAnnotations(map[string]string{"machineconfiguration.openshift.io/generated-by-controller-version": "new"})
+		}},
+		{name: "removed-controller-annotation", needsRender: true, prepare: func(before, _ *unstructured.Unstructured) {
+			before.SetAnnotations(map[string]string{"machineconfiguration.openshift.io/mc-name-suffix": "old"})
+		}},
+		{name: "selection-label", needsRender: true, prepare: func(_, after *unstructured.Unstructured) {
+			after.SetLabels(map[string]string{"role": "master"})
+		}},
+		{name: "replaced-object", needsRender: true, admit: func(resource *unstructured.Unstructured) { resource.SetUID("replacement") }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			g := NewWithT(t)
+			r, cluster := testRunner(t, "")
+			r.options.BatchMCP = false
+			r.options.Directory = t.TempDir()
+			resources, err := decodeResources([]byte(`{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"MachineConfig",
+"metadata":{"name":"metadata-only","labels":{"role":"worker"},"annotations":{"example.com/note":"new"}},
+"spec":{"kernelArguments":["preserved"]}}`))
+			g.Expect(err).NotTo(HaveOccurred())
+			desired := resources[0]
+			before := desired.DeepCopy()
+			before.SetUID("original")
+			before.SetAnnotations(map[string]string{"example.com/note": "old"})
+			if test.prepare != nil {
+				test.prepare(before, &desired)
+			}
+			cluster.store(*before)
+			cluster.mutateApplied = test.admit
+			cluster.holdRender, cluster.startErr = true, errSimulated
+			data, err := desired.MarshalJSON()
+			g.Expect(err).NotTo(HaveOccurred())
+			writeFile(t, filepath.Join(r.options.Directory, "config.yaml"), string(data))
+			err = r.run(t.Context())
+			if test.needsRender {
+				g.Expect(err).To(MatchError(ContainSubstring(noRenderMessage)))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			g.Expect(cluster.changed).To(Equal([]string{"metadata-only"}))
+		})
+	}
+}
+
+func TestEarlierRolloutCannotSatisfyLaterApply(t *testing.T) {
+	g := NewWithT(t)
+	r, cluster := testRunner(t, "existing")
+	cluster.pool.Spec.Configuration.Name = "rendered-earlier"
+	cluster.pool.Status.Conditions = []metav1.Condition{
+		{Type: "Updated", Status: metav1.ConditionFalse}, {Type: "Updating", Status: metav1.ConditionTrue},
+	}
+	g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("must finish its current rollout before applying pool inputs")))
+	g.Expect(cluster.changed).To(BeEmpty())
+}
+
+func TestMissingApplyResponseCannotConfirmNoChange(t *testing.T) {
+	g := NewWithT(t)
+	r, cluster := testRunner(t, "existing")
+	r.command = func(ctx context.Context, input []byte, environment []string, stdout io.Writer, name string, args ...string) ([]byte, error) {
+		output, err := cluster.command(ctx, input, environment, stdout, name, args...)
+		if name == "oc" && args[0] == actionApply {
+			return nil, err
+		}
+
+		return output, err
+	}
+	g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("apply response is missing machineconfig.machineconfiguration.openshift.io/first")))
+	g.Expect(cluster.changed).To(Equal([]string{"first"}))
+}
+
+func TestBatchRejectsNamesInPreviousRender(t *testing.T) {
+	for _, statusOnly := range []bool{false, true} {
+		t.Run(map[bool]string{false: "spec", true: "status"}[statusOnly], func(t *testing.T) {
+			g := NewWithT(t)
+			r, cluster := testRunner(t, "")
+			configuration := &cluster.pool.Spec.Configuration
+			if statusOnly {
+				configuration = &cluster.pool.Status.Configuration
+			}
+			configuration.Source = []poolSource{{Name: "first"}}
+			g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("refusing to batch a reused name")))
+			g.Expect(cluster.changed).To(BeEmpty())
+			for _, event := range cluster.events {
+				g.Expect(event.args[0]).NotTo(Equal(commandPatch))
+			}
+		})
+	}
+}
+
+func TestBatchFinalSnapshotMustMatchCapturedTarget(t *testing.T) {
+	g := NewWithT(t)
+	r, cluster := testRunner(t, "")
+	cluster.beforePoolRead = func() {
+		if !cluster.pool.Spec.Paused && len(cluster.waited) == 2 {
+			cluster.pool.Spec.Configuration.Name = "rendered-unrelated"
+			cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
+		}
+	}
+	g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("instead of captured target " + newConfiguration)))
+	g.Expect(cluster.pool.Spec.Paused).To(BeFalse())
 }
 
 func TestCleanupKeepsCancellationAndResumeError(t *testing.T) {

@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -26,6 +29,10 @@ type poolConfiguration struct {
 
 type poolSource struct {
 	Name string `json:"name"`
+}
+
+func (configuration poolConfiguration) hasSource(name string) bool {
+	return slices.ContainsFunc(configuration.Source, func(source poolSource) bool { return source.Name == name })
 }
 
 type poolState struct {
@@ -58,13 +65,92 @@ func (r runner) getPool(ctx context.Context) (*poolState, error) {
 	return &pool, err
 }
 
-func poolIsSettled(pool *poolState) bool {
+func poolHasCurrentConfiguration(pool *poolState) bool {
 	return meta.IsStatusConditionTrue(pool.Status.Conditions, "Updated") &&
 		!meta.IsStatusConditionTrue(pool.Status.Conditions, "Updating") &&
-		!meta.IsStatusConditionTrue(pool.Status.Conditions, "Degraded") &&
-		!meta.IsStatusConditionTrue(pool.Status.Conditions, "RenderDegraded") &&
 		!pool.Spec.Paused && pool.Status.ObservedGeneration >= pool.Generation &&
 		pool.Spec.Configuration.Name != "" && pool.Spec.Configuration.Name == pool.Status.Configuration.Name
+}
+
+func poolIsSettled(pool *poolState) bool {
+	return poolHasCurrentConfiguration(pool) &&
+		!meta.IsStatusConditionTrue(pool.Status.Conditions, "Degraded") &&
+		!meta.IsStatusConditionTrue(pool.Status.Conditions, "RenderDegraded")
+}
+
+func poolResourceName(resource unstructured.Unstructured) string {
+	return strings.ToLower(resource.GetKind()) + "." + resource.GroupVersionKind().Group + "/" + resource.GetName()
+}
+
+func poolSelector(pool *poolState) (labels.Selector, error) {
+	if pool.Spec.MachineConfigSelector == nil || len(pool.Spec.MachineConfigSelector.MatchLabels)+len(pool.Spec.MachineConfigSelector.MatchExpressions) == 0 {
+		return nil, fmt.Errorf("mcp/%s has an empty machineConfigSelector", pool.Name)
+	}
+	selector, err := metav1.LabelSelectorAsSelector(pool.Spec.MachineConfigSelector)
+	if err != nil {
+		return nil, fmt.Errorf("mcp/%s machineConfigSelector: %w", pool.Name, err)
+	}
+
+	return selector, nil
+}
+
+func samePoolInput(before, after unstructured.Unstructured, selector labels.Selector) bool {
+	if isMachineConfig(after) {
+		selectedBefore := before.Object != nil && selector.Matches(labels.Set(before.GetLabels()))
+		selectedAfter := selector.Matches(labels.Set(after.GetLabels()))
+		if selectedBefore != selectedAfter {
+			return false
+		}
+		if !selectedBefore {
+			return true
+		}
+	}
+	if before.Object == nil || before.GetUID() != after.GetUID() ||
+		!reflect.DeepEqual(before.Object["spec"], after.Object["spec"]) {
+		return false
+	}
+	for _, resource := range []unstructured.Unstructured{before, after} {
+		for name := range resource.GetAnnotations() {
+			if strings.HasPrefix(name, "machineconfiguration.openshift.io/") && before.GetAnnotations()[name] != after.GetAnnotations()[name] {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func (r runner) readPoolInputs(ctx context.Context, resources []unstructured.Unstructured) (map[string]unstructured.Unstructured, *poolState, error) {
+	if !slices.ContainsFunc(resources, isPoolConfiguration) {
+		return nil, nil, nil
+	}
+	pool, err := r.getPool(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !poolHasCurrentConfiguration(pool) {
+		return nil, nil, fmt.Errorf("mcp/%s must finish its current rollout before applying pool inputs", r.options.PoolName)
+	}
+	inputs := make(map[string]unstructured.Unstructured)
+	for _, resource := range resources {
+		if !isPoolConfiguration(resource) {
+			continue
+		}
+		name := poolResourceName(resource)
+		data, err := r.oc(ctx, nil, "get", name, "--ignore-not-found", "-o", "json")
+		if err != nil {
+			return nil, nil, err
+		}
+		var current unstructured.Unstructured
+		if len(data) > 0 {
+			if err := json.Unmarshal(data, &current); err != nil {
+				return nil, nil, err
+			}
+		}
+		inputs[name] = current
+	}
+
+	return inputs, pool, nil
 }
 
 func (r runner) getSettledPool(ctx context.Context) (*poolState, error) {
@@ -154,13 +240,18 @@ func (r runner) applyPaused(ctx context.Context, prepared *batch) (target string
 	if err != nil {
 		return "", err
 	}
-	selector, err := metav1.LabelSelectorAsSelector(pool.Spec.MachineConfigSelector)
+	selector, err := poolSelector(pool)
 	if err != nil {
-		return "", fmt.Errorf("mcp/%s machineConfigSelector: %w", r.options.PoolName, err)
+		return "", err
 	}
 	for _, resource := range prepared.resources {
 		if isMachineConfig(resource) && !selector.Matches(labels.Set(resource.GetLabels())) {
 			return "", fmt.Errorf("MachineConfig/%s is not selected by mcp/%s", resource.GetName(), r.options.PoolName)
+		}
+	}
+	for _, name := range prepared.machineConfigs {
+		if pool.Spec.Configuration.hasSource(name) || pool.Status.Configuration.hasSource(name) {
+			return "", fmt.Errorf("MachineConfig/%s is still referenced by mcp/%s; refusing to batch a reused name", name, r.options.PoolName)
 		}
 	}
 	owner, paused := rand.Text(), false
@@ -203,7 +294,7 @@ func (r runner) waitForRender(ctx context.Context, machineConfigs []string) (str
 		return "", fmt.Errorf("mcp/%s has no rendered target", r.options.PoolName)
 	}
 	for _, name := range machineConfigs {
-		if !slices.ContainsFunc(pool.Spec.Configuration.Source, func(source poolSource) bool { return source.Name == name }) {
+		if !pool.Spec.Configuration.hasSource(name) {
 			return "", fmt.Errorf("mcp/%s rendered target %s is missing MachineConfig/%s", r.options.PoolName, pool.Spec.Configuration.Name, name)
 		}
 	}
@@ -228,8 +319,11 @@ func (r runner) waitForRollout(ctx context.Context, target, previousTarget strin
 	if err != nil {
 		return err
 	}
-	if startErr != nil && previousTarget != "" && pool.Spec.Configuration.Name == previousTarget {
-		return fmt.Errorf("no new rendered configuration or rollout observed for mcp/%s: %w", r.options.PoolName, startErr)
+	if target != "" && pool.Spec.Configuration.Name != target {
+		return fmt.Errorf("mcp/%s settled on %s instead of captured target %s", r.options.PoolName, pool.Spec.Configuration.Name, target)
+	}
+	if previousTarget != "" && pool.Spec.Configuration.Name == previousTarget {
+		return errors.Join(fmt.Errorf("mcp/%s has not rendered the changed pool inputs", r.options.PoolName), startErr)
 	}
 
 	return nil

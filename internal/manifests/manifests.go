@@ -307,7 +307,7 @@ func (r runner) applyResources(ctx context.Context, resources []unstructured.Uns
 		if isMachineConfig(resource) {
 			args = []string{commandCreate, "--save-config", "-f", "-"}
 		}
-		if _, err := r.changeResource(ctx, data, args...); err != nil {
+		if err := r.changeResource(ctx, data, args...); err != nil {
 			return err
 		}
 	}
@@ -315,21 +315,62 @@ func (r runner) applyResources(ctx context.Context, resources []unstructured.Uns
 	return nil
 }
 
-func (r runner) changeResource(ctx context.Context, data []byte, args ...string) ([]byte, error) {
+func (r runner) changeResource(ctx context.Context, data []byte, args ...string) error {
 	output, err := r.oc(ctx, data, args...)
 	fmt.Print(string(output))
 
-	return output, err
+	return err
 }
 
-func allUnchanged(output []byte) bool {
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		if !strings.HasSuffix(line, " unchanged") {
-			return false
+func (r runner) applyFile(ctx context.Context, data []byte) error {
+	resources, err := decodeResources(data)
+	if err != nil {
+		return err
+	}
+	before, pool, err := r.readPoolInputs(ctx, resources)
+	if err != nil {
+		return err
+	}
+	if len(before) == 0 {
+		if err := r.changeResource(ctx, data, actionApply, "-f", "-"); err != nil {
+			return err
+		}
+
+		return r.waitForRollout(ctx, "", "")
+	}
+	selector, err := poolSelector(pool)
+	if err != nil {
+		return err
+	}
+	output, err := r.oc(ctx, data, actionApply, "-f", "-", "-o", "json")
+	if err != nil {
+		return err
+	}
+	applied, err := decodeResources(output)
+	if err != nil {
+		return fmt.Errorf("decode apply response: %w", err)
+	}
+	after := make(map[string]unstructured.Unstructured)
+	for _, resource := range applied {
+		fmt.Printf("%s/%s applied\n", resource.GetKind(), resource.GetName())
+		if isPoolConfiguration(resource) {
+			after[poolResourceName(resource)] = resource
 		}
 	}
+	changed := false
+	for name, resource := range before {
+		updated, found := after[name]
+		if !found {
+			return fmt.Errorf("apply response is missing %s", name)
+		}
+		changed = changed || !samePoolInput(resource, updated, selector)
+	}
+	previousTarget := pool.Spec.Configuration.Name
+	if !changed {
+		previousTarget = ""
+	}
 
-	return true
+	return r.waitForRollout(ctx, "", previousTarget)
 }
 
 func (r runner) changeFiles(ctx context.Context, files []string) error {
@@ -342,34 +383,15 @@ func (r runner) changeFiles(ctx context.Context, files []string) error {
 		if err != nil {
 			return err
 		}
-		previousTarget := ""
 		if r.options.Action == actionApply && r.options.WaitForMCP {
-			resources, err := decodeResources(data)
-			if err != nil {
+			if err := r.applyFile(ctx, data); err != nil {
 				return err
 			}
-			if slices.ContainsFunc(resources, isPoolConfiguration) {
-				pool, err := r.getPool(ctx)
-				if err != nil {
-					return err
-				}
-				previousTarget = pool.Spec.Configuration.Name
-			}
-		}
-		output, err := r.changeResource(ctx, data, args...)
-		if err != nil {
+		} else if err := r.changeResource(ctx, data, args...); err != nil {
 			return err
 		}
 		if r.options.Action == actionDelete {
 			continue
-		}
-		if r.options.WaitForMCP {
-			if allUnchanged(output) {
-				previousTarget = ""
-			}
-			if err := r.waitForRollout(ctx, "", previousTarget); err != nil {
-				return err
-			}
 		}
 		hook := sibling(path, ".sh")
 		if _, err := os.Stat(hook); err == nil {
