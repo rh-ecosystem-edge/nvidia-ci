@@ -1,4 +1,4 @@
-"""Profile configuration and schedule resolution for version updates."""
+"""Profile configuration and weekday-based schedule resolution."""
 
 from __future__ import annotations
 
@@ -6,18 +6,17 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 import os
-import re
 from pathlib import Path
+import re
 from typing import Iterable
 
 
 @dataclass(frozen=True)
 class Profile:
     name: str
-    schedule: str
+    active_weekdays: frozenset[str]
     version_file_path: str
     settings_file_path: str
-    tests_to_trigger_file_path: str
     test_command_template: str
     support_matrix: dict
     ignored_versions_regex: str
@@ -29,13 +28,28 @@ class Profile:
 @dataclass(frozen=True)
 class ProfileManifest:
     profiles: dict[str, Profile]
-    combined_output_file: str
-    active_profiles_file: str
+    tests_to_trigger_file_path: str
+    test_comments_file_path: str
+    new_gpu_channels_file: str
     request_timeout_sec: int
 
 
 COMMAND_PLACEHOLDER_RE = re.compile(r'\{([A-Za-z_][A-Za-z0-9_]*)\}')
 SUPPORTED_COMMAND_PLACEHOLDERS = {'ocp_version', 'gpu_version'}
+
+WEEKDAY_ABBREVIATIONS = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
+WEEKDAY_FULL_NAMES = (
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+)
+WEEKDAY_ALIASES = {
+    'mo': 'Mon', 'mon': 'Mon', 'monday': 'Mon',
+    'tu': 'Tue', 'tue': 'Tue', 'tues': 'Tue', 'tuesday': 'Tue',
+    'we': 'Wed', 'wed': 'Wed', 'weds': 'Wed', 'wednesday': 'Wed',
+    'th': 'Thu', 'thu': 'Thu', 'thur': 'Thu', 'thurs': 'Thu', 'thursday': 'Thu',
+    'fr': 'Fri', 'fri': 'Fri', 'friday': 'Fri',
+    'sa': 'Sat', 'sat': 'Sat', 'saturday': 'Sat',
+    'su': 'Sun', 'sun': 'Sun', 'sunday': 'Sun',
+}
 
 
 def validate_test_command_template(template: str) -> None:
@@ -52,6 +66,44 @@ def validate_test_command_template(template: str) -> None:
 def _load_json(path: Path) -> dict:
     with path.open('r', encoding='utf-8') as json_file:
         return json.load(json_file)
+
+
+def _normalize_weekday(token: str) -> str:
+    """Normalize a common weekday spelling to its three-letter form."""
+    if not isinstance(token, str):
+        raise ValueError(f'Invalid weekday: {token!r}. Expected a weekday or "all".')
+
+    normalized = WEEKDAY_ALIASES.get(token.lower())
+    if normalized is None:
+        raise ValueError(
+            f'Invalid weekday: {token!r}. Expected a common weekday spelling or "all".'
+        )
+    return normalized
+
+
+def _parse_active_weekdays(value: object, profile_name: str) -> frozenset[str]:
+    """Parse a weekday list, or the special value "all", into canonical weekdays."""
+    if isinstance(value, str):
+        tokens = [value]
+    elif isinstance(value, list):
+        tokens = value
+    else:
+        raise ValueError(
+            f'Profile {profile_name!r} active_weekdays must be "all" or a nonempty list'
+        )
+
+    if not tokens:
+        raise ValueError(f'Profile {profile_name!r} must define a nonempty active_weekdays list')
+
+    if any(isinstance(token, str) and token.lower() == 'all' for token in tokens):
+        if len(tokens) != 1:
+            raise ValueError(f'Profile {profile_name!r} cannot combine "all" with other weekdays')
+        return frozenset(WEEKDAY_ABBREVIATIONS)
+
+    weekdays = [_normalize_weekday(token) for token in tokens]
+    if len(weekdays) != len(set(weekdays)):
+        raise ValueError(f'Profile {profile_name!r} contains duplicate active weekdays')
+    return frozenset(weekdays)
 
 
 def load_profiles(manifest_path: str | Path) -> ProfileManifest:
@@ -71,12 +123,13 @@ def load_profiles(manifest_path: str | Path) -> ProfileManifest:
         test_command_template = config['test_command_template']
         validate_test_command_template(test_command_template)
 
+        active_weekdays = _parse_active_weekdays(config.get('active_weekdays'), name)
+
         profiles[name] = Profile(
             name=name,
-            schedule=config['schedule'],
+            active_weekdays=active_weekdays,
             version_file_path=config['version_file_path'],
             settings_file_path=config['settings_file_path'],
-            tests_to_trigger_file_path=config['tests_to_trigger_file_path'],
             test_command_template=test_command_template,
             support_matrix=settings,
             ignored_versions_regex=settings.get(
@@ -98,82 +151,57 @@ def load_profiles(manifest_path: str | Path) -> ProfileManifest:
 
     return ProfileManifest(
         profiles=profiles,
-        combined_output_file=manifest.get(
-            'combined_output_file',
+        tests_to_trigger_file_path=manifest.get(
+            'tests_to_trigger_file_path',
             '.github/scripts/generated-files/tests_to_trigger.txt',
         ),
-        active_profiles_file=manifest.get(
-            'active_profiles_file',
-            '.github/scripts/generated-files/active_profiles.txt',
+        test_comments_file_path=manifest.get(
+            'test_comments_file_path',
+            '.github/scripts/generated-files/test_comments.txt',
+        ),
+        new_gpu_channels_file=manifest.get(
+            'new_gpu_channels_file',
+            '.github/scripts/generated-files/new_gpu_channels.txt',
         ),
         request_timeout_sec=request_timeout_sec,
     )
 
 
-def _expand_cron_dow_part(part: str) -> set[int]:
-    """Expand one comma-separated cron day-of-week component to ISO weekdays."""
-    if part == '*':
-        return set(range(1, 8))
-
-    step = 1
-    if '/' in part:
-        part, step_text = part.split('/', 1)
-        step = int(step_text)
-        if step <= 0:
-            raise ValueError(f'Invalid cron day-of-week step: {step}')
-
-    if '-' in part:
-        start_text, end_text = part.split('-', 1)
-        start = int(start_text)
-        end = int(end_text)
-    else:
-        start = end = int(part)
-
-    if not (0 <= start <= 7 and 0 <= end <= 7):
-        raise ValueError(f'Invalid cron day-of-week range: {part}')
-
-    days: set[int] = set()
-    for day in range(start, end + 1, step):
-        # Cron uses 0 and 7 for Sunday; Python's ISO weekday uses 7.
-        days.add(7 if day % 7 == 0 else day)
-    return days
+def _current_weekday(now: datetime) -> str:
+    """Return the locale-independent three-letter weekday abbreviation."""
+    return WEEKDAY_ABBREVIATIONS[now.weekday()]
 
 
-def cron_day_matches(schedule: str, now: datetime) -> bool:
-    """Return whether a five-field cron schedule is active on now's UTC weekday."""
-    fields = schedule.split()
-    if len(fields) != 5:
-        raise ValueError(f'Expected a five-field cron expression: {schedule}')
-
-    allowed_days = set[int]()
-    for part in fields[4].split(','):
-        allowed_days.update(_expand_cron_dow_part(part))
-
-    return now.isoweekday() in allowed_days
+def current_weekday_name(now: datetime) -> str:
+    """Return the locale-independent full weekday name."""
+    return WEEKDAY_FULL_NAMES[now.weekday()]
 
 
-def resolve_profiles(
+def format_weekdays(weekdays: Iterable[str]) -> str:
+    """Format canonical weekday abbreviations in weekday order."""
+    return ', '.join(sorted(weekdays, key=WEEKDAY_ABBREVIATIONS.index))
+
+
+def profile_is_active(profile: Profile, now: datetime) -> bool:
+    """Return whether a profile is active on now's UTC weekday."""
+    return _current_weekday(now) in profile.active_weekdays
+
+
+def partition_profiles(
     profiles: dict[str, Profile],
-    selection: str,
     now: datetime,
-) -> list[Profile]:
-    """Resolve the profiles selected by auto, all, or an explicit list."""
-    selection = (selection or 'auto').strip()
-
-    if selection == 'auto':
-        return [profile for profile in profiles.values() if cron_day_matches(profile.schedule, now)]
-
-    if selection == 'all':
-        return list(profiles.values())
-
-    selected_names = [name.strip() for name in selection.split(',') if name.strip()]
-    unknown = [name for name in selected_names if name not in profiles]
-    if unknown:
-        raise ValueError(f'Unknown profile(s): {", ".join(unknown)}')
-    if not selected_names:
-        raise ValueError('No profiles selected')
-
-    return [profiles[name] for name in selected_names]
+) -> tuple[list[Profile], list[Profile]]:
+    """Partition configured profiles into active and schedule-skipped profiles."""
+    active_profiles = [
+        profile for profile in profiles.values() if profile_is_active(profile, now)
+    ]
+    active_names = {profile.name for profile in active_profiles}
+    skipped_profiles = [
+        profile
+        for profile in profiles.values()
+        if profile.name not in active_names
+    ]
+    return active_profiles, skipped_profiles
 
 
 def profile_names(profiles: Iterable[Profile]) -> list[str]:

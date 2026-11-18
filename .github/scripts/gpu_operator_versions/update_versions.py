@@ -1,4 +1,5 @@
 import argparse
+from dataclasses import dataclass
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,8 +8,10 @@ from common.utils import logger
 from gpu_operator_versions.profiles import (
     Profile,
     ProfileManifest,
+    current_weekday_name,
+    format_weekdays,
     load_profiles,
-    resolve_profiles,
+    partition_profiles,
 )
 from gpu_operator_versions.openshift import fetch_ocp_version_stream, filter_ocp_versions
 from gpu_operator_versions.version_utils import get_latest_versions, get_earliest_versions
@@ -36,14 +39,6 @@ CONFIG_PINNED_GPU_OPERATOR = "pinned_gpu_operator"
 CONFIG_OPENSHIFT_SUPPORT = "openshift_support"
 CONFIG_DEFAULTS = "defaults"
 CONFIG_UNLISTED_VERSIONS = "unlisted_versions"
-
-
-def save_tests_commands(tests_commands: set, file_path: str):
-    output = Path(file_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    with output.open("w", encoding="utf-8") as f:
-        for command in sorted(tests_commands):
-            f.write(command + "\n")
 
 
 def get_ocp_support_config(ocp_version: str, support_matrix: dict) -> dict:
@@ -369,8 +364,19 @@ def discover_versions(request_timeout_sec: int) -> dict:
     }
 
 
-def process_profile(snapshot: dict, profile: Profile) -> set[str]:
-    """Apply one profile to the shared upstream snapshot."""
+@dataclass(frozen=True)
+class ProfileUpdate:
+    """A fully calculated profile update, prior to writing any files."""
+
+    profile: Profile
+    final_versions: dict
+    commands: set[str]
+    comments: set[str]
+    new_gpu_channels: set[str]
+
+
+def prepare_profile(snapshot: dict, profile: Profile) -> ProfileUpdate:
+    """Calculate one profile update without writing any files."""
     ocp_versions = filter_ocp_versions(
         snapshot[VERSION_OCP],
         profile.ignored_versions_regex,
@@ -399,11 +405,6 @@ def process_profile(snapshot: dict, profile: Profile) -> set[str]:
     # Apply the filtered diffs to obtain the final profile version matrix.
     final_versions = apply_diffs(old_versions, diffs)
 
-    version_file.write_text(
-        json.dumps(final_versions, indent=4),
-        encoding='utf-8',
-    )
-
     ocp_releases = list(ocp_versions.keys())
     # Use final_versions rather than the raw snapshot so commands are generated
     # only for channels actually tracked in this profile's version file.
@@ -419,55 +420,117 @@ def process_profile(snapshot: dict, profile: Profile) -> set[str]:
             if _version_tuple(channel) >= _version_tuple(profile.minimum_gpu_channel)
         ]
 
-    commands = create_tests_commands(
+    generated_output = create_tests_commands(
         diffs,
         ocp_releases,
         gpu_releases,
         profile.support_matrix,
-        gpu_catalog_entries,
+        gpu_catalog_entries=gpu_catalog_entries,
         test_command_template=profile.test_command_template,
     )
-    save_tests_commands(commands, profile.tests_to_trigger_file_path)
-    return commands
+    commands = {
+        command for command in generated_output if command.startswith('/test ')
+    }
+    comments = {
+        f'**{profile.name}:** {command.lstrip("# ")}'
+        for command in generated_output
+        if not command.startswith('/test ')
+    }
+    new_gpu_channels = (
+        set(final_versions[VERSION_GPU_OPERATOR])
+        - set(old_versions.get(VERSION_GPU_OPERATOR, {}))
+    )
+    return ProfileUpdate(
+        profile=profile,
+        final_versions=final_versions,
+        commands=commands,
+        comments=comments,
+        new_gpu_channels=new_gpu_channels,
+    )
+
+
+def write_profile_update(update: ProfileUpdate) -> None:
+    """Write one fully calculated profile version file."""
+    version_file = Path(update.profile.version_file_path)
+    version_file.write_text(
+        json.dumps(update.final_versions, indent=4),
+        encoding='utf-8',
+    )
+
+
+def _write_text(path: str | Path, text: str) -> None:
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(text, encoding='utf-8')
 
 
 def _write_lines(path: str | Path, lines: list[str]) -> None:
-    output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(''.join(f'{line}\n' for line in lines), encoding='utf-8')
+    _write_text(path, ''.join(f'{line}\n' for line in lines))
 
 
-def run(manifest: ProfileManifest, selection: str, now: datetime | None = None) -> list[str]:
+def render_test_comments(
+    comments: set[str],
+    skipped_profiles: list[Profile],
+    now: datetime,
+) -> list[str]:
+    """Render aggregate warnings and non-actionable schedule information."""
+    lines = [f'- {comment}' for comment in sorted(comments)]
+    lines.extend(
+        f'- INFO: **{profile.name}** was not run because '
+        f'{current_weekday_name(now)} is outside its configured weekdays '
+        f'({format_weekdays(profile.active_weekdays)}).'
+        for profile in skipped_profiles
+    )
+    return lines
+
+
+def run(manifest: ProfileManifest, now: datetime | None = None) -> list[str]:
     """Discover upstream versions once and dispatch them to active profiles."""
     current_time = now or datetime.now(timezone.utc)
-    active_profiles = resolve_profiles(manifest.profiles, selection, current_time)
+    active_profiles, skipped_profiles = partition_profiles(
+        manifest.profiles,
+        current_time,
+    )
     active_names = [profile.name for profile in active_profiles]
     logger.info(f'Active profiles: {", ".join(active_names) if active_names else "none"}')
 
     if not active_profiles:
-        _write_lines(manifest.combined_output_file, [])
-        _write_lines(manifest.active_profiles_file, [])
+        _write_lines(manifest.tests_to_trigger_file_path, [])
+        _write_lines(
+            manifest.test_comments_file_path,
+            render_test_comments(set(), skipped_profiles, current_time),
+        )
+        _write_lines(manifest.new_gpu_channels_file, [])
         return active_names
 
     snapshot = discover_versions(manifest.request_timeout_sec)
-    commands: set[str] = set()
 
+    updates: list[ProfileUpdate] = []
     for profile in active_profiles:
-        logger.info(f'Processing profile: {profile.name}')
-        commands.update(process_profile(snapshot, profile))
+        logger.info(f'Calculating profile: {profile.name}')
+        updates.append(prepare_profile(snapshot, profile))
 
-    _write_lines(manifest.combined_output_file, sorted(commands))
-    _write_lines(manifest.active_profiles_file, active_names)
+    commands: set[str] = set()
+    comments: set[str] = set()
+    new_gpu_channels: set[str] = set()
+    for update in updates:
+        logger.info(f'Writing profile: {update.profile.name}')
+        write_profile_update(update)
+        commands.update(update.commands)
+        comments.update(update.comments)
+        new_gpu_channels.update(update.new_gpu_channels)
+
+    _write_lines(manifest.tests_to_trigger_file_path, sorted(commands))
+    _write_lines(
+        manifest.test_comments_file_path,
+        render_test_comments(comments, skipped_profiles, current_time),
+    )
+    _write_lines(manifest.new_gpu_channels_file, sorted(new_gpu_channels))
     return active_names
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Update configured GPU Operator version profiles')
-    parser.add_argument(
-        '--profiles',
-        default='auto',
-        help='auto, all, or a comma-separated profile list (default: auto)',
-    )
+    parser = argparse.ArgumentParser(description='Update configured GPU Operator versions')
     parser.add_argument(
         '--manifest',
         default=str(Path(__file__).with_name('profiles.json')),
@@ -479,7 +542,7 @@ def parse_args() -> argparse.Namespace:
 def main():
     args = parse_args()
     manifest = load_profiles(args.manifest)
-    run(manifest, args.profiles)
+    run(manifest)
 
 
 if __name__ == '__main__':

@@ -9,11 +9,6 @@ on:
         default: 'main'
         required: false
         type: string
-      profiles:
-        description: 'Profiles to run: auto, all, regular, signed, or a comma-separated list'
-        default: 'auto'
-        required: false
-        type: string
 
 permissions:
   contents: write
@@ -35,33 +30,28 @@ jobs:
         with:
           python-version: 3.13
 
-      - name: Update version profiles
+      - name: Update versions
         id: update_versions
         run: |
           pip install -r .github/scripts/gpu_operator_versions/requirements.txt
           mkdir -p .github/scripts/generated-files
-          PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions \
-            --profiles "${PROFILES}"
+          PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions
 
           TEST_TRIGGERS=$(cat .github/scripts/generated-files/tests_to_trigger.txt)
-          ACTIVE_PROFILES=$(paste -sd, .github/scripts/generated-files/active_profiles.txt)
+          TEST_COMMENTS=$(cat .github/scripts/generated-files/test_comments.txt)
           {
             echo 'TEST_TRIGGERS<<EOF'
             echo "${TEST_TRIGGERS}"
             echo 'EOF'
-            echo "ACTIVE_PROFILES=${ACTIVE_PROFILES}"
+            echo 'TEST_COMMENTS<<EOF'
+            echo "${TEST_COMMENTS}"
+            echo 'EOF'
           } >> "$GITHUB_OUTPUT"
-        env:
-          PROFILES: ${{ github.event.inputs.profiles || 'auto' }}
 
-      - name: Detect new GPU operator channels
+      - name: Expose new GPU operator channels
         id: new_gpu_channels
-        env:
-          VERSIONS_FILE: .github/scripts/gpu_operator_versions/versions.json
         run: |
-          old_channels=$(git show HEAD:"${VERSIONS_FILE}" | jq -r '."gpu-operator" | keys[]')
-          new_channels=$(jq -r '."gpu-operator" | keys[]' "${VERSIONS_FILE}")
-          new_gpu=$(comm -23 <(echo "${new_channels}") <(echo "${old_channels}"))
+          new_gpu=$(paste -sd, .github/scripts/generated-files/new_gpu_channels.txt)
 
           if [ -z "${new_gpu}" ]; then
             echo "No new GPU operator channels detected."
@@ -69,7 +59,7 @@ jobs:
           else
             echo "New GPU operator channels detected:"
             echo "${new_gpu}"
-            echo "channels=$(echo "${new_gpu}" | paste -sd, -)" >> "$GITHUB_OUTPUT"
+            echo "channels=${new_gpu}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create Pull Request
@@ -88,6 +78,9 @@ jobs:
             /approve
             ```
 
+            ${{ steps.update_versions.outputs.TEST_COMMENTS }}
+            /approve
+
             Update the NVIDIA GPU operator on OpenShift test matrix
             ---
             ${{ vars.VERSION_UPDATE_FLOW_NOTIFY_USERS }}
@@ -101,23 +94,13 @@ jobs:
           GH_TOKEN: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
           PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
           TEST_TRIGGERS: ${{ steps.update_versions.outputs.TEST_TRIGGERS }}
-          ACTIVE_PROFILES: ${{ steps.update_versions.outputs.ACTIVE_PROFILES }}
-          PROFILES: ${{ github.event.inputs.profiles || 'auto' }}
         run: |
-          BODY="${TEST_TRIGGERS}"
-
-          if [ "${PROFILES}" = "auto" ] &&
-             ! printf '%s' ",${ACTIVE_PROFILES}," | grep -q ',signed,'; then
-            BODY="${BODY}
-          :warning: Signed/precompiled driver tests were not evaluated because the signed profile is outside its configured schedule. The next scheduled signed run will evaluate them."
-          fi
-
-          if [ -z "${BODY//[[:space:]]/}" ]; then
+          if [ -z "${TEST_TRIGGERS//[[:space:]]/}" ]; then
             echo "No test triggers to comment; skipping."
             exit 0
           fi
 
-          gh pr comment "${PR_NUMBER}" --body "${BODY}"
+          gh pr comment "${PR_NUMBER}" --body "${TEST_TRIGGERS}"
 
       - name: Create issues for new GPU operator channels
         if: steps.new_gpu_channels.outputs.channels != ''
@@ -144,7 +127,7 @@ jobs:
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   title: issueTitle,
-                  body: `A new GPU operator channel **v${channel}** has been detected.\n\n## Tasks\n\n- [ ] Ensure Prow jobs exist for this channel\n- [ ] Confirm the version appears in \`versions.json\` after the PR is merged\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                  body: `A new GPU operator channel **v${channel}** has been detected.\n\n## Tasks\n\n- [ ] Ensure Prow jobs exist for this channel\n- [ ] Confirm the channel appears in the relevant version file after the PR is merged\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
                   labels: ['operator-available']
                 });
                 console.log(`Created issue for channel v${channel}`);

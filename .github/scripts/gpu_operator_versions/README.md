@@ -106,24 +106,28 @@ The signed profile also sets:
 
 ### Schedules
 
-The workflow uses the union of all profile schedules and resolves the active profiles from each profile’s five-field cron expression:
+Profile activation is based only on the current UTC weekday. The profile manifest uses an explicit `active_weekdays` setting. Its value may be the case-insensitive special value `all`, or a nonempty list of common weekday spellings. Two-letter abbreviations, three-letter abbreviations, and full names are accepted case-insensitively; for example, `Su`, `Sun`, and `Sunday` are equivalent.
 
-- regular: `0 0 * * 0-5` (Sunday through Friday)
-- signed: `0 0 * * 2-4` (Tuesday through Thursday)
+- regular: `all`
+- signed: Tuesday through Thursday
 
-On Sunday, Monday, and Friday, only the regular profile runs. On Tuesday through Thursday, both profiles run from one upstream discovery pass. The workflow does not run on Saturday.
+The workflow’s own cron schedule determines when the workflow starts. A profile runs only when the workflow is started **and** the profile is active for the current UTC weekday. In other words, the effective schedule is the intersection of the workflow schedule and the profile’s weekday list.
 
-When the signed profile is inactive in `auto` mode, `signed_versions.json` is not updated and signed test commands are not generated. The unchanged signed tracking file remains the pending state for the next scheduled signed run.
+The automatic workflow currently runs Sunday through Friday. Therefore:
 
-### Manual profile selection
+- The regular profile runs Sunday through Friday automatically.
+- The signed profile runs Tuesday through Thursday automatically.
+- Neither profile runs automatically on Saturday because the workflow is not scheduled then.
 
-The GitHub workflow accepts a `profiles` input:
+A manually dispatched run still respects the weekday restrictions configured in the profile manifest. For example, a manual run on Saturday processes only the regular profile; the signed profile is skipped because Saturday is outside its schedule.
 
-- `auto`: use each profile’s cron schedule
-- `all`: run every profile
-- `regular`: run only the regular profile
-- `signed`: run only the signed profile
-- A comma-separated list, such as `regular,signed`
+The updater aggregates output from all active profiles:
+
+- `tests_to_trigger_file_path` contains only `/test` commands.
+- `test_comments_file_path` contains warnings and non-actionable schedule information.
+- `new_gpu_channels_file` contains the union of newly detected GPU operator channels.
+
+The GitHub workflow consumes these generic outputs without knowing which profiles exist.
 
 ## Data Sources
 
@@ -150,23 +154,16 @@ Run all profiles selected by the current UTC weekday:
 PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions
 ```
 
-Run a specific profile selection:
-
-```console
-PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions --profiles signed
-```
-
 Use a custom profile manifest:
 
 ```console
 PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions \
-  --profiles all \
   --manifest path/to/profiles.json
 ```
 
 ### Environment Variables
 
-The profile manifest defines each profile’s version file, settings file, output file, complete `/test` command template, schedule, and catalog-check setting. The remaining environment variables are:
+The profile manifest defines each profile’s version file, settings file, complete `/test` command template, weekday schedule, and catalog-check setting. It also defines aggregate output paths for test commands, comments, and new GPU channels. The remaining environment variables are:
 - `REQUEST_TIMEOUT_SECONDS` - Request timeout in seconds (Optional, defaults to the manifest value or `30`)
 - `OCP_IGNORED_VERSIONS_REGEX` - Fallback OpenShift ignore regex when a settings file omits one
 - `CHECK_CATALOG_AVAILABILITY` - Fallback catalog-check setting when a profile omits one
