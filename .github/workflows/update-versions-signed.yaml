@@ -1,0 +1,30 @@
+name: Check for new signed driver versions
+
+on:
+  schedule:
+    - cron: '0 0 * * 2-4'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to check out'
+        default: 'main'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  update-versions:
+    uses: ./.github/workflows/update-versions.reusable.yaml
+    with:
+      branch: ${{ inputs.branch || 'main' }}
+      version-file: .github/scripts/gpu_operator_versions/signed_versions.json
+      settings-file: .github/scripts/gpu_operator_versions/signed_settings.json
+      tests-file: .github/scripts/generated-files/signed_tests_to_trigger.txt
+      test-command-suffix: '-signed'
+      check-catalog-availability: true
+      verification-label: 'gpu-operator-verification:signed'
+    secrets: inherit

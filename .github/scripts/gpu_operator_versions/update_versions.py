@@ -1,4 +1,5 @@
 import json
+
 from common.utils import logger
 
 from gpu_operator_versions.settings import Settings
@@ -205,7 +206,7 @@ def create_tests_commands(diffs: dict, ocp_releases: list, gpu_releases: list,
 
     Args:
         gpu_catalog_entries: Optional NVIDIA GPU operator catalog entries for availability checking
-        test_command_suffix: Suffix appended to test command job names (e.g., "-signed")
+        test_command_suffix: Suffix appended to test command job names
 
     Returns:
         Set of test command strings and comment strings (e.g., warnings)
@@ -321,6 +322,12 @@ def filter_new_gpu_versions_by_catalog(
     return filtered_diffs, gpu_catalog_entries
 
 
+def get_gpu_releases_for_tests(final_versions: dict, latest_gpu_channels: list[str]) -> list[str]:
+    """Get the latest two tracked channels that are still eligible for new tests."""
+    tracked_gpu_channels = set(final_versions[VERSION_GPU_OPERATOR]) & set(latest_gpu_channels)
+    return get_latest_versions(list(tracked_gpu_channels), 2)
+
+
 def apply_diffs(old_versions: dict, diffs: dict) -> dict:
     """Apply diffs to old versions to create updated versions."""
     updated = dict(old_versions)
@@ -333,18 +340,21 @@ def apply_diffs(old_versions: dict, diffs: dict) -> dict:
     return updated
 
 
+
 def main():
     settings = Settings()
     sha = get_sha(settings)
     gpu_versions = get_operator_versions(settings)
     ocp_versions = fetch_ocp_versions(settings)
 
-    if settings.signed_gpu_min_channel:
-        min_parts = tuple(int(x) for x in settings.signed_gpu_min_channel.split('.'))
-        gpu_versions = {
-            k: v for k, v in gpu_versions.items()
-            if tuple(int(x) for x in k.split('.')) >= min_parts
-        }
+    # Version tracking exists to decide which tests to trigger. Only the latest
+    # GPU Operator channels are eligible for new tests, so historical channels
+    # are not compared or backfilled into the version matrix.
+    latest_gpu_channels = get_latest_versions(list(gpu_versions), 2)
+    gpu_versions = {
+        channel: gpu_versions[channel]
+        for channel in latest_gpu_channels
+    }
 
     new_versions = {
         VERSION_GPU_MAIN_LATEST: sha,
@@ -374,16 +384,8 @@ def main():
     # Use the already-filtered diffs for test generation
     ocp_releases = list(ocp_versions.keys())
     # Use final_versions (after catalog filtering) instead of raw gpu_versions
-    # to ensure tests are only generated for versions actually tracked in versions.json
-    gpu_releases = get_latest_versions(list(final_versions[VERSION_GPU_OPERATOR].keys()), 2)
-
-    # Filter GPU channels to only those >= signed_gpu_min_channel when running in signed mode
-    if settings.signed_gpu_min_channel:
-        min_parts = tuple(int(x) for x in settings.signed_gpu_min_channel.split('.'))
-        gpu_releases = [
-            g for g in gpu_releases
-            if tuple(int(x) for x in g.split('.')) >= min_parts
-        ]
+    # to ensure tests are only generated for versions actually tracked in versions.json.
+    gpu_releases = get_gpu_releases_for_tests(final_versions, latest_gpu_channels)
 
     tests_commands = create_tests_commands(
         diffs,
