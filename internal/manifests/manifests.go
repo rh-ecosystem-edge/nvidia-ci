@@ -203,15 +203,20 @@ func decodeResources(data []byte) ([]unstructured.Unstructured, error) {
 	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 4096)
 	var resources []unstructured.Unstructured
 	for {
-		var resource unstructured.Unstructured
-		if err := decoder.Decode(&resource); errors.Is(err, io.EOF) {
+		var document json.RawMessage
+		if err := decoder.Decode(&document); errors.Is(err, io.EOF) {
 			return resources, nil
 		} else if err != nil {
 			return nil, err
 		}
-		if resource.Object != nil {
-			resources = append(resources, resource)
+		if len(document) == 0 || bytes.Equal(bytes.TrimSpace(document), []byte("null")) {
+			continue
 		}
+		var resource unstructured.Unstructured
+		if err := json.Unmarshal(document, &resource); err != nil {
+			return nil, err
+		}
+		resources = append(resources, resource)
 	}
 }
 
@@ -320,7 +325,7 @@ func (r runner) changeFiles(ctx context.Context, files []string) error {
 			continue
 		}
 		if r.options.WaitForMCP {
-			if err := r.waitForRollout(ctx, ""); err != nil {
+			if err := r.waitForRollout(ctx, "", nil); err != nil {
 				return err
 			}
 		}

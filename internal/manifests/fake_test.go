@@ -16,6 +16,8 @@ import (
 const (
 	oldConfiguration = "rendered-old"
 	newConfiguration = "rendered-new"
+	firstConfigName  = "first"
+	alreadyPaused    = "already-paused"
 )
 
 var errSimulated = errors.New("simulated failure")

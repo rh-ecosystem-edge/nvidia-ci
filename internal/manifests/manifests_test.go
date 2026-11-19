@@ -69,7 +69,7 @@ func TestFreshBatchIncludesAdditionalManifests(t *testing.T) {
 	r, cluster := testRunner(t, "")
 	writeFile(t, filepath.Join(r.options.Directory, "30-extra.yaml"),
 		"apiVersion: machineconfiguration.openshift.io/v1\nkind: MachineConfig\nmetadata:\n  name: extra\n  labels:\n    role: worker\n"+
-			"---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: extra-settings\n")
+			"---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: extra-settings\n---\nnull\n")
 	g.Expect(r.run(t.Context())).To(Succeed())
 	g.Expect(cluster.pool.Spec.Paused).To(BeFalse())
 	g.Expect(cluster.waited).To(Equal(cluster.created))
@@ -103,7 +103,7 @@ func TestFreshBatchIncludesAdditionalManifests(t *testing.T) {
 			}
 		}
 	}
-	g.Expect(cluster.changed).To(Equal([]string{"first", "second", "settings", "extra", "extra-settings"}))
+	g.Expect(cluster.changed).To(Equal([]string{firstConfigName, "second", "settings", "extra", "extra-settings"}))
 	if patches != 2 || starts != 0 || lastSource < 0 || lastSource >= capture || capture >= resume {
 		t.Fatalf("bad ordering: patches=%d starts=%d source=%d capture=%d resume=%d",
 			patches, starts, lastSource, capture, resume)
@@ -119,7 +119,7 @@ func TestBatchFailuresPreservePauseOwnership(t *testing.T) {
 		{"stale", "has not converged"},
 		{"cancel", "context canceled"},
 		{"cancel-apply", "context canceled"},
-		{"already-paused", "is already paused"},
+		{alreadyPaused, "is already paused"},
 		{"foreign-owner", "oc patch mcp/worker"},
 		{"version-conflict", "testing value /metadata/resourceVersion failed"},
 		{"resume-error", "could not resume mcp/worker"},
@@ -128,7 +128,7 @@ func TestBatchFailuresPreservePauseOwnership(t *testing.T) {
 			g := NewWithT(t)
 			mode := test.mode
 			r, cluster := testRunner(t, mode)
-			cluster.pool.Spec.Paused = mode == "already-paused"
+			cluster.pool.Spec.Paused = mode == alreadyPaused
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if strings.HasPrefix(mode, "cancel") {
@@ -136,7 +136,7 @@ func TestBatchFailuresPreservePauseOwnership(t *testing.T) {
 			}
 			g.Expect(r.run(ctx)).To(MatchError(ContainSubstring(test.message)))
 			g.Expect(cluster.pool.Spec.Paused).To(Equal(slices.Contains(
-				[]string{"already-paused", "foreign-owner", "resume-error"}, mode)))
+				[]string{alreadyPaused, "foreign-owner", "resume-error"}, mode)))
 		})
 	}
 }
@@ -289,7 +289,7 @@ func TestBatchRejectsNamesInPreviousRender(t *testing.T) {
 			if statusOnly {
 				configuration = &cluster.pool.Status.Configuration
 			}
-			configuration.Source = []poolSource{{Name: "first"}}
+			configuration.Source = []poolSource{{Name: firstConfigName}}
 			g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("refusing to batch a reused name")))
 			g.Expect(cluster.changed).To(BeEmpty())
 			for _, event := range cluster.events {
@@ -310,6 +310,63 @@ func TestBatchFinalSnapshotMustMatchCapturedTarget(t *testing.T) {
 	}
 	g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("instead of captured target " + newConfiguration)))
 	g.Expect(cluster.pool.Spec.Paused).To(BeFalse())
+}
+
+func TestBatchFinalSnapshotMustIncludeEverySource(t *testing.T) {
+	g := NewWithT(t)
+	r, cluster := testRunner(t, "")
+	cluster.beforePoolRead = func() {
+		if !cluster.pool.Spec.Paused && len(cluster.waited) == 2 {
+			cluster.pool.Spec.Configuration.Source = cluster.pool.Spec.Configuration.Source[:1]
+			cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
+		}
+	}
+	g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("lost MachineConfig/second")))
+	g.Expect(cluster.pool.Spec.Paused).To(BeFalse())
+}
+
+func TestBatchWaitsForStatusSourcesWithUnchangedTarget(t *testing.T) {
+	g := NewWithT(t)
+	r, cluster := testRunner(t, "")
+	r.options.RolloutTimeout = 2 * time.Second
+	cluster.pool.Spec.Configuration.Source = []poolSource{{Name: firstConfigName}}
+	reads := 0
+	cluster.beforePoolRead = func() {
+		reads++
+		if reads == 2 {
+			cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
+		}
+	}
+	g.Expect(r.waitForRollout(t.Context(), oldConfiguration, []string{firstConfigName})).To(Succeed())
+	g.Expect(reads).To(Equal(2))
+}
+
+func TestDecodeResources(t *testing.T) {
+	const resource = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n"
+	for _, test := range []struct {
+		name, input string
+		count       int
+		invalid     bool
+	}{
+		{"empty", "# comment\n---\n", 0, false},
+		{"null", "null\n---\n~\n---\n", 0, false},
+		{"mixed", "null\n---\n" + resource + "---\nnull\n---\n# empty\n", 1, false},
+		{"json-null", "{\"apiVersion\":\"v1\",\"kind\":\"ConfigMap\"}\nnull", 1, false},
+		{"missing-kind", "metadata:\n  name: invalid\n", 0, true},
+		{"scalar", "invalid", 0, true},
+		{"malformed", "kind: [", 0, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			g := NewWithT(t)
+			resources, err := decodeResources([]byte(test.input))
+			if test.invalid {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(resources).To(HaveLen(test.count))
+			}
+		})
+	}
 }
 
 func TestCleanupKeepsCancellationAndResumeError(t *testing.T) {

@@ -18,6 +18,7 @@ import (
 const (
 	pauseOwner     = "nvidia-ci/pause-owner"
 	cleanupTimeout = time.Minute
+	patchAdd       = "add"
 )
 
 type poolConfiguration struct {
@@ -139,8 +140,8 @@ func (r runner) setPoolPause(ctx context.Context, pool *poolState, owner string,
 
 	return r.patchPool(ctx, []patchOperation{
 		{Op: "test", Path: "/metadata/resourceVersion", Value: pool.ResourceVersion},
-		{Op: "add", Path: "/metadata/annotations", Value: annotations},
-		{Op: "add", Path: "/spec/paused", Value: paused},
+		{Op: patchAdd, Path: "/metadata/annotations", Value: annotations},
+		{Op: patchAdd, Path: "/spec/paused", Value: paused},
 	})
 }
 
@@ -167,7 +168,7 @@ func (r runner) resumePool(ctx context.Context, owner, originalVersion string, r
 
 	return r.patchPool(ctx, []patchOperation{
 		{Op: "test", Path: "/metadata/annotations/nvidia-ci~1pause-owner", Value: owner},
-		{Op: "add", Path: "/spec/paused", Value: false},
+		{Op: patchAdd, Path: "/spec/paused", Value: false},
 		{Op: "remove", Path: "/metadata/annotations/nvidia-ci~1pause-owner"},
 	})
 }
@@ -241,7 +242,7 @@ func (r runner) waitForRender(ctx context.Context, machineConfigs []string) (str
 	return pool.Spec.Configuration.Name, nil
 }
 
-func (r runner) waitForRollout(ctx context.Context, target string) error {
+func (r runner) waitForRollout(ctx context.Context, target string, machineConfigs []string) error {
 	if target == "" {
 		_ = r.waitForPool(ctx, "condition=Updating=True", r.options.StartTimeout)
 		if ctx.Err() != nil {
@@ -265,7 +266,14 @@ func (r runner) waitForRollout(ctx context.Context, target string) error {
 		if condition := meta.FindStatusCondition(pool.Status.Conditions, "RenderDegraded"); condition != nil && condition.Status == metav1.ConditionTrue {
 			return false, fmt.Errorf("mcp/%s render failed: %s", r.options.PoolName, condition.Message)
 		}
-		return poolIsSettled(pool), nil
+		settled := poolIsSettled(pool)
+		for _, name := range machineConfigs {
+			if !pool.Spec.Configuration.hasSource(name) {
+				return false, fmt.Errorf("mcp/%s captured target %s lost MachineConfig/%s", r.options.PoolName, target, name)
+			}
+			settled = settled && pool.Status.Configuration.hasSource(name)
+		}
+		return settled, nil
 	})
 	if err != nil {
 		return fmt.Errorf("mcp/%s has not converged: %w", r.options.PoolName, err)
@@ -282,5 +290,5 @@ func (r runner) applyBatch(ctx context.Context, prepared *batch) error {
 		return err
 	}
 
-	return r.waitForRollout(ctx, target)
+	return r.waitForRollout(ctx, target, prepared.machineConfigs)
 }

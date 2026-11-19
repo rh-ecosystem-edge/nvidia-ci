@@ -23,7 +23,7 @@ func TestDeleteUsesReverseOrderWithoutPoolChanges(t *testing.T) {
 	for _, event := range cluster.events {
 		g.Expect(event.args[0]).To(Equal(actionDelete))
 	}
-	g.Expect(cluster.changed).To(Equal([]string{"settings", "second", "first"}))
+	g.Expect(cluster.changed).To(Equal([]string{"settings", "second", firstConfigName}))
 }
 
 func TestHooksUseSelectedKubeconfig(t *testing.T) {
@@ -137,7 +137,7 @@ func TestHooksRunBeforeRenderingTheNextFile(t *testing.T) {
 	for _, event := range cluster.events {
 		g.Expect(event.args[0]).NotTo(Equal(commandPatch))
 	}
-	g.Expect(cluster.changed).To(Equal([]string{"first", "after-hook"}))
+	g.Expect(cluster.changed).To(Equal([]string{firstConfigName, "after-hook"}))
 }
 
 func TestUnrelatedResourcesAndDisabledWaitsDoNotTouchPool(t *testing.T) {
