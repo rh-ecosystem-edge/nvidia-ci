@@ -89,11 +89,13 @@ test-bm-arm-deployment: ## Test bare-metal ARM deployment
 
 MANIFEST_DIR ?= manifests/nno
 WAIT_FOR_WORKER_MCP ?= true
+BATCH_WORKER_MCP ?= $(if $(filter manifests/nno,$(MANIFEST_DIR)),true,false)
+export MANIFEST_DIR WAIT_FOR_WORKER_MCP BATCH_WORKER_MCP
 
 .PHONY: apply-manifests
-apply-manifests: ## Apply YAML manifests under MANIFEST_DIR to the cluster, waiting for the worker MachineConfigPool to roll out after each file (requires KUBECONFIG)
-	MANIFEST_DIR=$(MANIFEST_DIR) WAIT_FOR_WORKER_MCP=$(WAIT_FOR_WORKER_MCP) scripts/apply-manifests.sh apply
+apply-manifests: ## Apply YAML manifests, batching the default NNO worker MachineConfigs into one rollout (requires KUBECONFIG)
+	scripts/apply-manifests.sh apply
 
 .PHONY: delete-manifests
 delete-manifests: ## Delete YAML manifests under MANIFEST_DIR from the cluster (requires KUBECONFIG)
-	MANIFEST_DIR=$(MANIFEST_DIR) scripts/apply-manifests.sh delete
+	scripts/apply-manifests.sh delete
