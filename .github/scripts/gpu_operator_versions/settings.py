@@ -11,7 +11,6 @@ class Settings:
     support_matrix: dict
     check_catalog_availability: bool
     test_command_suffix: str
-    signed_gpu_min_channel: str
 
     def __init__(self):
         self.version_file_path = os.getenv("VERSION_FILE_PATH")
@@ -33,9 +32,6 @@ class Settings:
 
         # Load support matrix
         self.support_matrix = self._load_support_matrix()
-
-        # Minimum GPU operator channel for signed/precompiled tests (e.g., "26.3")
-        self.signed_gpu_min_channel = self.support_matrix.get("signed_gpu_min_channel", "")
 
         # Get ignored_versions from support matrix or fall back to env var
         self.ignored_versions = self.support_matrix.get(

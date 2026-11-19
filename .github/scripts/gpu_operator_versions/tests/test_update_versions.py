@@ -2,11 +2,14 @@ import copy
 import unittest
 from unittest.mock import patch
 
+import requests
+
 from gpu_operator_versions.update_versions import (
     calculate_diffs,
     create_tests_commands,
     create_tests_matrix,
-    filter_new_gpu_versions_by_catalog
+    filter_new_gpu_versions_by_catalog,
+    get_gpu_releases_for_tests
 )
 
 base_versions = {
@@ -331,6 +334,20 @@ class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
         self.assertEqual(entries, [])
         mock_fetch.assert_not_called()
 
+    def test_catalog_request_failure_aborts_update(self):
+        """Unknown catalog availability must fail the run before tests are generated."""
+        gpu_diffs = {'25.3': '25.3.1'}
+        ocp_versions = {'4.20': '4.20.0'}
+
+        with patch(
+            'gpu_operator_versions.update_versions.fetch_gpu_operator_catalog_entries',
+            side_effect=requests.ConnectionError('catalog unavailable')
+        ):
+            with self.assertRaises(requests.ConnectionError):
+                filter_new_gpu_versions_by_catalog(
+                    gpu_diffs, ocp_versions, default_support_matrix
+                )
+
     def test_no_active_ocp_returns_all_gpu_diffs(self):
         """When no active OCP versions exist, all GPU diffs should be kept."""
         gpu_diffs = {
@@ -393,6 +410,41 @@ class TestFilterNewGpuVersionsByCatalog(unittest.TestCase):
         self.assertNotIn('25.3', diffs['gpu-operator'])
 
 
+class TestGetGpuReleasesForTests(unittest.TestCase):
+
+    def test_historical_channels_do_not_replace_rejected_latest_channels(self):
+        """Historical channels must not become eligible when a latest channel is filtered."""
+        final_versions = {
+            'gpu-operator': {
+                '24.1': '24.1.5',
+                '25.1': '25.1.5',
+                '26.1': '26.1.0',
+            }
+        }
+        latest_gpu_channels = ['26.1', '25.9']
+
+        self.assertEqual(
+            get_gpu_releases_for_tests(final_versions, latest_gpu_channels),
+            ['26.1']
+        )
+
+    def test_latest_tracked_channels_remain_eligible(self):
+        """Both latest channels remain eligible when both are tracked."""
+        final_versions = {
+            'gpu-operator': {
+                '24.1': '24.1.5',
+                '25.9': '25.9.0',
+                '26.1': '26.1.0',
+            }
+        }
+        latest_gpu_channels = ['26.1', '25.9']
+
+        self.assertEqual(
+            get_gpu_releases_for_tests(final_versions, latest_gpu_channels),
+            ['25.9', '26.1']
+        )
+
+
 class TestCreateTestsCommands(unittest.TestCase):
 
     def test_default_no_suffix(self):
@@ -402,28 +454,28 @@ class TestCreateTestsCommands(unittest.TestCase):
             diff, ['4.20'], ['26.3'], default_support_matrix)
         self.assertIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x', commands)
 
-    def test_signed_suffix(self):
+    def test_command_suffix(self):
         """Commands with suffix should append it to job names."""
         diff = {'ocp': {'4.20': '4.20.36'}}
         commands = create_tests_commands(
             diff, ['4.20'], ['26.3'], default_support_matrix,
-            test_command_suffix='-signed')
-        self.assertIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x-signed', commands)
+            test_command_suffix='-custom')
+        self.assertIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x-custom', commands)
         self.assertNotIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x', commands)
 
-    def test_signed_suffix_master(self):
-        """Master bundle changes with suffix should produce master-signed commands."""
+    def test_command_suffix_master(self):
+        """Master bundle changes with suffix should include it in the command."""
         diff = {'gpu-main-latest': 'B'}
         commands = create_tests_commands(
             diff, ['4.21', '4.22'], ['26.3'], default_support_matrix,
-            test_command_suffix='-signed')
+            test_command_suffix='-custom')
         self.assertTrue(
-            all('-signed' in cmd for cmd in commands if cmd.startswith('/test')))
+            all('-custom' in cmd for cmd in commands if cmd.startswith('/test')))
         self.assertTrue(
-            any('master-signed' in cmd for cmd in commands))
+            any('master-custom' in cmd for cmd in commands))
 
     def test_mixed_openshift_4_and_5_command_generation(self):
-        """Mixed OCP changes generate standard and signed/precompiled commands."""
+        """Mixed OCP changes generate standard and suffixed commands."""
         diff = {'ocp': {'4.22': '4.22.23', '5.0': '5.0.2'}}
         ocp_releases = ['4.20', '4.22', '5.0']
         gpu_releases = ['26.3', '26.7']
@@ -431,12 +483,12 @@ class TestCreateTestsCommands(unittest.TestCase):
         commands = create_tests_commands(
             diff, ocp_releases, gpu_releases, default_support_matrix
         )
-        signed_commands = create_tests_commands(
+        suffixed_commands = create_tests_commands(
             diff,
             ocp_releases,
             gpu_releases,
             default_support_matrix,
-            test_command_suffix='-signed',
+            test_command_suffix='-custom',
         )
 
         self.assertEqual(commands, {
@@ -445,11 +497,11 @@ class TestCreateTestsCommands(unittest.TestCase):
             '/test 5.0-stable-nvidia-gpu-operator-e2e-26-3-x',
             '/test 5.0-stable-nvidia-gpu-operator-e2e-26-7-x',
         })
-        self.assertEqual(signed_commands, {
-            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-3-x-signed',
-            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-7-x-signed',
-            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-3-x-signed',
-            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-7-x-signed',
+        self.assertEqual(suffixed_commands, {
+            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-3-x-custom',
+            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-7-x-custom',
+            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-3-x-custom',
+            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-7-x-custom',
         })
 
 
