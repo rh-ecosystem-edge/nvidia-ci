@@ -528,8 +528,7 @@ cluster, via the `make apply-manifests` / `make delete-manifests` targets. This 
 one-off, day-2 cluster configuration (e.g. worker `MachineConfig`s, `ServiceAccount`s) that isn't
 part of a Ginkgo test flow.
 
-Requires `oc` and GNU `envsubst`. The CI image includes both and the Go executable; local runs build it with Go.
-Rollout settings are command-line flags; the shell wrapper maps the variables below to flags.
+Requires `oc`, GNU `envsubst`, and `jq` for batching. All are included in the CI image.
 
 ### Environment variables
 
@@ -547,7 +546,7 @@ Rollout settings are command-line flags; the shell wrapper maps the variables be
 - **Ordering**: files are applied in lexical filename order (reverse order on delete), so prefix
   files with numbers (`00-`, `10-`, `20-`, ...) to control ordering when one manifest depends on
   another (e.g. a namespace before objects created in it).
-- **Templating**: GNU `envsubst` replaces `${VAR}` / `$VAR` using the template values supplied to the Go helper. The command supplies the current environment.
+- **Templating**: GNU `envsubst` replaces `${VAR}` / `$VAR` from the current environment.
 - **Required variables** (`<name>.env-required`): if a sibling file with the same base name and
   a `.env-required` extension exists next to a manifest (e.g. `10-foo.yaml` ->
   `10-foo.env-required`, one variable name per line, blank lines and `#`-comments ignored), the
@@ -591,7 +590,7 @@ $ make apply-manifests
 
 On a fresh cluster, `make apply-manifests` batches the NNO `MachineConfig`s into one worker rollout.
 Batching allows new MachineConfigs plus ConfigMaps, ServiceAccounts and RoleBindings. Existing
-MachineConfigs, hooks, Lists or other kinds switch the entire run to the original per-file waits. Use
+MachineConfigs, hooks, multi-object files or other kinds switch the entire run to per-file waits. Use
 `BATCH_WORKER_MCP=false` when later manifests depend on an earlier rollout.
 
 To remove everything again:
