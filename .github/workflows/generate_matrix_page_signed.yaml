@@ -1,0 +1,48 @@
+name: Generate signed GPU Operator matrix
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to check out'
+        default: 'main'
+        required: false
+        type: string
+      pr_number:
+        description: 'PR number to process (must be specified as a number or "all")'
+        required: true
+        type: string
+      gh_pages_branch:
+        description: 'GitHub Pages branch to update'
+        default: 'gh-pages'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: generate-gpu-operator-matrix-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  generate-matrix:
+    uses: ./.github/workflows/generate_matrix_page.reusable.yaml
+    with:
+      branch: ${{ github.event.pull_request.base.ref || inputs.branch }}
+      pr-number: ${{ github.event.pull_request.number || inputs.pr_number }}
+      gh-pages-branch: ${{ inputs.gh_pages_branch || 'gh-pages' }}
+      verification-label: 'gpu-operator-verification:signed'
+      data-filename: 'gpu_operator_signed_matrix.json'
+      html-filename: 'gpu_operator_signed_matrix.html'
+      job-suffix: '-signed'
+      dashboard-title: 'Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift (precompiled/signed)'
+      sibling-url: 'gpu_operator_matrix.html'
+      sibling-label: 'Standard'
+      force-generate: ${{ github.event_name != 'pull_request_target' }}
+    secrets: inherit

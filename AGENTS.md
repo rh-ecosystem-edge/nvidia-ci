@@ -53,6 +53,16 @@ Tests are Ginkgo suites under `tests/`. The test-runner script (`scripts/test-ru
 
 Pass ginkgo CLI parameters via `ARGS`: `make run-tests ARGS="-- --single.mig.profile=1"`
 
+## GPU Operator version-update test selection
+
+The GPU Operator version updater calculates which Prow jobs should run. Version JSON files store the previous state needed to detect changes; they are not inventories that must be preserved, backfilled, or expanded.
+
+Only the latest two GPU Operator channels are eligible for new tests. Historical channels do not trigger tests and are not reintroduced. When catalog checking is enabled, a new GPU Operator version must be available in at least one active OpenShift operator catalog before it is tracked.
+
+Test selection follows the configured OpenShift support matrix. Active OpenShift versions use the latest two GPU Operator channels, while maintenance versions use their configured pinned GPU Operator channels. All verification variants use these same rules; variant-specific behavior comes only from configuration.
+
+When reasoning about which tests should run, derive the answer from current version changes and the selection rules above rather than from historical entries in a version JSON file.
+
 ## Architecture
 
 ### Package layout

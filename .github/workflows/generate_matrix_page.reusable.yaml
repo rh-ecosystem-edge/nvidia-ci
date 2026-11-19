@@ -1,0 +1,150 @@
+name: Generate GPU Operator matrix (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch containing dashboard scripts'
+        required: false
+        default: 'main'
+        type: string
+      pr-number:
+        description: 'PR number to process, or all'
+        required: true
+        type: string
+      gh-pages-branch:
+        description: 'GitHub Pages branch to update'
+        required: false
+        default: 'gh-pages'
+        type: string
+      verification-label:
+        description: 'GPU Operator verification label represented by this dashboard'
+        required: true
+        type: string
+      data-filename:
+        description: 'Dashboard JSON filename'
+        required: true
+        type: string
+      html-filename:
+        description: 'Dashboard HTML filename'
+        required: true
+        type: string
+      job-suffix:
+        description: 'Prow job suffix used by this verification variant'
+        required: false
+        default: ''
+        type: string
+      dashboard-title:
+        description: 'Dashboard title'
+        required: true
+        type: string
+      sibling-url:
+        description: 'URL of the sibling dashboard'
+        required: true
+        type: string
+      sibling-label:
+        description: 'Label for the sibling dashboard link'
+        required: true
+        type: string
+      force-generate:
+        description: 'Generate HTML even when dashboard JSON is unchanged'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  generate-matrix:
+    if: >-
+      github.event_name != 'pull_request_target' ||
+      (
+        github.repository == 'rh-ecosystem-edge/nvidia-ci' &&
+        github.event.pull_request.user.login == 'github-actions[bot]' &&
+        contains(
+          toJSON(github.event.pull_request.labels.*.name),
+          format('"{0}"', inputs.verification-label)
+        )
+      )
+    runs-on: ubuntu-latest
+    env:
+      DASHBOARD_OUTPUT_DIR: '.github/scripts/test_matrix_dashboard/output'
+      DASHBOARD_DATA_FILEPATH: '.github/scripts/test_matrix_dashboard/output/${{ inputs.data-filename }}'
+      DASHBOARD_HTML_FILEPATH: '.github/scripts/test_matrix_dashboard/output/${{ inputs.html-filename }}'
+    steps:
+      - name: Check out dashboard code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Check out GitHub Pages
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.gh-pages-branch }}
+          path: ${{ env.DASHBOARD_OUTPUT_DIR }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          pip install -r .github/scripts/gpu_operator_dashboard/requirements.txt
+
+      - name: Fetch verification results
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Processing ${{ inputs.verification-label }} results for PR: ${{ inputs.pr-number }}"
+          PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.fetch_ci_data \
+            --pr_number "${{ inputs.pr-number }}" \
+            --baseline_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
+            --merged_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
+            --job-suffix="${{ inputs.job-suffix }}"
+
+      - name: Generate dashboard
+        run: |
+          cd "${{ env.DASHBOARD_OUTPUT_DIR }}"
+          if [[ "${{ inputs.force-generate }}" != "true" ]] &&
+             git ls-files --error-unmatch "${{ inputs.data-filename }}" >/dev/null 2>&1 &&
+             git diff --exit-code "${{ inputs.data-filename }}"; then
+            echo "No changes for ${{ inputs.verification-label }}"
+            exit 0
+          fi
+
+          cd "${{ github.workspace }}"
+          echo "Generating ${{ inputs.verification-label }} dashboard..."
+          PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.generate_ci_dashboard \
+            --dashboard_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
+            --dashboard_html_filepath "${{ env.DASHBOARD_HTML_FILEPATH }}" \
+            --title "${{ inputs.dashboard-title }}" \
+            --sibling-url "${{ inputs.sibling-url }}" \
+            --sibling-label "${{ inputs.sibling-label }}"
+
+      - name: Deploy HTML to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: ${{ inputs.gh-pages-branch }}
+          folder: ${{ env.DASHBOARD_OUTPUT_DIR }}
+          clean: false
+          force: false
+
+      - name: Delete merged branch
+        if: |
+          github.event_name == 'pull_request_target' &&
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.user.login == 'github-actions[bot]'
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          echo "Deleting merged branch: $BRANCH"
+          git push origin --delete "$BRANCH" || echo "Branch $BRANCH already deleted or doesn't exist"
+
+      - name: Notify on failure
+        if: failure()
+        uses: ./.github/actions/notify-failure
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
