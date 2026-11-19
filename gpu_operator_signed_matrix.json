@@ -585,6 +585,13 @@
         "notes": [],
         "bundle_tests": [
             {
+                "ocp_full_version": "4.20",
+                "gpu_operator_version": "master",
+                "test_status": "FAILURE",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/839/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.20-stable-nvidia-gpu-operator-e2e-master-signed/2122848800161665024",
+                "job_timestamp": 1794969653
+            },
+            {
                 "ocp_full_version": "4.20.46",
                 "gpu_operator_version": "26.7.2(bundle)",
                 "test_status": "SUCCESS",
@@ -1330,8 +1337,20 @@
         "notes": [
             "On Red Hat OpenShift 5, the default GPU driver image will not work. A RHEL 10-compatible driver image must be explicitly specified in ClusterPolicy."
         ],
-        "bundle_tests": [],
+        "bundle_tests": [
+            {
+                "ocp_full_version": "5.0",
+                "gpu_operator_version": "master",
+                "test_status": "FAILURE",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/839/pull-ci-rh-ecosystem-edge-nvidia-ci-main-5.0-stable-nvidia-gpu-operator-e2e-master-signed/2122848800287494144",
+                "job_timestamp": 1794962543
+            }
+        ],
         "release_tests": [],
-        "job_history_links": []
+        "job_history_links": [
+            "https://prow.ci.openshift.org/job-history/gs/test-platform-results-public/pr-logs/directory/pull-ci-rh-ecosystem-edge-nvidia-ci-main-5.0-stable-nvidia-gpu-operator-e2e-26-3-x-signed",
+            "https://prow.ci.openshift.org/job-history/gs/test-platform-results-public/pr-logs/directory/pull-ci-rh-ecosystem-edge-nvidia-ci-main-5.0-stable-nvidia-gpu-operator-e2e-26-7-x-signed",
+            "https://prow.ci.openshift.org/job-history/gs/test-platform-results-public/pr-logs/directory/pull-ci-rh-ecosystem-edge-nvidia-ci-main-5.0-stable-nvidia-gpu-operator-e2e-master-signed"
+        ]
     }
 }
