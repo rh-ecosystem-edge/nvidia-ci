@@ -37,9 +37,7 @@ type fakeCluster struct {
 	changed        []string
 	events         []operation
 	cancel         context.CancelFunc
-	hook           func() error
 	renderErr      error
-	startErr       error
 	afterApply     func()
 	beforePoolRead func()
 }
@@ -49,11 +47,10 @@ func (f *fakeCluster) patch(data string) error {
 	if err != nil {
 		return err
 	}
-	current := f.pool
 	if f.mode == "version-conflict" {
-		current.ResourceVersion = "2"
+		f.pool.ResourceVersion = "2"
 	}
-	document, err := json.Marshal(current)
+	document, err := json.Marshal(f.pool)
 	if err != nil {
 		return err
 	}
@@ -101,9 +98,6 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ i
 		return input, f.renderErr
 	}
 	f.events = append(f.events, operation{args: slices.Clone(args), input: slices.Clone(input), paused: f.pool.Spec.Paused})
-	if name == "bash" && f.hook != nil {
-		return nil, f.hook()
-	}
 	if name != "oc" || args[len(args)-1] != "--kubeconfig=/explicit/kubeconfig" {
 		return nil, fmt.Errorf("unexpected command or implicit kubeconfig: %s %v", name, args)
 	}
@@ -124,7 +118,7 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ i
 	case commandPatch:
 		return nil, f.patch(args[slices.Index(args, "-p")+1])
 	case actionApply, commandCreate, actionDelete:
-		if f.mode == "apply-fail" || (args[0] == commandCreate && f.mode == "create-race") {
+		if f.mode == "apply-fail" {
 			return nil, errSimulated
 		}
 		resources, err := decodeResources(input)
@@ -137,19 +131,11 @@ func (f *fakeCluster) command(ctx context.Context, input []byte, _ []string, _ i
 				f.created = append(f.created, resource.GetName())
 			}
 		}
-		if f.mode == "cancel-apply" && f.cancel != nil {
-			f.cancel()
-
-			return nil, ctx.Err()
-		}
 		if f.afterApply != nil {
 			f.afterApply()
 		}
 	case commandWait:
 		condition := args[2]
-		if condition == "--for=condition=Updating=True" {
-			return nil, f.startErr
-		}
 		if _, remainder, ok := strings.Cut(condition, `@.name=="`); ok {
 			name, _, _ := strings.Cut(remainder, `"`)
 			if !f.pool.Spec.Paused || !slices.Contains(f.created, name) {

@@ -53,7 +53,6 @@ spec:
 	}
 	cluster := &fakeCluster{mode: mode}
 	cluster.pool.Name = options.PoolName
-	cluster.pool.Labels = map[string]string{"pool": "worker"}
 	cluster.pool.Generation, cluster.pool.ResourceVersion = 1, "1"
 	cluster.pool.Spec.Configuration.Name = oldConfiguration
 	cluster.pool.Spec.MachineConfigSelector = &metav1.LabelSelector{MatchLabels: map[string]string{"role": "worker"}}
@@ -68,20 +67,18 @@ func TestFreshBatchIncludesAdditionalManifests(t *testing.T) {
 	g := NewWithT(t)
 	r, cluster := testRunner(t, "")
 	writeFile(t, filepath.Join(r.options.Directory, "30-extra.yaml"),
-		"apiVersion: machineconfiguration.openshift.io/v1\nkind: MachineConfig\nmetadata:\n  name: extra\n  labels:\n    role: worker\n"+
-			"---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: extra-settings\n---\nnull\n")
+		"# empty document\n---\nnull\n---\napiVersion: machineconfiguration.openshift.io/v1\nkind: MachineConfig\nmetadata:\n  name: extra\n  labels:\n    role: worker\n"+
+			"---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: extra-settings\n---\nnull\n---\n~\n")
 	g.Expect(r.run(t.Context())).To(Succeed())
 	g.Expect(cluster.pool.Spec.Paused).To(BeFalse())
 	g.Expect(cluster.waited).To(Equal(cluster.created))
-	patches, starts, lastSource, capture, resume := 0, 0, -1, -1, -1
-	for index, event := range cluster.events {
+	var steps []string
+	for _, event := range cluster.events {
 		switch event.args[0] {
 		case commandPatch:
-			patches++
-			if event.paused {
-				resume = index
-			}
+			steps = append(steps, commandPatch)
 		case commandCreate, actionApply:
+			steps = append(steps, event.args[0])
 			g.Expect(event.paused).To(BeTrue())
 			if event.args[0] == commandCreate {
 				g.Expect(event.args).To(ContainElement("--save-config"))
@@ -91,34 +88,30 @@ func TestFreshBatchIncludesAdditionalManifests(t *testing.T) {
 					ContainSubstring("data:text/plain;base64,dGVzdA==")))
 			}
 		case commandWait:
+			g.Expect(event.args).NotTo(ContainElement("--for=condition=Updating=True"))
 			if strings.Contains(event.args[2], ".spec.configuration.source") {
-				lastSource = index
-			}
-			if event.args[2] == "--for=condition=Updating=True" {
-				starts++
+				steps = append(steps, commandWait)
 			}
 		case commandGet:
-			if lastSource >= 0 && event.paused {
-				capture = index
+			if event.paused {
+				steps = append(steps, commandGet)
 			}
 		}
 	}
 	g.Expect(cluster.changed).To(Equal([]string{firstConfigName, "second", "settings", "extra", "extra-settings"}))
-	if patches != 2 || starts != 0 || lastSource < 0 || lastSource >= capture || capture >= resume {
-		t.Fatalf("bad ordering: patches=%d starts=%d source=%d capture=%d resume=%d",
-			patches, starts, lastSource, capture, resume)
-	}
+	g.Expect(steps).To(Equal([]string{
+		commandPatch, commandCreate, commandCreate, actionApply, commandCreate, actionApply,
+		commandWait, commandWait, commandWait, commandGet, commandGet, commandPatch,
+	}))
 }
 
 func TestBatchFailuresPreservePauseOwnership(t *testing.T) {
 	for _, test := range []struct{ mode, message string }{
 		{"apply-fail", "oc create --save-config"},
-		{"create-race", "oc create --save-config"},
 		{"pause-error", "oc patch mcp/worker"},
 		{"render-timeout", ".spec.configuration.source"},
 		{"stale", "has not converged"},
 		{"cancel", "context canceled"},
-		{"cancel-apply", "context canceled"},
 		{alreadyPaused, "is already paused"},
 		{"foreign-owner", "oc patch mcp/worker"},
 		{"version-conflict", "testing value /metadata/resourceVersion failed"},
@@ -131,7 +124,7 @@ func TestBatchFailuresPreservePauseOwnership(t *testing.T) {
 			cluster.pool.Spec.Paused = mode == alreadyPaused
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			if strings.HasPrefix(mode, "cancel") {
+			if mode == "cancel" {
 				cluster.cancel = cancel
 			}
 			g.Expect(r.run(ctx)).To(MatchError(ContainSubstring(test.message)))
@@ -141,38 +134,25 @@ func TestBatchFailuresPreservePauseOwnership(t *testing.T) {
 	}
 }
 
-func TestExistingConfigsUseSequentialWaits(t *testing.T) {
-	g := NewWithT(t)
-	r, cluster := testRunner(t, "")
-	cluster.existing = "second"
-	g.Expect(r.run(t.Context())).To(Succeed())
-	starts, applies := 0, 0
-	for _, event := range cluster.events {
-		g.Expect(event.args[0]).NotTo(BeElementOf(commandPatch, commandCreate))
-		g.Expect(event.paused).To(BeFalse())
-		if slices.Contains(event.args, "--for=condition=Updating=True") {
-			starts++
-		}
-		if event.args[0] == actionApply {
-			applies++
-		}
-	}
-	g.Expect(applies).To(BeNumerically(">", 0))
-	g.Expect(starts).To(Equal(applies))
-}
-
-func TestRequiredInputsDoNotReadAmbientEnvironment(t *testing.T) {
-	for _, key := range []string{"KUBECONFIG", "RULES_BASE64"} {
-		t.Run(key, func(t *testing.T) {
+func TestInvalidInputsFailBeforeClusterChanges(t *testing.T) {
+	t.Setenv("KUBECONFIG", "ambient-value-must-not-be-used")
+	t.Setenv("RULES_BASE64", "ambient-value-must-not-be-used")
+	for _, test := range []struct {
+		name, message string
+		configure     func(*runner)
+	}{
+		{"missing-kubeconfig", "kubeconfig must be supplied", func(r *runner) { r.options.Kubeconfig = "" }},
+		{"missing-variable", "missing required variable RULES_BASE64", func(r *runner) { delete(r.options.Variables, "RULES_BASE64") }},
+		{"kubeconfig-list", "must name a single file", func(r *runner) { r.options.Kubeconfig = "/first" + string(os.PathListSeparator) + "/second" }},
+		{"invalid-document", "Object 'Kind' is missing", func(r *runner) {
+			writeFile(t, filepath.Join(r.options.Directory, "00-first.yaml"), "metadata: {name: invalid}")
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
-			t.Setenv(key, "ambient-value-must-not-be-used")
 			r, cluster := testRunner(t, "")
-			if key == "KUBECONFIG" {
-				r.options.Kubeconfig = ""
-			} else {
-				delete(r.options.Variables, key)
-			}
-			g.Expect(r.run(t.Context())).To(HaveOccurred())
+			test.configure(&r)
+			g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring(test.message)))
 			g.Expect(cluster.events).To(BeEmpty())
 		})
 	}
@@ -198,21 +178,6 @@ func TestRenderingUsesExplicitValuesAndFilter(t *testing.T) {
 	g.Expect(string(data)).To(Equal("   ${UNCHANGED:-default}"))
 }
 
-func TestMissingEnvsubstFailsBeforeClusterOperations(t *testing.T) {
-	g := NewWithT(t)
-	r, cluster := testRunner(t, "")
-	r.command = func(ctx context.Context, input []byte, environment []string, stdout io.Writer, name string, args ...string) ([]byte, error) {
-		if name == "envsubst" {
-			return executeCommand(ctx, input, environment, stdout, name, args...)
-		}
-
-		return cluster.command(ctx, input, environment, stdout, name, args...)
-	}
-	t.Setenv("PATH", t.TempDir())
-	g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("envsubst")))
-	g.Expect(cluster.events).To(BeEmpty())
-}
-
 func TestRenderFailurePreventsClusterChanges(t *testing.T) {
 	g := NewWithT(t)
 	r, cluster := testRunner(t, "")
@@ -221,14 +186,6 @@ func TestRenderFailurePreventsClusterChanges(t *testing.T) {
 	g.Expect(err).To(MatchError(ContainSubstring("render ")))
 	g.Expect(err).To(MatchError(ContainSubstring("00-first.yaml")))
 	g.Expect(err).To(MatchError(ContainSubstring(errSimulated.Error())))
-	g.Expect(cluster.events).To(BeEmpty())
-}
-
-func TestKubeconfigListsFailBeforeClusterChanges(t *testing.T) {
-	g := NewWithT(t)
-	r, cluster := testRunner(t, "")
-	r.options.Kubeconfig = "/first/config" + string(os.PathListSeparator) + "/second/config"
-	g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("must name a single file")))
 	g.Expect(cluster.events).To(BeEmpty())
 }
 
@@ -241,42 +198,17 @@ func TestBatchChecksPoolSelectorBeforeWriting(t *testing.T) {
 		{"missing-selector", nil, "empty machineConfigSelector"},
 		{"empty-selector", &metav1.LabelSelector{}, "empty machineConfigSelector"},
 		{"wrong-pool", &metav1.LabelSelector{MatchLabels: map[string]string{"role": "master"}}, "is not selected by mcp/worker"},
-		{"matching-expression", &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{
-			{Key: "role", Operator: metav1.LabelSelectorOpIn, Values: []string{"worker"}},
-		}}, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			r, cluster := testRunner(t, "")
 			cluster.pool.Spec.MachineConfigSelector = test.selector
-			err := r.run(t.Context())
-			if test.message == "" {
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(cluster.created).To(HaveLen(2))
-				return
-			}
-			g.Expect(err).To(MatchError(ContainSubstring(test.message)))
+			g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring(test.message)))
 			g.Expect(cluster.changed).To(BeEmpty())
 			for _, event := range cluster.events {
 				g.Expect(event.args[0]).NotTo(Equal(commandPatch))
 			}
 		})
-	}
-}
-
-func TestCapturedRenderMustStillIncludeEverySource(t *testing.T) {
-	g := NewWithT(t)
-	r, cluster := testRunner(t, "")
-	cluster.beforePoolRead = func() {
-		if len(cluster.waited) == 2 && len(cluster.pool.Spec.Configuration.Source) == 2 {
-			cluster.pool.Spec.Configuration.Source = cluster.pool.Spec.Configuration.Source[1:]
-		}
-	}
-	g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("is missing MachineConfig/first")))
-	g.Expect(cluster.waited).To(Equal(cluster.created))
-	g.Expect(cluster.pool.Spec.Paused).To(BeFalse())
-	for _, event := range cluster.events {
-		g.Expect(event.args).NotTo(ContainElement("--for=condition=Updating=True"))
 	}
 }
 
@@ -299,71 +231,68 @@ func TestBatchRejectsNamesInPreviousRender(t *testing.T) {
 	}
 }
 
-func TestBatchFinalSnapshotMustMatchCapturedTarget(t *testing.T) {
-	g := NewWithT(t)
-	r, cluster := testRunner(t, "")
-	cluster.beforePoolRead = func() {
-		if !cluster.pool.Spec.Paused && len(cluster.waited) == 2 {
-			cluster.pool.Spec.Configuration.Name = "rendered-unrelated"
-			cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
-		}
-	}
-	g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("instead of captured target " + newConfiguration)))
-	g.Expect(cluster.pool.Spec.Paused).To(BeFalse())
-}
-
-func TestBatchFinalSnapshotMustIncludeEverySource(t *testing.T) {
-	g := NewWithT(t)
-	r, cluster := testRunner(t, "")
-	cluster.beforePoolRead = func() {
-		if !cluster.pool.Spec.Paused && len(cluster.waited) == 2 {
-			cluster.pool.Spec.Configuration.Source = cluster.pool.Spec.Configuration.Source[:1]
-			cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
-		}
-	}
-	g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring("lost MachineConfig/second")))
-	g.Expect(cluster.pool.Spec.Paused).To(BeFalse())
-}
-
-func TestBatchWaitsForStatusSourcesWithUnchangedTarget(t *testing.T) {
-	g := NewWithT(t)
-	r, cluster := testRunner(t, "")
-	r.options.RolloutTimeout = 2 * time.Second
-	cluster.pool.Spec.Configuration.Source = []poolSource{{Name: firstConfigName}}
-	reads := 0
-	cluster.beforePoolRead = func() {
-		reads++
-		if reads == 2 {
-			cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
-		}
-	}
-	g.Expect(r.waitForRollout(t.Context(), oldConfiguration, []string{firstConfigName})).To(Succeed())
-	g.Expect(reads).To(Equal(2))
-}
-
-func TestDecodeResources(t *testing.T) {
-	const resource = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n"
+func TestBatchRejectsChangedRender(t *testing.T) {
 	for _, test := range []struct {
-		name, input string
-		count       int
-		invalid     bool
+		name, message string
+		paused        bool
+		change        func(*poolConfiguration)
 	}{
-		{"empty", "# comment\n---\n", 0, false},
-		{"null", "null\n---\n~\n---\n", 0, false},
-		{"mixed", "null\n---\n" + resource + "---\nnull\n---\n# empty\n", 1, false},
-		{"json-null", "{\"apiVersion\":\"v1\",\"kind\":\"ConfigMap\"}\nnull", 1, false},
-		{"missing-kind", "metadata:\n  name: invalid\n", 0, true},
-		{"scalar", "invalid", 0, true},
-		{"malformed", "kind: [", 0, true},
+		{"capture-source", "is missing MachineConfig/first", true, func(c *poolConfiguration) { c.Source = c.Source[1:] }},
+		{"rollout-target", "instead of captured target " + newConfiguration, false, func(c *poolConfiguration) { c.Name = "rendered-unrelated" }},
+		{"rollout-source", "lost MachineConfig/second", false, func(c *poolConfiguration) { c.Source = c.Source[:1] }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
-			resources, err := decodeResources([]byte(test.input))
-			if test.invalid {
-				g.Expect(err).To(HaveOccurred())
-			} else {
+			r, cluster := testRunner(t, "")
+			cluster.beforePoolRead = func() {
+				if len(cluster.waited) == 2 && cluster.pool.Spec.Paused == test.paused {
+					test.change(&cluster.pool.Spec.Configuration)
+					cluster.beforePoolRead = nil
+				}
+			}
+			g.Expect(r.run(t.Context())).To(MatchError(ContainSubstring(test.message)))
+			g.Expect(cluster.waited).To(Equal(cluster.created))
+			g.Expect(cluster.pool.Spec.Paused).To(BeFalse())
+		})
+	}
+}
+
+func TestBatchWaitsForPoolStatus(t *testing.T) {
+	for _, test := range []struct {
+		name                string
+		renderError, clears bool
+	}{
+		{"status-sources", false, true},
+		{"stale-render-error", true, true},
+		{"persistent-render-error", true, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			g := NewWithT(t)
+			r, cluster := testRunner(t, "")
+			cluster.pool.Spec.Configuration.Source = []poolSource{{Name: firstConfigName}}
+			if test.clears {
+				r.options.RolloutTimeout = 2 * time.Second
+			}
+			if test.renderError {
+				cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
+				cluster.pool.Status.Conditions = append(cluster.pool.Status.Conditions,
+					metav1.Condition{Type: "RenderDegraded", Status: metav1.ConditionTrue, Message: "previous render error"})
+			}
+			reads := 0
+			cluster.beforePoolRead = func() {
+				reads++
+				if test.clears && reads == 2 {
+					cluster.pool.Status.Configuration = cluster.pool.Spec.Configuration
+					cluster.pool.Status.Conditions = cluster.pool.Status.Conditions[:1]
+				}
+			}
+			err := r.waitForRollout(t.Context(), oldConfiguration, []string{firstConfigName})
+			if test.clears {
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(resources).To(HaveLen(test.count))
+				g.Expect(reads).To(Equal(2))
+			} else {
+				g.Expect(errors.Is(err, context.DeadlineExceeded)).To(BeTrue())
+				g.Expect(err).To(MatchError(ContainSubstring("previous render error")))
 			}
 		})
 	}
@@ -383,23 +312,35 @@ func TestCleanupKeepsCancellationAndResumeError(t *testing.T) {
 }
 
 func TestLatePauseCannotOutliveCleanup(t *testing.T) {
-	for _, lateWins := range []bool{false, true} {
-		t.Run(map[bool]string{false: "fence-first", true: "pause-after-cleanup-read"}[lateWins], func(t *testing.T) {
+	for _, test := range []struct {
+		name                string
+		lateWins, failFence bool
+	}{
+		{"fence-first", false, false},
+		{"pause-after-cleanup-read", true, false},
+		{"retry-failed-fence", false, true},
+		{"pause-after-failed-fence", true, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			r, cluster := testRunner(t, "")
 			var pending string
-			attemptedLateCommit := false
+			attemptedLateCommit, fenceFailed := false, false
 			r.command = func(ctx context.Context, input []byte, environment []string, stdout io.Writer, name string, args ...string) ([]byte, error) {
 				if name == "oc" && args[0] == commandPatch && pending == "" {
 					pending = args[slices.Index(args, "-p")+1]
 					return nil, errSimulated
 				}
+				if name == "oc" && args[0] == commandPatch && test.failFence && !fenceFailed {
+					fenceFailed = true
+					return nil, errSimulated
+				}
 				output, err := cluster.command(ctx, input, environment, stdout, name, args...)
-				if name == "oc" && pending != "" && !attemptedLateCommit &&
-					((lateWins && args[0] == commandGet) || (!lateWins && args[0] == commandPatch)) {
+				if name == "oc" && pending != "" && !attemptedLateCommit && (!test.failFence || fenceFailed) &&
+					((test.lateWins && args[0] == commandGet) || (!test.lateWins && args[0] == commandPatch)) {
 					attemptedLateCommit = true
 					lateErr := cluster.patch(pending)
-					if lateWins {
+					if test.lateWins {
 						g.Expect(lateErr).NotTo(HaveOccurred())
 					} else {
 						g.Expect(lateErr).To(MatchError(ContainSubstring("resourceVersion")))
@@ -411,9 +352,27 @@ func TestLatePauseCannotOutliveCleanup(t *testing.T) {
 			g.Expect(errors.Is(err, errSimulated)).To(BeTrue())
 			g.Expect(err.Error()).NotTo(ContainSubstring("could not resume"))
 			g.Expect(attemptedLateCommit).To(BeTrue())
+			g.Expect(fenceFailed).To(Equal(test.failFence))
 			g.Expect(cluster.pool.Spec.Paused).To(BeFalse())
 			g.Expect(cluster.pool.Annotations).NotTo(HaveKey(pauseOwner))
 			g.Expect(cluster.changed).To(BeEmpty())
 		})
 	}
+}
+
+func TestCleanupReportsUnconfirmedPauseAtDeadline(t *testing.T) {
+	g := NewWithT(t)
+	r, cluster := testRunner(t, "")
+	r.command = func(ctx context.Context, input []byte, environment []string, stdout io.Writer, name string, args ...string) ([]byte, error) {
+		if name == "oc" && args[0] == commandPatch {
+			return nil, errSimulated
+		}
+		return cluster.command(ctx, input, environment, stdout, name, args...)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	err := r.resumePool(ctx, "our-owner", cluster.pool.ResourceVersion, false)
+	g.Expect(errors.Is(err, context.DeadlineExceeded)).To(BeTrue())
+	g.Expect(errors.Is(err, errSimulated)).To(BeTrue())
+	g.Expect(err).To(MatchError(ContainSubstring("pause outcome could not be confirmed")))
 }

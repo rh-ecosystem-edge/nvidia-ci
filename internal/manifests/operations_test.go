@@ -35,11 +35,14 @@ func TestHooksUseSelectedKubeconfig(t *testing.T) {
 				g.Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 			}
 			r, cluster := testRunner(t, "")
-			r.options.WaitForMCP = false
 			result := filepath.Join(t.TempDir(), "hook-result")
 			t.Setenv("HOOK_RESULT", result)
+			later := filepath.Join(r.options.Directory, "10-second.yml")
+			t.Setenv("HOOK_MANIFEST", later)
+			writeFile(t, later, "invalid until the hook runs")
 			writeFile(t, filepath.Join(r.options.Directory, "00-first.sh"),
-				`printf '%s' "$KUBECONFIG" > "$HOOK_RESULT"`)
+				`printf '%s' "$KUBECONFIG" > "$HOOK_RESULT"
+printf '%s' '{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"after-hook"}}' > "$HOOK_MANIFEST"`)
 			r.command = func(ctx context.Context, input []byte, environment []string, stdout io.Writer, name string, args ...string) ([]byte, error) {
 				if name == "bash" {
 					g.Expect(stdout).To(Equal(os.Stdout))
@@ -53,6 +56,10 @@ func TestHooksUseSelectedKubeconfig(t *testing.T) {
 			data, err := os.ReadFile(result)
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(string(data)).To(Equal(r.options.Kubeconfig))
+			g.Expect(cluster.changed).To(Equal([]string{firstConfigName, "after-hook", "settings"}))
+			for _, event := range cluster.events {
+				g.Expect(event.args[0]).NotTo(BeElementOf(commandPatch, commandCreate))
+			}
 		})
 	}
 }
@@ -89,8 +96,9 @@ func TestStreamingCommandCancellationDoesNotWaitForBackgroundChild(t *testing.T)
 	g.Expect(err).To(MatchError(io.EOF))
 }
 
-func TestUnsupportedKindsUseSequentialWaits(t *testing.T) {
+func TestIneligibleRunsUseSequentialWaits(t *testing.T) {
 	for _, test := range []struct{ name, resource string }{
+		{"existing", ""},
 		{"kubelet", `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"KubeletConfig","metadata":{"name":"kubelet"},"spec":{"machineConfigPoolSelector":{"matchLabels":{"pool":"worker"}}}}`},
 		{"runtime", `{"apiVersion":"machineconfiguration.openshift.io/v1","kind":"ContainerRuntimeConfig","metadata":{"name":"runtime"},"spec":{"machineConfigPoolSelector":{"matchLabels":{"pool":"worker"}}}}`},
 		{"custom", `{"apiVersion":"example.com/v1","kind":"MachineConfig","metadata":{"name":"custom"}}`},
@@ -101,43 +109,30 @@ func TestUnsupportedKindsUseSequentialWaits(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			r, cluster := testRunner(t, "")
-			r.options.Directory = t.TempDir()
-			writeFile(t, filepath.Join(r.options.Directory, "config.yaml"), test.resource)
+			expectedApplies := 3
+			if test.resource == "" {
+				cluster.existing = "second"
+			} else {
+				expectedApplies++
+				writeFile(t, filepath.Join(r.options.Directory, "30-unsupported.yaml"), test.resource)
+			}
 			g.Expect(r.run(t.Context())).To(Succeed())
-			applies, waits := 0, 0
-			for _, event := range cluster.events {
+			var inputs []string
+			for index, event := range cluster.events {
 				g.Expect(event.args[0]).NotTo(BeElementOf(commandPatch, commandCreate))
-				switch event.args[0] {
-				case actionApply:
-					applies++
-					g.Expect(string(event.input)).To(Equal(test.resource))
-				case commandWait:
-					waits++
+				g.Expect(event.paused).To(BeFalse())
+				if event.args[0] == actionApply {
+					inputs = append(inputs, string(event.input))
+					g.Expect(cluster.events[index+1].args).To(ContainElement("--for=condition=Updating=True"))
+					g.Expect(cluster.events[index+2].args).To(ContainElement("--for=condition=Updated=True"))
 				}
 			}
-			g.Expect(applies).To(Equal(1))
-			g.Expect(waits).To(Equal(2))
+			g.Expect(inputs).To(HaveLen(expectedApplies))
+			if test.resource != "" {
+				g.Expect(inputs[len(inputs)-1]).To(Equal(test.resource))
+			}
 		})
 	}
-}
-
-func TestHooksRunBeforeRenderingTheNextFile(t *testing.T) {
-	g := NewWithT(t)
-	r, cluster := testRunner(t, "")
-	r.options.Directory = t.TempDir()
-	first := filepath.Join(r.options.Directory, "00-first.yaml")
-	later := filepath.Join(r.options.Directory, "10-later.yaml")
-	writeFile(t, first, "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: first\n")
-	writeFile(t, later, "invalid until the hook runs")
-	writeFile(t, sibling(first, ".sh"), "hook")
-	cluster.hook = func() error {
-		return os.WriteFile(later, []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: after-hook\n"), 0o600)
-	}
-	g.Expect(r.run(t.Context())).To(Succeed())
-	for _, event := range cluster.events {
-		g.Expect(event.args[0]).NotTo(Equal(commandPatch))
-	}
-	g.Expect(cluster.changed).To(Equal([]string{firstConfigName, "after-hook"}))
 }
 
 func TestUnrelatedResourcesAndDisabledWaitsDoNotTouchPool(t *testing.T) {

@@ -146,22 +146,30 @@ func (r runner) setPoolPause(ctx context.Context, pool *poolState, owner string,
 }
 
 func (r runner) resumePool(ctx context.Context, owner, originalVersion string, required bool) error {
-	pool, err := r.getPool(ctx)
+	var pool *poolState
+	var lastErr error
+	err := wait.PollUntilContextCancel(ctx, time.Second, true, func(ctx context.Context) (bool, error) {
+		pool, lastErr = r.getPool(ctx)
+		if lastErr != nil {
+			return false, nil
+		}
+		if pool.Annotations[pauseOwner] == owner {
+			return true, nil
+		}
+		if required {
+			return false, fmt.Errorf("pause ownership changed; refusing to resume another caller's pause")
+		}
+		if pool.ResourceVersion != originalVersion {
+			return true, nil
+		}
+		// Commit a new version so a delayed pause cannot pass its version test.
+		lastErr = r.setPoolPause(ctx, pool, owner, false)
+		return false, nil
+	})
 	if err != nil {
-		return err
+		return fmt.Errorf("pause outcome could not be confirmed: %w", errors.Join(err, lastErr))
 	}
 	if pool.Annotations[pauseOwner] != owner {
-		if required {
-			return fmt.Errorf("pause ownership changed; refusing to resume another caller's pause")
-		}
-		if pool.ResourceVersion == originalVersion {
-			// Commit a new version so a delayed pause cannot pass its version test.
-			fenceErr := r.setPoolPause(ctx, pool, owner, false)
-			if err := r.resumePool(ctx, owner, originalVersion, true); err != nil {
-				return errors.Join(fenceErr, err)
-			}
-		}
-
 		return nil
 	}
 	fmt.Printf("Resuming mcp/%s\n", r.options.PoolName)
@@ -255,16 +263,18 @@ func (r runner) waitForRollout(ctx context.Context, target string, machineConfig
 		return err
 	}
 	fmt.Printf("Waiting for mcp/%s to converge to %s (timeout: %s)\n", r.options.PoolName, target, r.options.RolloutTimeout)
+	var renderErr error
 	err := wait.PollUntilContextTimeout(ctx, time.Second, r.options.RolloutTimeout, true, func(ctx context.Context) (bool, error) {
 		pool, err := r.getPool(ctx)
 		if err != nil {
 			return false, err
 		}
+		renderErr = nil
+		if condition := meta.FindStatusCondition(pool.Status.Conditions, "RenderDegraded"); condition != nil && condition.Status == metav1.ConditionTrue {
+			renderErr = fmt.Errorf("mcp/%s render failed: %s", r.options.PoolName, condition.Message)
+		}
 		if pool.Spec.Configuration.Name != target {
 			return false, fmt.Errorf("mcp/%s targets %s instead of captured target %s", r.options.PoolName, pool.Spec.Configuration.Name, target)
-		}
-		if condition := meta.FindStatusCondition(pool.Status.Conditions, "RenderDegraded"); condition != nil && condition.Status == metav1.ConditionTrue {
-			return false, fmt.Errorf("mcp/%s render failed: %s", r.options.PoolName, condition.Message)
 		}
 		settled := poolIsSettled(pool)
 		for _, name := range machineConfigs {
@@ -276,7 +286,7 @@ func (r runner) waitForRollout(ctx context.Context, target string, machineConfig
 		return settled, nil
 	})
 	if err != nil {
-		return fmt.Errorf("mcp/%s has not converged: %w", r.options.PoolName, err)
+		return fmt.Errorf("mcp/%s has not converged: %w", r.options.PoolName, errors.Join(err, renderErr))
 	}
 	return nil
 }
