@@ -14,7 +14,7 @@ The dashboard fetches results from periodic Prow jobs stored in Google Cloud Sto
 
 ## Data Flow
 
-1. **Daily cron** (`--job-limit 1`): fetches the latest periodic job run
+1. **Daily cron** (`--job-limit 2`): checks the two latest builds per job so a build that finishes after the refresh is picked up the next day
 2. **Manual backfill** (`--job-limit 30`): fetches the last 30 runs (for initial setup)
 3. Results accumulate in `dpf_matrix.json` on `gh-pages`, merged by `build_id`
 4. HTML dashboard is regenerated when the JSON data changes
@@ -62,9 +62,10 @@ To add a new OCP version or branch, add an entry to `ocp_versions`.
 Fetches periodic job results from GCS.
 
 ```bash
-# Daily run (fetch latest result)
+# Daily run (check the two latest builds)
 PYTHONPATH=.github/scripts python -m dpf_dashboard.fetch_ci_data \
-  --output-data output/dpf_matrix.json
+  --output-data output/dpf_matrix.json \
+  --job-limit 2
 
 # Initial backfill (fetch last 30 runs)
 PYTHONPATH=.github/scripts python -m dpf_dashboard.fetch_ci_data \

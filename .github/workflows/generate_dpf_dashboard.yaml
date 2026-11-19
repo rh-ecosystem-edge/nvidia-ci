@@ -17,7 +17,7 @@ on:
         type: string
       job_limit:
         description: 'Number of recent job runs to fetch (use 30 for initial backfill)'
-        default: '1'
+        default: '2'
         required: false
         type: string
 
@@ -35,7 +35,7 @@ jobs:
       - name: Set dynamic env vars
         run: |
           echo "GH_PAGES_BRANCH=${{ github.event.inputs.gh_pages_branch || 'gh-pages' }}" >> "$GITHUB_ENV"
-          echo "JOB_LIMIT=${{ github.event.inputs.job_limit || '1' }}" >> "$GITHUB_ENV"
+          echo "JOB_LIMIT=${{ github.event.inputs.job_limit || '2' }}" >> "$GITHUB_ENV"
 
       - name: Checkout Code
         uses: actions/checkout@v6
