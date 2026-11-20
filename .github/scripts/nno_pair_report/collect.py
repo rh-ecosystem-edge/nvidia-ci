@@ -34,7 +34,10 @@ STEP_CHECKS = {
         "ocp_version", "nno_csv", "nno_deployment", "nic_cluster_policy_ready",
         "rdma_gpudirect",
     ),
-    "precompiled": ("ocp_version", "nno_csv", "precompiled_selection", "nno_deployment", "nic_cluster_policy_ready"),
+    "precompiled": (
+        "ocp_version", "nno_csv", "precompiled_selection", "nno_deployment", "nic_cluster_policy_ready",
+        "rdma_shared_device",
+    ),
 }
 
 
@@ -196,7 +199,7 @@ def normalize_manifest(data: Any, path: str) -> dict[str, Any]:
             "environment": str(run.get("environment", "")),
             "status": str(run.get("status", "unknown")),
             "planned_modes": sorted(set(planned_modes)),
-            **{key: run[key] for key in ("source", "provenance", "discovery", "note") if key in run},
+            **{key: run[key] for key in ("source", "provenance", "discovery", "note", "failed_steps") if key in run},
         },
         "pairs": normalized_pairs,
     }
@@ -294,6 +297,16 @@ def _step_pair(
         pair["checks"] = {name: "blocked" for name in expected_checks}
         return pair
 
+    if family == "precompiled":
+        rdma_checks = {
+            name for _, result in matching if isinstance(result.get("checks"), dict)
+            for name in ("rdma_shared_device", "rdma_gpudirect") if name in result["checks"]
+        }
+        if rdma_checks and "rdma_shared_device" not in rdma_checks:
+            pair["checks"].pop("rdma_shared_device")
+        for name in rdma_checks:
+            pair["checks"].setdefault(name, "planned")
+
     statuses: list[str] = []
     notes: list[str] = []
     no_precompiled_match = False
@@ -323,9 +336,12 @@ def _step_pair(
         if isinstance(result_checks, dict):
             for name, value in result_checks.items():
                 if name in {"rdma_shared_device", "rdma_gpudirect"}:
-                    if "gpudirect" not in str(result.get("step", "")).lower():
+                    if family == "standard":
+                        if "gpudirect" not in str(result.get("step", "")).lower():
+                            continue
+                        name = "rdma_gpudirect"
+                    elif not any(token in str(result.get("step", "")).lower() for token in ("rdma", "gpudirect")):
                         continue
-                    name = "rdma_gpudirect"
                 if name not in pair["checks"]:
                     continue
                 if name == "precompiled_selection" and no_precompiled_match:
@@ -340,8 +356,21 @@ def _step_pair(
         selection_outcome = str(selection_data.get("outcome") or "")
         selected_version = str(selection_data.get("version") or "").strip()
         selected_pullspec = str(selection_data.get("pull_spec") or "").strip()
+        precompiled_rdma = family == "precompiled" and isinstance(result_checks, dict) and any(
+            name in result_checks for name in ("rdma_shared_device", "rdma_gpudirect")
+        )
+        if family == "precompiled":
+            for source, target in (("kernel_version", "kernel"), ("architecture", "architecture")):
+                if selection_data.get(source):
+                    pair["driver_requested"][target] = selection_data[source]
         if family == "precompiled" and selection_outcome in {"no_match", "selection_error", "not_run"}:
-            driver_version = selected_version
+            # The RDMA spec resets selection but still observes the active driver.
+            # Compare its version/digest with deployment without replacing the
+            # selected pullspec with a tagless repository/image reference.
+            driver_version = selected_version or (
+                str(configured_data.get("version") or "").strip()
+                if selection_outcome == "not_run" and precompiled_rdma else ""
+            )
             driver_image = selected_pullspec
         else:
             driver_version = selected_version or str(configured_data.get("version") or "").strip()
@@ -361,9 +390,11 @@ def _step_pair(
             else:
                 pair["driver_requested"]["image"] = driver_image
 
-        if configured_data and not (
-            family == "precompiled" and selection_outcome in {"no_match", "selection_error", "not_run"}
-        ):
+        ignore_configured = family == "precompiled" and (
+            selection_outcome in {"no_match", "selection_error"}
+            or (selection_outcome == "not_run" and not precompiled_rdma)
+        )
+        if configured_data and not ignore_configured:
             digest = _image_digest(configured_data.get("image_id"))
             if digest:
                 current_digest = (pair["driver_observed"] or {}).get("digest", "")
@@ -379,7 +410,7 @@ def _step_pair(
         metrics = result.get("metrics", {})
         if isinstance(metrics, dict):
             is_standard_rdma = (
-                family == "standard" and isinstance(result_checks, dict)
+                isinstance(result_checks, dict)
                 and "rdma_shared_device" in result_checks
                 and "gpudirect" not in str(result.get("step", "")).lower()
             )
@@ -671,6 +702,16 @@ def load_gcs(
     def needs_refresh(build_path: str) -> bool:
         previous = known.get(build_path)
         if cutoff is None or previous is None:
+            return True
+        if signed.is_signed_job(previous["run"]["job_name"]) and "failed_steps" not in previous["run"]:
+            return True
+        # Older report versions discarded the daily precompiled RDMA sidecar.
+        # Re-read that evidence once, including builds outside the normal window.
+        if any(
+            (pair.get("validation") == "precompiled" or pair["id"].startswith("doca2-precompiled-"))
+            and not any(name in pair["checks"] for name in ("rdma_shared_device", "rdma_gpudirect"))
+            for pair in previous["pairs"]
+        ):
             return True
         if previous["run"].get("status") not in {"success", "failure", "aborted", "error"}:
             return True
