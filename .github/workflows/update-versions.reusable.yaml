@@ -1,0 +1,165 @@
+name: Update versions (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to check out'
+        required: false
+        default: 'main'
+        type: string
+      version-file:
+        description: 'Version matrix file to update'
+        required: true
+        type: string
+      settings-file:
+        description: 'Settings file for the version matrix'
+        required: true
+        type: string
+      tests-file:
+        description: 'File where generated test commands are written'
+        required: true
+        type: string
+      test-command-suffix:
+        description: 'Suffix appended to generated test command job names'
+        required: false
+        default: ''
+        type: string
+      check-catalog-availability:
+        description: 'Only track GPU versions available in an active OCP catalog'
+        required: false
+        default: true
+        type: boolean
+      verification-label:
+        description: 'GitHub label identifying the GPU Operator verification variant'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  update-versions:
+    if: github.event_name != 'schedule' || github.repository == 'rh-ecosystem-edge/nvidia-ci' || vars.VERSION_UPDATE_FLOW_ENABLE_SCHEDULED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the Repo
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.13
+      - name: Update versions
+        id: read_tests
+        run: |
+          pip install -r .github/scripts/gpu_operator_versions/requirements.txt
+          mkdir -p $(dirname ${TEST_TO_TRIGGER_FILE_PATH})
+          PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions
+          {
+           echo 'TEST_TRIGGERS<<EOF'
+           cat ${TEST_TO_TRIGGER_FILE_PATH}
+           echo 'EOF'
+          } >> $GITHUB_OUTPUT
+        env:
+          VERSION_FILE_PATH: ${{ inputs.version-file }}
+          SETTINGS_FILE_PATH: ${{ inputs.settings-file }}
+          TEST_TO_TRIGGER_FILE_PATH: ${{ inputs.tests-file }}
+          TEST_COMMAND_SUFFIX: ${{ inputs.test-command-suffix }}
+          CHECK_CATALOG_AVAILABILITY: ${{ inputs.check-catalog-availability }}
+      - name: Detect new GPU operator channels
+        id: new_gpu_channels
+        env:
+          VERSIONS_FILE: ${{ inputs.version-file }}
+        run: |
+          old_channels=$(git show HEAD:"${VERSIONS_FILE}" | jq -r '."gpu-operator" | keys[]')
+          new_channels=$(jq -r '."gpu-operator" | keys[]' "${VERSIONS_FILE}")
+          new_gpu=$(comm -23 <(echo "${new_channels}") <(echo "${old_channels}"))
+
+          if [ -z "${new_gpu}" ]; then
+            echo "No new GPU operator channels detected."
+            echo "channels=" >> "$GITHUB_OUTPUT"
+          else
+            echo "New GPU operator channels detected:"
+            echo "${new_gpu}"
+            echo "channels=$(echo "${new_gpu}" | paste -sd, -)" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create Pull Request
+        id: create-pr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          title: "[Automatic] Update versions, run ID: ${{ github.run_id }}"
+          commit-message: Update versions
+          branch: update-versions/${{ github.run_id }}
+          body: |
+            :warning: Before approving the PR, run the following tests:
+
+            ```
+            ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
+            /ok-to-test
+            /approve
+            ```
+
+            Update the NVIDIA GPU operator on OpenShift test matrix
+            ---
+            ${{ vars.VERSION_UPDATE_FLOW_NOTIFY_USERS }}
+          delete-branch: true
+          labels: ${{ inputs.verification-label }}
+          assignees: ${{ vars.VERSION_UPDATE_FLOW_ASSIGNEES }}
+      - name: Comment test commands on PR
+        id: comment-tests
+        if: steps.create-pr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
+          PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
+          TEST_TRIGGERS: ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
+        run: |
+          if [ -z "${TEST_TRIGGERS//[[:space:]]/}" ]; then
+            echo "No test triggers to comment; skipping."
+            exit 0
+          fi
+          gh pr comment "${PR_NUMBER}" --body "${TEST_TRIGGERS}"
+      - name: Create issues for new GPU operator channels
+        if: steps.new_gpu_channels.outputs.channels != ''
+        uses: actions/github-script@v8
+        env:
+          NEW_CHANNELS: ${{ steps.new_gpu_channels.outputs.channels }}
+          VERSIONS_FILE: ${{ inputs.version-file }}
+        with:
+          script: |
+            const channels = process.env.NEW_CHANNELS.split(',');
+            const versionsFile = process.env.VERSIONS_FILE;
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'operator-available'
+            });
+
+            for (const channel of channels) {
+              const issueTitle = `New GPU operator channel available: v${channel}`;
+              const existingIssue = issues.find(issue => issue.title === issueTitle);
+
+              if (!existingIssue) {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: issueTitle,
+                  body: `A new GPU operator channel **v${channel}** has been detected.\n\n## Tasks\n\n- [ ] Ensure Prow jobs exist for this channel\n- [ ] Confirm the version appears in \`${versionsFile}\` after the PR is merged\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                  labels: ['operator-available']
+                });
+                console.log(`Created issue for channel v${channel}`);
+              } else {
+                console.log(`Issue already exists for channel v${channel}: #${existingIssue.number}`);
+              }
+            }
+      - name: Notify on failure
+        if: failure()
+        uses: ./.github/actions/notify-failure
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          help-file: .github/workflows/update-versions-help.md

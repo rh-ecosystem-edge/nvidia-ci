@@ -1,4 +1,4 @@
-name: Generate test matrices pages
+name: Generate standard GPU Operator matrix
 
 on:
   pull_request_target:
@@ -17,143 +17,32 @@ on:
         required: true
         type: string
       gh_pages_branch:
-        description: 'GitHub pages branch to update'
+        description: 'GitHub Pages branch to update'
         default: 'gh-pages'
         required: false
         type: string
+
 permissions:
   contents: write
   issues: write
+
+concurrency:
+  group: generate-gpu-operator-matrix-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   generate-matrix:
-    if: github.event_name != 'pull_request_target' || github.repository == 'rh-ecosystem-edge/nvidia-ci'
-    runs-on: ubuntu-latest
-    env:
-      DASHBOARD_OUTPUT_DIR: '.github/scripts/test_matrix_dashboard/output'
-    steps:
-      - name: Set dynamic env vars
-        run: |
-          echo "DASHBOARD_DATA_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.json" >> "$GITHUB_ENV"
-          echo "DASHBOARD_HTML_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_matrix.html" >> "$GITHUB_ENV"
-          echo "SIGNED_DASHBOARD_DATA_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_signed_matrix.json" >> "$GITHUB_ENV"
-          echo "SIGNED_DASHBOARD_HTML_FILEPATH=${DASHBOARD_OUTPUT_DIR}/gpu_operator_signed_matrix.html" >> "$GITHUB_ENV"
-          echo "GH_PAGES_BRANCH=${{ github.event.inputs.gh_pages_branch || 'gh-pages' }}" >> "$GITHUB_ENV"
-        env:
-          DASHBOARD_OUTPUT_DIR: ${{ env.DASHBOARD_OUTPUT_DIR }}
-      - name: Determine PR Number
-        id: determine_pr
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" == "pull_request_target" ]; then
-              echo "Processing merged pull request."
-              echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-          else
-              echo "PR_NUMBER=${{ github.event.inputs.pr_number }}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Checkout Code
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.base.ref || github.event.inputs.branch }}
-
-      - name: Checkout GitHub Pages
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ env.GH_PAGES_BRANCH }}
-          path: ${{ env.DASHBOARD_OUTPUT_DIR }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-
-      - name: Install Dependencies
-        run: |
-          pip install -r .github/scripts/gpu_operator_dashboard/requirements.txt
-
-      - name: Fetch CI Data
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Processing PR: ${{ steps.determine_pr.outputs.PR_NUMBER }}"
-          PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.fetch_ci_data \
-            --pr_number "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
-            --baseline_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
-            --merged_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}"
-          PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.fetch_ci_data \
-            --pr_number "${{ steps.determine_pr.outputs.PR_NUMBER }}" \
-            --baseline_data_filepath "${{ env.SIGNED_DASHBOARD_DATA_FILEPATH }}" \
-            --merged_data_filepath "${{ env.SIGNED_DASHBOARD_DATA_FILEPATH }}" \
-            --job-suffix="-signed"
-
-      - name: Generate HTML Dashboard (only if JSON changed)
-        run: |
-          cd "${{ env.DASHBOARD_OUTPUT_DIR }}"
-
-          # Check if GPU Operator JSON changed
-          GPU_CHANGED=false
-          if [[ ${{ github.event_name }} == "pull_request_target" ]] && git diff --exit-code gpu_operator_matrix.json; then
-            echo "GPU Operator: no changes"
-          else
-            echo "GPU Operator: changes detected"
-            GPU_CHANGED=true
-          fi
-
-          # Check if Signed GPU Operator JSON changed (also triggers on new untracked file)
-          SIGNED_CHANGED=false
-          if [[ ${{ github.event_name }} == "pull_request_target" ]] && git ls-files --error-unmatch gpu_operator_signed_matrix.json 2>/dev/null && git diff --exit-code gpu_operator_signed_matrix.json; then
-            echo "Signed GPU Operator: no changes"
-          else
-            echo "Signed GPU Operator: changes detected"
-            SIGNED_CHANGED=true
-          fi
-
-          cd "${{ github.workspace }}"
-
-          if [ "$GPU_CHANGED" = true ]; then
-            echo "Generating GPU Operator dashboard..."
-            PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.generate_ci_dashboard \
-              --dashboard_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
-              --dashboard_html_filepath "${{ env.DASHBOARD_HTML_FILEPATH }}" \
-              --sibling-url "gpu_operator_signed_matrix.html" \
-              --sibling-label "Precompiled/Signed"
-          fi
-
-          if [ "$SIGNED_CHANGED" = true ]; then
-            echo "Generating Signed GPU Operator dashboard..."
-            PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.generate_ci_dashboard \
-              --dashboard_data_filepath "${{ env.SIGNED_DASHBOARD_DATA_FILEPATH }}" \
-              --dashboard_html_filepath "${{ env.SIGNED_DASHBOARD_HTML_FILEPATH }}" \
-              --title "Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift (precompiled/signed)" \
-              --sibling-url "gpu_operator_matrix.html" \
-              --sibling-label "Standard"
-          fi
-
-      - name: Deploy HTML to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          branch: ${{ env.GH_PAGES_BRANCH }}
-          folder: ${{ env.DASHBOARD_OUTPUT_DIR }}
-          clean: false
-          force: false
-
-      - name: Delete merged branch
-        if: |
-          github.event_name == 'pull_request_target' &&
-          github.event.pull_request.merged == true &&
-          (github.event.pull_request.user.login == 'github-actions[bot]' ||
-           ((contains(github.event.pull_request.head.ref, 'signed-tuesday') ||
-            contains(github.event.pull_request.head.ref, 'signed-monday')) &&
-            github.event.pull_request.head.repo.full_name == github.repository))
-        env:
-          BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: |
-          echo "Deleting merged branch: $BRANCH"
-          git push origin --delete "$BRANCH" || echo "Branch $BRANCH already deleted or doesn't exist"
-
-      - name: Notify on failure
-        if: failure()
-        uses: ./.github/actions/notify-failure
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
+    uses: ./.github/workflows/generate_matrix_page.reusable.yaml
+    with:
+      branch: ${{ github.event.pull_request.base.ref || inputs.branch }}
+      pr-number: ${{ github.event.pull_request.number || inputs.pr_number }}
+      gh-pages-branch: ${{ inputs.gh_pages_branch || 'gh-pages' }}
+      verification-label: 'gpu-operator-verification:standard'
+      data-filename: 'gpu_operator_matrix.json'
+      html-filename: 'gpu_operator_matrix.html'
+      job-suffix: ''
+      dashboard-title: 'Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift'
+      sibling-url: 'gpu_operator_signed_matrix.html'
+      sibling-label: 'Precompiled/Signed'
+      force-generate: ${{ github.event_name != 'pull_request_target' }}
+    secrets: inherit

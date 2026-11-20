@@ -402,28 +402,28 @@ class TestCreateTestsCommands(unittest.TestCase):
             diff, ['4.20'], ['26.3'], default_support_matrix)
         self.assertIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x', commands)
 
-    def test_signed_suffix(self):
+    def test_command_suffix(self):
         """Commands with suffix should append it to job names."""
         diff = {'ocp': {'4.20': '4.20.36'}}
         commands = create_tests_commands(
             diff, ['4.20'], ['26.3'], default_support_matrix,
-            test_command_suffix='-signed')
-        self.assertIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x-signed', commands)
+            test_command_suffix='-custom')
+        self.assertIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x-custom', commands)
         self.assertNotIn('/test 4.20-stable-nvidia-gpu-operator-e2e-26-3-x', commands)
 
-    def test_signed_suffix_master(self):
-        """Master bundle changes with suffix should produce master-signed commands."""
+    def test_command_suffix_master(self):
+        """Master bundle changes with suffix should include it in the command."""
         diff = {'gpu-main-latest': 'B'}
         commands = create_tests_commands(
             diff, ['4.21', '4.22'], ['26.3'], default_support_matrix,
-            test_command_suffix='-signed')
+            test_command_suffix='-custom')
         self.assertTrue(
-            all('-signed' in cmd for cmd in commands if cmd.startswith('/test')))
+            all('-custom' in cmd for cmd in commands if cmd.startswith('/test')))
         self.assertTrue(
-            any('master-signed' in cmd for cmd in commands))
+            any('master-custom' in cmd for cmd in commands))
 
     def test_mixed_openshift_4_and_5_command_generation(self):
-        """Mixed OCP changes generate standard and signed/precompiled commands."""
+        """Mixed OCP changes generate standard and suffixed commands."""
         diff = {'ocp': {'4.22': '4.22.23', '5.0': '5.0.2'}}
         ocp_releases = ['4.20', '4.22', '5.0']
         gpu_releases = ['26.3', '26.7']
@@ -431,12 +431,12 @@ class TestCreateTestsCommands(unittest.TestCase):
         commands = create_tests_commands(
             diff, ocp_releases, gpu_releases, default_support_matrix
         )
-        signed_commands = create_tests_commands(
+        suffixed_commands = create_tests_commands(
             diff,
             ocp_releases,
             gpu_releases,
             default_support_matrix,
-            test_command_suffix='-signed',
+            test_command_suffix='-custom',
         )
 
         self.assertEqual(commands, {
@@ -445,11 +445,11 @@ class TestCreateTestsCommands(unittest.TestCase):
             '/test 5.0-stable-nvidia-gpu-operator-e2e-26-3-x',
             '/test 5.0-stable-nvidia-gpu-operator-e2e-26-7-x',
         })
-        self.assertEqual(signed_commands, {
-            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-3-x-signed',
-            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-7-x-signed',
-            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-3-x-signed',
-            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-7-x-signed',
+        self.assertEqual(suffixed_commands, {
+            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-3-x-custom',
+            '/test 4.22-stable-nvidia-gpu-operator-e2e-26-7-x-custom',
+            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-3-x-custom',
+            '/test 5.0-stable-nvidia-gpu-operator-e2e-26-7-x-custom',
         })
 
 
