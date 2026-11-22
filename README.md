@@ -590,7 +590,8 @@ $ make apply-manifests
 
 On a fresh cluster, `make apply-manifests` batches the NNO `MachineConfig`s into one worker rollout.
 Batching allows new MachineConfigs plus ConfigMaps, ServiceAccounts and RoleBindings. Existing
-MachineConfigs, hooks, multi-object files or other kinds switch the entire run to per-file waits. Use
+MachineConfigs, hooks, multi-object files or other kinds switch the entire run to per-file waits.
+A List containing one supported resource is treated as that resource after `oc` flattens it. Use
 `BATCH_WORKER_MCP=false` when later manifests depend on an earlier rollout.
 
 To remove everything again:

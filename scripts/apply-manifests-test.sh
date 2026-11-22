@@ -98,8 +98,17 @@ case ${oc_command} in
                 ;;
             'jsonpath={.status.configuration.name}='*)
                 echo rollout >> "${FAKE_OC_DIR}/events"
-                jq '.status.configuration = .spec.configuration' "${pool_file}" > "${pool_file}.tmp"
+                jq --argjson advance "${FAKE_ADVANCE_GENERATION:-false}" '
+                    .status.configuration = .spec.configuration |
+                    if $advance then .metadata.generation += 1 else . end |
+                    .status.observedGeneration = .metadata.generation
+                ' "${pool_file}" > "${pool_file}.tmp"
                 mv "${pool_file}.tmp" "${pool_file}"
+                ;;
+            'jsonpath={.status.observedGeneration}='*)
+                jq -e --argjson expected "${condition##*=}" '
+                    .status.observedGeneration == $expected
+                ' "${pool_file}" > /dev/null
                 ;;
             condition=Updating=True) exit 1 ;;
         esac
@@ -107,7 +116,8 @@ case ${oc_command} in
     apply|create)
         input=$(cat "${manifest_file}")
         if [[ ${dry_run} == true ]]; then
-            echo "${input}"
+            # oc flattens Lists before printing individual resources.
+            jq 'if .kind == "List" then .items[] else . end' <<< "${input}"
             exit 0
         fi
         name=$(jq -r '.metadata.name' <<< "${input}")
@@ -145,6 +155,10 @@ run_case() {
             metadata: {name: $name, labels: {role: "worker"}}
         }' > "${MANIFEST_DIR}/${name}.yaml"
     done
+    if [[ ${WITH_SINGLETON_LIST:-false} == true ]]; then
+        jq '{apiVersion: "v1", kind: "List", items: [.]}' "${MANIFEST_DIR}/first.yaml" > "${scratch}/list.json"
+        mv "${scratch}/list.json" "${MANIFEST_DIR}/first.yaml"
+    fi
     jq -n --argjson paused "${POOL_ALREADY_PAUSED:-false}" '{
         metadata: {resourceVersion: "1", generation: 1},
         spec: {paused: $paused, machineConfigSelector: {matchLabels: {role: "worker"}},
@@ -179,6 +193,10 @@ ${expected_events}"
 }
 
 run_case 'batch new MachineConfigs in one rollout' 0 '' \
+    pause create:first create:second render:first render:second resume rollout
+FAKE_ADVANCE_GENERATION=true run_case 'accept a newer observed generation' 0 '' \
+    pause create:first create:second render:first render:second resume rollout
+WITH_SINGLETON_LIST=true run_case 'batch a singleton List as its contained resource' 0 '' \
     pause create:first create:second render:first render:second resume rollout
 FAKE_EXISTING_MC=first run_case 'existing MachineConfig uses sequential apply' 0 'already exists' \
     apply:first apply:second

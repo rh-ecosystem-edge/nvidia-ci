@@ -182,6 +182,7 @@ prepare_batch() {
 
     for manifest_file in "${manifest_files[@]}"; do
         prepared_file="${work_dir}/${manifest_file##*/}.json"
+        # oc flattens Lists; eligibility depends on the resulting single resource.
         render_manifest "${manifest_file}" |
             oc create --dry-run=client --validate=false -f - -o json > "${prepared_file}"
         resource_type=$(jq -r '.apiVersion + "/" + .kind' "${prepared_file}")
@@ -286,11 +287,10 @@ check_batch_sources() {
 }
 
 wait_for_batch_rollout() {
-    local target_config=$1 generation condition pool_state
-    generation=$(get_worker_pool | jq -r '.metadata.generation')
+    local target_config=$1 condition pool_state
     echo "Waiting for mcp/${WORKER_MCP_NAME} to finish rolling out ${target_config}."
     wait_for_worker_pool "jsonpath={.status.configuration.name}=${target_config}" "${WORKER_MCP_ROLLOUT_TIMEOUT}"
-    wait_for_worker_pool "jsonpath={.status.observedGeneration}=${generation}" "${WORKER_MCP_ROLLOUT_TIMEOUT}"
+    # oc condition waits already require observedGeneration >= metadata.generation.
     for condition in Updated=True Updating=False Degraded=False RenderDegraded=False; do
         wait_for_worker_pool "condition=${condition}" "${WORKER_MCP_ROLLOUT_TIMEOUT}"
     done
