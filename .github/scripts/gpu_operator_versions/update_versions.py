@@ -362,7 +362,7 @@ def main():
         VERSION_OCP: ocp_versions
     }
 
-    with open(settings.version_file_path, "r+") as json_f:
+    with open(settings.version_file_path, "r") as json_f:
         old_versions = json.load(json_f)
 
         # Calculate diffs with catalog filtering
@@ -374,12 +374,17 @@ def main():
             check_catalog=settings.check_catalog_availability
         )
 
-        # Apply filtered diffs to get final versions
-        final_versions = apply_diffs(old_versions, diffs)
+    if not diffs:
+        logger.info("No version changes detected; leaving version file unchanged")
+        save_tests_commands(set(), settings.tests_to_trigger_file_path)
+        return
 
-        json_f.seek(0)
+    # Apply filtered diffs to get final versions
+    final_versions = apply_diffs(old_versions, diffs)
+
+    with open(settings.version_file_path, "w") as json_f:
         json.dump(final_versions, json_f, indent=4)
-        json_f.truncate()
+        json_f.write("\n")
 
     # Use the already-filtered diffs for test generation
     ocp_releases = list(ocp_versions.keys())
