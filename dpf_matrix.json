@@ -576,6 +576,18 @@
         "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2123574630730960896",
         "job_timestamp": "1795145823",
         "build_id": "2123574630730960896"
+      },
+      {
+        "ocp_version": "4.22.12-multi",
+        "branch": "main",
+        "dpf_version": "v26.11.0-main.d83dfab.jsonfix.3",
+        "ovn_chart_version": "v26.4.1-ocp-release-v4.22",
+        "bluefield_ocp_image": "quay.io/edge-infrastructure/bluefield-ocp:4.22.19-4k-doca3.4.2",
+        "hcp_provisioner_image": "quay.io/itsoiref/dpf-hcp-provisioner-operator:main-9e868033",
+        "networking_status": "FAILURE",
+        "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-openshift-dpf-main-daily-e2e-doca4/2124661880730423296",
+        "job_timestamp": "1795403695",
+        "build_id": "2124661880730423296"
       }
     ]
   }
