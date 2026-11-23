@@ -1,5 +1,9 @@
 import copy
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import requests
@@ -9,7 +13,8 @@ from gpu_operator_versions.update_versions import (
     create_tests_commands,
     create_tests_matrix,
     filter_new_gpu_versions_by_catalog,
-    get_gpu_releases_for_tests
+    get_gpu_releases_for_tests,
+    main
 )
 
 base_versions = {
@@ -443,6 +448,69 @@ class TestGetGpuReleasesForTests(unittest.TestCase):
             get_gpu_releases_for_tests(final_versions, latest_gpu_channels),
             ['25.9', '26.1']
         )
+
+
+class TestMain(unittest.TestCase):
+
+    def run_update(self, version_content: str, latest_sha: str):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            version_file = temp_path / "versions.json"
+            tests_file = temp_path / "tests_to_trigger.txt"
+            version_file.write_text(version_content)
+            tests_file.write_text("stale command\n")
+
+            settings = SimpleNamespace(
+                version_file_path=str(version_file),
+                tests_to_trigger_file_path=str(tests_file),
+                support_matrix=default_support_matrix,
+                check_catalog_availability=False,
+                test_command_suffix=""
+            )
+
+            with patch("gpu_operator_versions.update_versions.Settings", return_value=settings), \
+                 patch("gpu_operator_versions.update_versions.get_sha", return_value=latest_sha), \
+                 patch(
+                     "gpu_operator_versions.update_versions.get_operator_versions",
+                     return_value=copy.deepcopy(base_versions["gpu-operator"])
+                 ), \
+                 patch(
+                     "gpu_operator_versions.update_versions.fetch_ocp_versions",
+                     return_value=copy.deepcopy(base_versions["ocp"])
+                 ):
+                main()
+
+            return version_file.read_bytes(), tests_file.read_bytes()
+
+    def test_no_changes_leave_version_file_byte_identical(self):
+        """A no-op update must not rewrite the tracked version file."""
+        version_json = json.dumps(base_versions, indent=4)
+
+        for description, version_content in (
+            ("with trailing newline", version_json + "\n"),
+            ("without trailing newline", version_json),
+        ):
+            with self.subTest(description):
+                version_bytes, tests_bytes = self.run_update(
+                    version_content, base_versions["gpu-main-latest"]
+                )
+
+                self.assertEqual(version_bytes, version_content.encode())
+                self.assertEqual(tests_bytes, b"")
+
+    def test_changes_write_canonical_json_with_trailing_newline(self):
+        """A real update should use stable JSON formatting."""
+        version_json = json.dumps(base_versions, indent=4)
+        version_bytes, tests_bytes = self.run_update(
+            version_json, "B"
+        )
+
+        expected_versions = copy.deepcopy(base_versions)
+        expected_versions["gpu-main-latest"] = "B"
+
+        self.assertTrue(version_bytes.endswith(b"\n"))
+        self.assertEqual(json.loads(version_bytes), expected_versions)
+        self.assertIn(b"/test ", tests_bytes)
 
 
 class TestCreateTestsCommands(unittest.TestCase):
