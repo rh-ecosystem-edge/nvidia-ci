@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -21,14 +22,27 @@ import (
 const (
 	precompiledRegistry  = "registry.redhat.io"
 	precompiledNamespace = "nvidia"
-	precompiledImage     = "gpu-driver-rhel9"
 
-	PrecompiledDriverRepoField  = precompiledRegistry + "/" + precompiledNamespace
-	PrecompiledDriverImageField = precompiledImage
+	// PrecompiledDriverRepoField is the registry/namespace prefix for
+	// precompiled GPU driver images. It is the same for all RHEL versions.
+	PrecompiledDriverRepoField = precompiledRegistry + "/" + precompiledNamespace
 
-	precompiledRepository  = precompiledNamespace + "/" + precompiledImage
 	registryRequestTimeout = 30 * time.Second
 )
+
+var elMajorRegexp = regexp.MustCompile(`\.el(\d+)`)
+
+// PrecompiledDriverImageForKernel extracts the RHEL major version from
+// kernelVersion (e.g. ".el9" → 9) and returns the corresponding
+// precompiled GPU driver image name (e.g. "gpu-driver-rhel9").
+func PrecompiledDriverImageForKernel(kernelVersion string) (string, error) {
+	match := elMajorRegexp.FindStringSubmatch(kernelVersion)
+	if match == nil {
+		return "", fmt.Errorf("cannot extract RHEL major version from kernel %q", kernelVersion)
+	}
+
+	return fmt.Sprintf("gpu-driver-rhel%s", match[1]), nil
+}
 
 type dockerConfigJSON struct {
 	Auths map[string]dockerAuthEntry `json:"auths"`
@@ -46,8 +60,15 @@ type dockerAuthEntry struct {
 func DiscoverPrecompiledDriverVersion(apiClient *clients.Settings, kernelVersion string) ([]string, error) {
 	glog.V(100).Infof("Discovering precompiled driver version for kernel %s", kernelVersion)
 
+	imageName, err := PrecompiledDriverImageForKernel(kernelVersion)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine GPU driver image: %w", err)
+	}
+
+	repository := precompiledNamespace + "/" + imageName
+
 	secret := &corev1.Secret{}
-	err := apiClient.Get(context.TODO(), goclient.ObjectKey{
+	err = apiClient.Get(context.TODO(), goclient.ObjectKey{
 		Namespace: "openshift-config",
 		Name:      "pull-secret",
 	}, secret)
@@ -65,12 +86,12 @@ func DiscoverPrecompiledDriverVersion(apiClient *clients.Settings, kernelVersion
 		return nil, fmt.Errorf("no credentials for %s found in cluster pull-secret", precompiledRegistry)
 	}
 
-	tags, err := listRegistryTags(auth.Auth)
+	tags, err := listRegistryTags(auth.Auth, repository)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list tags from %s/%s: %w", precompiledRegistry, precompiledRepository, err)
+		return nil, fmt.Errorf("failed to list tags from %s/%s: %w", precompiledRegistry, repository, err)
 	}
 
-	glog.V(100).Infof("Found %d total tags in %s/%s", len(tags), precompiledRegistry, precompiledRepository)
+	glog.V(100).Infof("Found %d total tags in %s/%s", len(tags), precompiledRegistry, repository)
 
 	var driverVersions []string
 	seen := make(map[string]bool)
@@ -95,7 +116,7 @@ func DiscoverPrecompiledDriverVersion(apiClient *clients.Settings, kernelVersion
 
 	if len(driverVersions) == 0 {
 		return nil, fmt.Errorf("no precompiled driver images found for kernel %s in %s/%s",
-			kernelVersion, precompiledRegistry, precompiledRepository)
+			kernelVersion, precompiledRegistry, repository)
 	}
 
 	glog.V(100).Infof("Found precompiled driver versions for kernel %s: %v", kernelVersion, driverVersions)
@@ -137,8 +158,8 @@ func deduplicateByMajorVersion(versions []string) []string {
 	return result
 }
 
-func listRegistryTags(authBase64 string) ([]string, error) {
-	tagsURL := fmt.Sprintf("https://%s/v2/%s/tags/list", precompiledRegistry, precompiledRepository)
+func listRegistryTags(authBase64, repository string) ([]string, error) {
+	tagsURL := fmt.Sprintf("https://%s/v2/%s/tags/list", precompiledRegistry, repository)
 
 	client := &http.Client{Timeout: registryRequestTimeout}
 
