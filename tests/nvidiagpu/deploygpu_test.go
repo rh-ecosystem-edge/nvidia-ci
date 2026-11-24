@@ -790,10 +790,13 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					glog.Error("Error writing driver branch versions file: ", err)
 				}
 
+				precompiledImage, err := nvidiagpu.PrecompiledDriverImageForKernel(kernelVersion)
+				Expect(err).ToNot(HaveOccurred(), "Failed to determine precompiled driver image for kernel %s", kernelVersion)
+
 				precompiledOps := []map[string]interface{}{
 					{"op": "add", "path": "/spec/driver/usePrecompiled", "value": true},
 					{"op": "add", "path": "/spec/driver/repository", "value": nvidiagpu.PrecompiledDriverRepoField},
-					{"op": "add", "path": "/spec/driver/image", "value": nvidiagpu.PrecompiledDriverImageField},
+					{"op": "add", "path": "/spec/driver/image", "value": precompiledImage},
 					{"op": "add", "path": "/spec/driver/version", "value": driverVersion},
 				}
 
