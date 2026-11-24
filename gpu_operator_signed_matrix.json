@@ -602,6 +602,14 @@
             {
                 "ocp_full_version": "4.20.47",
                 "gpu_operator_version": "26.7.3(bundle)",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/854/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.20-stable-nvidia-gpu-operator-e2e-master-signed/2125024248719216640/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1795485292,
+                "driver_branch": "580.196.07, 595.112.07"
+            },
+            {
+                "ocp_full_version": "4.20.47",
+                "gpu_operator_version": "26.7.3(bundle)",
                 "test_status": "FAILURE",
                 "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/847/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.20-stable-nvidia-gpu-operator-e2e-master-signed/2123573044843646976/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
                 "job_timestamp": 1795138187
@@ -1409,6 +1417,13 @@
             "On Red Hat OpenShift 5, the default GPU driver image will not work. A RHEL 10-compatible driver image must be explicitly specified in ClusterPolicy."
         ],
         "bundle_tests": [
+            {
+                "ocp_full_version": "5.0.2",
+                "gpu_operator_version": "26.7.3(bundle)",
+                "test_status": "FAILURE",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/854/pull-ci-rh-ecosystem-edge-nvidia-ci-main-5.0-stable-nvidia-gpu-operator-e2e-master-signed/2125024251244187648/artifacts/nvidia-gpu-operator-e2e-master-signed/gpu-operator-e2e",
+                "job_timestamp": 1795484026
+            },
             {
                 "ocp_full_version": "5.0.2",
                 "gpu_operator_version": "26.7.3(bundle)",
