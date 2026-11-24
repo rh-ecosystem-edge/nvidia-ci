@@ -32,16 +32,11 @@ jobs:
         with:
           ref: main
 
-      - name: Checkout GitHub Pages
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ env.GH_PAGES_BRANCH }}
-          path: ${{ env.OUTPUT_DIR }}
-
       - name: Fetch DSX AI Factory packages
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          mkdir -p "$OUTPUT_DIR"
           gh api orgs/rh-ecosystem-edge/packages?package_type=container --paginate \
             --jq '.[] | select(.repository.name == "dsx-ai-factory") | {name, html_url, updated_at, visibility}' \
             | jq -s '{packages: (sort_by(.name)), updated: (now | todate)}' \
