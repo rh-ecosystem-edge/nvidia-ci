@@ -3754,6 +3754,20 @@
         ],
         "bundle_tests": [
             {
+                "ocp_full_version": "4.18",
+                "gpu_operator_version": "master",
+                "test_status": "FAILURE",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/853/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/2125046266139250688",
+                "job_timestamp": 1795497586
+            },
+            {
+                "ocp_full_version": "4.18",
+                "gpu_operator_version": "master",
+                "test_status": "FAILURE",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/853/pull-ci-rh-ecosystem-edge-nvidia-ci-main-4.18-stable-nvidia-gpu-operator-e2e-master/2125020034215448576",
+                "job_timestamp": 1795482192
+            },
+            {
                 "ocp_full_version": "4.18.60",
                 "gpu_operator_version": "26.7.3(bundle)",
                 "test_status": "SUCCESS",
@@ -10941,6 +10955,20 @@
             "On Red Hat OpenShift 5, the default GPU driver image will not work. A RHEL 10-compatible driver image must be explicitly specified in ClusterPolicy."
         ],
         "bundle_tests": [
+            {
+                "ocp_full_version": "5.0.2",
+                "gpu_operator_version": "26.7.3(bundle)",
+                "test_status": "SUCCESS",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/853/pull-ci-rh-ecosystem-edge-nvidia-ci-main-5.0-stable-nvidia-gpu-operator-e2e-master/2125046266168610816/artifacts/nvidia-gpu-operator-e2e-master/gpu-operator-e2e",
+                "job_timestamp": 1795489947
+            },
+            {
+                "ocp_full_version": "5.0",
+                "gpu_operator_version": "master",
+                "test_status": "FAILURE",
+                "prow_job_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/rh-ecosystem-edge_nvidia-ci/853/pull-ci-rh-ecosystem-edge-nvidia-ci-main-5.0-stable-nvidia-gpu-operator-e2e-master/2125020034253197312",
+                "job_timestamp": 1795480533
+            },
             {
                 "ocp_full_version": "5.0.2",
                 "gpu_operator_version": "26.7.3(bundle)",
