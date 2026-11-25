@@ -2,7 +2,7 @@ name: Check for new signed driver versions
 
 on:
   schedule:
-    - cron: '0 0 * * 2-4'
+    - cron: '0 2 * * 2-4'
   workflow_dispatch:
     inputs:
       branch:
