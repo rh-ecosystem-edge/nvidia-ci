@@ -1,0 +1,54 @@
+name: Check driver images (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to check out'
+        required: false
+        default: 'main'
+        type: string
+      architecture:
+        description: 'Target architecture for driver image check'
+        required: false
+        default: 'amd64'
+        type: string
+      github-repo:
+        description: 'GitHub owner/repo for missing-driver issue alerting'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  check-driver-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the Repo
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.13
+      - name: Install dependencies
+        run: pip install -r .github/scripts/gpu_operator_versions/requirements.txt
+      - name: Download version state
+        uses: actions/download-artifact@v4
+        with:
+          name: version-state
+      - name: Check precompiled driver images
+        run: PYTHONPATH=.github/scripts:scripts/common:scripts/gpu python -m gpu_operator_versions.check_driver_images
+        env:
+          VERSION_STATE_PATH: version_state.json
+          DRIVER_STATE_PATH: driver_state.json
+          GPU_PREFLIGHT_ARCHITECTURE: ${{ inputs.architecture }}
+          REGISTRY_AUTH_FILE: ${{ runner.temp }}/auth.json
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPU_PREFLIGHT_GITHUB_REPO: ${{ inputs.github-repo || github.repository }}
+      - name: Upload driver state
+        uses: actions/upload-artifact@v4
+        with:
+          name: driver-state
+          path: driver_state.json
+          retention-days: 1

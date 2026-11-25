@@ -8,18 +8,6 @@ import subprocess
 import tempfile
 
 version_re = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9][A-Za-z0-9._-]*)?$")
-image_re = re.compile(
-    r"^registry\.stage\.redhat\.io/nvidia/"
-    r"(?P<image>doca-driver-rhel9|doca-driver-rhel10):(?P<tag>[A-Za-z0-9][A-Za-z0-9._-]*)$"
-)
-tag_re = re.compile(
-    r"^(?P<version>[A-Za-z0-9][A-Za-z0-9._-]*)-"
-    r"(?P<kernel>[0-9]+\.[0-9]+\.[0-9]+-[A-Za-z0-9._+-]*\.el[0-9]+_[0-9]+\."
-    r"(?:x86_64|aarch64(?:_64k)?|ppc64le|s390x))-"
-    r"(?P<os_tag>[A-Za-z0-9][A-Za-z0-9._-]*)-"
-    r"(?P<architecture>amd64|arm64|ppc64le|s390x)$"
-)
-pair_id_re = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 architecture_re = re.compile(r"^(?:amd64|arm64|ppc64le|s390x)$")
 digest_re = re.compile(r"^sha256:[a-f0-9]{64}$")
 installer_suffix_re = re.compile(r"-(?:x86_64|aarch64|amd64|arm64|ppc64le|s390x|multi)$")
@@ -40,6 +28,34 @@ def command(arguments, cwd=None, env=None):
     if result.returncode:
         raise ValueError(f"{' '.join(arguments[:3])} exited {result.returncode}: {error_message(result.stderr)}")
     return result.stdout
+
+
+def digest(value):
+    if not isinstance(value, str) or not digest_re.fullmatch(value):
+        raise ValueError(f"invalid image digest: {value!r}")
+    return value
+
+
+def release_stream_urls(architecture):
+    urls = []
+    for major in ('4', '5'):
+        stream = f'{major}-stable' if architecture == 'amd64' else f'{major}-stable-{architecture}'
+        urls.append(f'https://{architecture}.ocp.releases.ci.openshift.org/api/v1/releasestream/{stream}/tags')
+        urls.append(f'https://multi.ocp.releases.ci.openshift.org/api/v1/releasestream/{major}-stable-multi/tags')
+    return urls
+
+image_re = re.compile(
+    r"^registry\.stage\.redhat\.io/nvidia/"
+    r"(?P<image>doca-driver-rhel9|doca-driver-rhel10):(?P<tag>[A-Za-z0-9][A-Za-z0-9._-]*)$"
+)
+tag_re = re.compile(
+    r"^(?P<version>[A-Za-z0-9][A-Za-z0-9._-]*)-"
+    r"(?P<kernel>[0-9]+\.[0-9]+\.[0-9]+-[A-Za-z0-9._+-]*\.el[0-9]+_[0-9]+\."
+    r"(?:x86_64|aarch64(?:_64k)?|ppc64le|s390x))-"
+    r"(?P<os_tag>[A-Za-z0-9][A-Za-z0-9._-]*)-"
+    r"(?P<architecture>amd64|arm64|ppc64le|s390x)$"
+)
+pair_id_re = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def metadata(image):
@@ -107,18 +123,18 @@ def nno_version_matches(channel, version):
             and re.fullmatch(re.escape(channel[1:]) + r'\.[0-9]+(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?(?:\+[A-Za-z0-9.-]+)?', version) is not None)
 
 
-def digest(value):
-    if not isinstance(value, str) or not digest_re.fullmatch(value):
-        raise ValueError(f"invalid image digest: {value!r}")
-    return value
-
+# The following functions are defined locally rather than imported from
+# ocp_release because existing tests patch signed_images.command.  These
+# definitions resolve 'command' and 'digest' in this module's namespace,
+# keeping the established test interface intact.
 
 def image_info(image, architecture, auth_file):
     info = json.loads(command(['oc', 'image', 'info', image, '-o', 'json',
                                '--filter-by-os=linux/' + architecture, '--registry-config=' + str(auth_file)]))
     if info['config']['architecture'] != architecture or info['config']['os'] != 'linux':
         raise ValueError(f"registry platform disagrees with requested architecture: {image}")
-    return dict(manifest_digest=digest(info['digest']), index_digest=digest(info['listDigest']) if info.get('listDigest') else None,
+    return dict(manifest_digest=digest(info['digest']),
+                index_digest=digest(info['listDigest']) if info.get('listDigest') else None,
                 created_at=info['config']['created'])
 
 

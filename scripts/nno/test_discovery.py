@@ -534,12 +534,19 @@ class DiscoveryTests(unittest.TestCase):
             stream = '4-stable' if architecture == 'amd64' else '4-stable-' + architecture
             self.assertIn('/' + stream + '/tags', urls[0])
             self.assertIn('/4-stable-multi/tags', urls[1])
+            # OCP 5 streams are also present.
+            stream5 = '5-stable' if architecture == 'amd64' else '5-stable-' + architecture
+            self.assertTrue(any('/' + stream5 + '/tags' in u for u in urls))
+            self.assertTrue(any('/5-stable-multi/tags' in u for u in urls))
             args = SimpleNamespace(installer_token_file=None, installer_versions_url='assisted',
                                    architecture=architecture, release_stream_url=urls)
             records = {'assisted': {'4.22.0': {'cpu_architectures': [assisted]},
                                     '4.22.0-multi': {'cpu_architectures': [assisted]}},
                        urls[0]: {'name': stream, 'tags': [dict(name='4.22.0', phase='Accepted', pullSpec='native')]},
                        urls[1]: {'name': '4-stable-multi', 'tags': [dict(name='4.22.0', phase='Accepted', pullSpec='multi')]}}
+            # OCP 5 streams return empty tag lists.
+            for url in urls[2:]:
+                records[url] = {'name': url.split('/')[-2], 'tags': []}
             with self.subTest(architecture=architecture), patch.dict(GLOBALS, get_json=lambda url, *args: records[url]):
                 self.assertEqual([r['payload'] for r in d.releases(args)], ['native', 'multi'])
 
