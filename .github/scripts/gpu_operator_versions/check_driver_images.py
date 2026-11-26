@@ -28,6 +28,21 @@ from gpu_drivers import (
 )
 
 
+def load_config():
+    """Load configuration from environment variables."""
+    return {
+        'state_path': os.environ.get('VERSION_STATE_PATH', 'version_state.json'),
+        'output_path': os.environ.get('DRIVER_STATE_PATH', 'driver_state.json'),
+        'architecture': os.environ.get('GPU_PREFLIGHT_ARCHITECTURE', 'amd64'),
+        'auth_file': os.environ.get(
+            'REGISTRY_AUTH_FILE',
+            '/var/run/secrets/ci-pull-credentials/.dockerconfigjson'),
+        'github_token': os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN') or '',
+        'github_repo': os.environ.get(
+            'GPU_PREFLIGHT_GITHUB_REPO', 'rh-ecosystem-edge/nvidia-ci'),
+    }
+
+
 def check_ocp_version(ocp_minor, ocp_patch, architecture, auth_file):
     """Check driver image availability for a single OCP version.
 
@@ -68,30 +83,12 @@ def check_ocp_version(ocp_minor, ocp_patch, architecture, auth_file):
                     error=str(error))
 
 
-def main():
-    state_path = os.environ.get('VERSION_STATE_PATH', 'version_state.json')
-    output_path = os.environ.get('DRIVER_STATE_PATH', 'driver_state.json')
-    architecture = os.environ.get('GPU_PREFLIGHT_ARCHITECTURE', 'amd64')
-    auth_file = os.environ.get(
-        'REGISTRY_AUTH_FILE',
-        '/var/run/secrets/ci-pull-credentials/.dockerconfigjson')
-    github_token = os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN') or ''
-    github_repo = os.environ.get('GPU_PREFLIGHT_GITHUB_REPO', 'rh-ecosystem-edge/nvidia-ci')
+def check_versions_and_alert(changed_ocp, architecture, auth_file,
+                             github_token, github_repo):
+    """Check driver availability for each changed OCP version and send alerts.
 
-    with open(state_path, 'r') as f:
-        state = json.load(f)
-
-    diffs = state.get('diffs', {})
-    changed_ocp = diffs.get('ocp', {})
-
-    if not changed_ocp:
-        logger.info('No OCP version changes — skipping driver image check')
-        driver_state = {'checked_at': datetime.now(timezone.utc).isoformat(), 'results': []}
-        with open(output_path, 'w') as f:
-            json.dump(driver_state, f, indent=2)
-            f.write('\n')
-        return
-
+    Returns a list of result dicts and the timestamp used for alerting.
+    """
     results = []
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -111,8 +108,14 @@ def main():
             if github_token and 'gpu_repo' in result:
                 alert_missing_driver(
                     github_token, github_repo, ocp_minor, architecture,
-                    result.get('kernel_version', ''), result.get('gpu_repo', ''), timestamp)
+                    result.get('kernel_version', ''),
+                    result.get('gpu_repo', ''), timestamp)
 
+    return results, timestamp
+
+
+def write_driver_state(output_path, results, architecture, timestamp):
+    """Write driver availability results to JSON."""
     driver_state = {
         'checked_at': timestamp,
         'architecture': architecture,
@@ -126,6 +129,28 @@ def main():
     available_count = sum(1 for r in results if r['available'])
     logger.info(f'Driver state written to {output_path} '
                 f'({available_count}/{len(results)} versions have drivers)')
+
+
+def main():
+    config = load_config()
+
+    with open(config['state_path'], 'r') as f:
+        state = json.load(f)
+
+    changed_ocp = state.get('diffs', {}).get('ocp', {})
+
+    if not changed_ocp:
+        logger.info('No OCP version changes — skipping driver image check')
+        write_driver_state(config['output_path'], [], config['architecture'],
+                           datetime.now(timezone.utc).isoformat())
+        return
+
+    results, timestamp = check_versions_and_alert(
+        changed_ocp, config['architecture'], config['auth_file'],
+        config['github_token'], config['github_repo'])
+
+    write_driver_state(config['output_path'], results,
+                       config['architecture'], timestamp)
 
 
 if __name__ == '__main__':

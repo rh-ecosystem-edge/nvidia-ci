@@ -16,6 +16,72 @@ from gpu_operator_versions.update_versions import (
 )
 
 
+def load_unavailable_ocp_versions(driver_state_path):
+    """Load OCP versions without available drivers from driver state.
+
+    Returns a set of OCP minor versions that lack precompiled driver images,
+    or an empty set if no driver state exists.
+    """
+    if not driver_state_path or not os.path.isfile(driver_state_path):
+        return set()
+
+    with open(driver_state_path, 'r') as f:
+        driver_state = json.load(f)
+
+    unavailable = {
+        r['ocp_minor'] for r in driver_state.get('results', [])
+        if not r.get('available', False)
+    }
+
+    if unavailable:
+        logger.info(f'OCP versions without drivers: {sorted(unavailable)}')
+
+    return unavailable
+
+
+def filter_diffs_by_availability(diffs, unavailable):
+    """Remove unavailable OCP versions from diffs.
+
+    Returns a new diffs dict with unavailable OCP versions excluded.
+    """
+    if not unavailable or 'ocp' not in diffs:
+        return dict(diffs)
+
+    effective = dict(diffs)
+    filtered_ocp = {
+        minor: patch
+        for minor, patch in effective['ocp'].items()
+        if minor not in unavailable
+    }
+
+    if filtered_ocp:
+        effective['ocp'] = filtered_ocp
+    else:
+        del effective['ocp']
+
+    return effective
+
+
+def filter_versions_by_availability(final_versions, unavailable):
+    """Remove unavailable OCP versions from final_versions.
+
+    Versions without drivers are excluded from version tracking so they
+    will be detected as new changes on the next run and retried.
+    """
+    if not unavailable:
+        return final_versions
+
+    filtered = dict(final_versions)
+    if 'ocp' in filtered:
+        filtered['ocp'] = {
+            minor: patch
+            for minor, patch in filtered['ocp'].items()
+            if minor not in unavailable
+        }
+
+    return filtered
+
+
 def main():
     settings = Settings()
     state_path = os.environ.get('VERSION_STATE_PATH', 'version_state.json')
@@ -29,44 +95,25 @@ def main():
     final_versions = state.get('final_versions', {})
     gpu_releases = state.get('gpu_releases', [])
     gpu_catalog_entries = state.get('gpu_catalog_entries', [])
-    old_versions = state.get('old_versions', {})
 
     if not diffs:
         logger.info('No version changes — writing empty test commands')
         save_tests_commands(set(), settings.tests_to_trigger_file_path)
         return
 
-    # Write updated versions.json.
+    unavailable = load_unavailable_ocp_versions(driver_state_path)
+
+    # Filter unavailable OCP versions from final_versions BEFORE writing
+    # versions.json — versions without drivers are not recorded so they
+    # will be retried on the next run.
+    filtered_versions = filter_versions_by_availability(final_versions, unavailable)
+
     with open(settings.version_file_path, 'w') as f:
-        json.dump(final_versions, f, indent=4)
+        json.dump(filtered_versions, f, indent=4)
         f.write('\n')
 
     ocp_releases = list(ocp_versions.keys())
-
-    # When driver_state.json exists, filter out OCP versions without drivers.
-    effective_diffs = dict(diffs)
-    if driver_state_path and os.path.isfile(driver_state_path):
-        with open(driver_state_path, 'r') as f:
-            driver_state = json.load(f)
-
-        unavailable = {
-            r['ocp_minor'] for r in driver_state.get('results', [])
-            if not r.get('available', False)
-        }
-
-        if unavailable and 'ocp' in effective_diffs:
-            filtered_ocp = {
-                minor: patch
-                for minor, patch in effective_diffs['ocp'].items()
-                if minor not in unavailable
-            }
-            if filtered_ocp:
-                effective_diffs['ocp'] = filtered_ocp
-            else:
-                del effective_diffs['ocp']
-
-            if unavailable:
-                logger.info(f'Filtered OCP versions without drivers: {sorted(unavailable)}')
+    effective_diffs = filter_diffs_by_availability(diffs, unavailable)
 
     tests_commands = create_tests_commands(
         effective_diffs,
