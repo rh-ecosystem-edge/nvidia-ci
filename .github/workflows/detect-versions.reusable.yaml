@@ -1,0 +1,56 @@
+name: Detect versions (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to check out'
+        required: false
+        default: 'main'
+        type: string
+      version-file:
+        description: 'Version matrix file to read'
+        required: true
+        type: string
+      settings-file:
+        description: 'Settings file for the version matrix'
+        required: true
+        type: string
+      tests-file:
+        description: 'File path for test trigger output (used by Settings)'
+        required: true
+        type: string
+      check-catalog-availability:
+        description: 'Only track GPU versions available in an active OCP catalog'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  detect-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the Repo
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.13
+      - name: Install dependencies
+        run: pip install -r .github/scripts/gpu_operator_versions/requirements.txt
+      - name: Detect versions and calculate diffs
+        run: PYTHONPATH=.github/scripts python -m gpu_operator_versions.detect_versions
+        env:
+          VERSION_FILE_PATH: ${{ inputs.version-file }}
+          SETTINGS_FILE_PATH: ${{ inputs.settings-file }}
+          TEST_TO_TRIGGER_FILE_PATH: ${{ inputs.tests-file }}
+          CHECK_CATALOG_AVAILABILITY: ${{ inputs.check-catalog-availability }}
+          VERSION_STATE_PATH: version_state.json
+      - name: Upload version state
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-state
+          path: version_state.json
+          retention-days: 1

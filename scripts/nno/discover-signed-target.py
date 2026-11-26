@@ -231,9 +231,12 @@ def recent_images(architecture, auth_file, scan_started, cluster_profile_dir=Non
 
 
 def release_stream_urls(architecture):
-    stream = '4-stable' if architecture == 'amd64' else '4-stable-' + architecture
-    return [f'https://{architecture}.ocp.releases.ci.openshift.org/api/v1/releasestream/{stream}/tags',
-            'https://multi.ocp.releases.ci.openshift.org/api/v1/releasestream/4-stable-multi/tags']
+    urls = []
+    for major in ('4', '5'):
+        stream = f'{major}-stable' if architecture == 'amd64' else f'{major}-stable-{architecture}'
+        urls.append(f'https://{architecture}.ocp.releases.ci.openshift.org/api/v1/releasestream/{stream}/tags')
+        urls.append(f'https://multi.ocp.releases.ci.openshift.org/api/v1/releasestream/{major}-stable-multi/tags')
+    return urls
 
 
 def lab_json(profile, url, helper=None):
@@ -359,6 +362,39 @@ def release_for(image, available, args, cache):
     return None
 
 
+def _get_gpu_drivers():
+    """Lazy import of gpu_drivers module.
+
+    Requires PYTHONPATH to include scripts/common and scripts/gpu.
+    Only called when --check-gpu-driver is enabled.
+    """
+    import gpu_drivers
+    return gpu_drivers
+
+
+def check_gpu_driver(kernel_version, rhel_major, architecture, auth_file):
+    """Check whether precompiled GPU driver images exist for the selected kernel.
+
+    Returns a dict with availability info (driver_versions, gpu_repo, available).
+    Uses the same kernel version already determined by the OFED/DOCA discovery.
+    On tool failures (e.g. skopeo not installed), returns available=None (skipped).
+    """
+    _gpu = _get_gpu_drivers()
+    gpu_repo = _gpu.gpu_driver_repo_for_rhel(rhel_major)
+    try:
+        tags = _gpu.list_gpu_driver_tags(gpu_repo, str(auth_file))
+        matches = _gpu.filter_matching_tags(tags, kernel_version, architecture)
+        deduplicated = _gpu.deduplicate_by_major(matches)
+        driver_versions = [e['driver_version'] for e in deduplicated]
+        return dict(gpu_repo=gpu_repo, driver_versions=driver_versions, available=len(driver_versions) > 0)
+    except FileNotFoundError:
+        print('NNO GPU driver check: skopeo not available, skipping', file=sys.stderr)
+        return dict(gpu_repo=gpu_repo, driver_versions=[], available=None)
+    except (OSError, ValueError) as error:
+        print(f'NNO GPU driver check failed: {error}', file=sys.stderr)
+        return dict(gpu_repo=gpu_repo, driver_versions=[], available=False, error=str(error))
+
+
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
@@ -379,12 +415,19 @@ def main():
     parser.add_argument('--signed-job', action='append', help='All automatic and manual signed job names (repeatable)')
     parser.add_argument('--output-dir', type=Path, default=os.environ.get('ARTIFACT_DIR'))
     parser.add_argument('--shared-dir', type=Path, default=os.environ.get('SHARED_DIR'))
+    parser.add_argument('--check-gpu-driver', action='store_true',
+        default=os.environ.get('NNO_CHECK_GPU_DRIVER', '').lower() in ('true', '1', 'yes'),
+        help='Also check GPU precompiled driver availability (env: NNO_CHECK_GPU_DRIVER)')
+    parser.add_argument('--gpu-alert-github-repo', default=os.environ.get(
+        'GPU_PREFLIGHT_GITHUB_REPO', 'rh-ecosystem-edge/nvidia-ci'),
+        help='GitHub owner/repo for GPU driver issue alerting (optional)')
     args = parser.parse_args()
     if not args.output_dir or not args.shared_dir:
         parser.error('Artifact and shared directories are required')
     args.release_auth_file = args.release_auth_file or args.registry_auth_file
     args.signed_job = args.signed_job or os.environ.get('NNO_SIGNED_HISTORY_JOBS', '').split() or [MANUAL_JOB, AUTOMATIC_JOB]
     args.release_stream_url = args.release_stream_url or release_stream_urls(args.architecture)
+    args.github_token = os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN') or ''
     started = datetime.now(timezone.utc)
     result = dict(schema_version=1, job_name=os.environ.get('JOB_NAME', 'local'), build_id=os.environ.get('BUILD_ID', 'local'),
                   started_at=started.isoformat(), outcome='failed', selected=None)
@@ -413,7 +456,39 @@ def main():
             write_json(request_path, request)
             command([sys.executable, str(Path(__file__).with_name('validate-signed-request.py')), '--matrix', str(request_path),
                      '--shared-dir', str(args.shared_dir), '--artifact-dir', str(args.output_dir)])
-            result.update(outcome='selected', reason='one_new_compatible_image', selected=selected)
+            if not args.check_gpu_driver:
+                result.update(outcome='selected', reason='one_new_compatible_image', selected=selected)
+            else:
+                # Check GPU precompiled driver availability using the same kernel/RHEL.
+                gpu_check = check_gpu_driver(image['kernel'], image['rhel_major'],
+                                             args.architecture, args.registry_auth_file)
+                result['gpu_driver_available'] = gpu_check['available']
+                result['gpu_driver_versions'] = gpu_check['driver_versions']
+                ocp_minor = '.'.join(release['version'].split('.')[:2])
+                timestamp = datetime.now(timezone.utc).isoformat()
+                if gpu_check['available'] is None:
+                    # GPU check was skipped (e.g. skopeo not installed); proceed with OFED.
+                    result.update(outcome='selected', reason='one_new_compatible_image', selected=selected)
+                elif gpu_check['available']:
+                    print(f'NNO GPU driver check: found {gpu_check["driver_versions"]} '
+                          f'for kernel {image["kernel"]}')
+                    _get_gpu_drivers().alert_driver_found(
+                        args.github_token, args.gpu_alert_github_repo,
+                        ocp_minor, args.architecture,
+                        gpu_check['driver_versions'], timestamp)
+                    result.update(outcome='selected', reason='one_new_compatible_image', selected=selected)
+                else:
+                    print(f'NNO GPU driver check: no drivers for kernel {image["kernel"]} '
+                          f'in {gpu_check["gpu_repo"]}')
+                    _get_gpu_drivers().alert_missing_driver(
+                        args.github_token, args.gpu_alert_github_repo,
+                        ocp_minor, args.architecture,
+                        image['kernel'], gpu_check['gpu_repo'], timestamp)
+                    # Clean up OFED handoff — NNO signed test needs both OFED and GPU drivers.
+                    (args.output_dir / 'nno-selected-request.json').unlink(missing_ok=True)
+                    for name in ['nno-doca2-signed-request.json', 'dpf-openshift-version', 'ofed-pullspec']:
+                        (args.shared_dir / name).unlink(missing_ok=True)
+                    result.update(outcome='no_work', reason='no_gpu_precompiled_driver', selected=None)
             break
     except (OSError, ValueError, KeyError, TypeError, IndexError, subprocess.SubprocessError) as error:
         result.update(outcome='failed', selected=None, error=error_message(error))

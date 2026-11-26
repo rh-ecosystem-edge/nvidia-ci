@@ -17,8 +17,28 @@ permissions:
   pull-requests: write
 
 jobs:
-  update-versions:
-    uses: ./.github/workflows/update-versions.reusable.yaml
+  detect-versions:
+    if: github.event_name != 'schedule' || github.repository == 'rh-ecosystem-edge/nvidia-ci' || vars.VERSION_UPDATE_FLOW_ENABLE_SCHEDULED == 'true'
+    uses: ./.github/workflows/detect-versions.reusable.yaml
+    with:
+      branch: ${{ inputs.branch || 'main' }}
+      version-file: .github/scripts/gpu_operator_versions/signed_versions.json
+      settings-file: .github/scripts/gpu_operator_versions/signed_settings.json
+      tests-file: .github/scripts/generated-files/signed_tests_to_trigger.txt
+      check-catalog-availability: true
+    secrets: inherit
+
+  check-driver-images:
+    needs: detect-versions
+    uses: ./.github/workflows/check-driver-images.reusable.yaml
+    with:
+      branch: ${{ inputs.branch || 'main' }}
+    secrets: inherit
+
+  create-test-commands:
+    needs: [detect-versions, check-driver-images]
+    if: always() && needs.detect-versions.result == 'success'
+    uses: ./.github/workflows/create-test-commands.reusable.yaml
     with:
       branch: ${{ inputs.branch || 'main' }}
       version-file: .github/scripts/gpu_operator_versions/signed_versions.json
@@ -26,5 +46,16 @@ jobs:
       tests-file: .github/scripts/generated-files/signed_tests_to_trigger.txt
       test-command-suffix: '-signed'
       check-catalog-availability: true
+    secrets: inherit
+
+  create-pr:
+    needs: create-test-commands
+    uses: ./.github/workflows/create-version-pr.reusable.yaml
+    with:
+      branch: ${{ inputs.branch || 'main' }}
+      version-file: .github/scripts/gpu_operator_versions/signed_versions.json
+      tests-file: .github/scripts/generated-files/signed_tests_to_trigger.txt
       verification-label: 'gpu-operator-verification:signed'
+      test-triggers: ${{ needs.create-test-commands.outputs.test-triggers }}
+      new-gpu-channels: ${{ needs.create-test-commands.outputs.new-gpu-channels }}
     secrets: inherit

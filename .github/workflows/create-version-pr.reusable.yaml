@@ -1,4 +1,4 @@
-name: Update versions (Reusable)
+name: Create version PR (Reusable)
 
 on:
   workflow_call:
@@ -9,30 +9,26 @@ on:
         default: 'main'
         type: string
       version-file:
-        description: 'Version matrix file to update'
-        required: true
-        type: string
-      settings-file:
-        description: 'Settings file for the version matrix'
+        description: 'Version matrix file path (for channel detection context)'
         required: true
         type: string
       tests-file:
-        description: 'File where generated test commands are written'
+        description: 'File containing generated test commands'
         required: true
         type: string
-      test-command-suffix:
-        description: 'Suffix appended to generated test command job names'
-        required: false
-        default: ''
-        type: string
-      check-catalog-availability:
-        description: 'Only track GPU versions available in an active OCP catalog'
-        required: false
-        default: true
-        type: boolean
       verification-label:
         description: 'GitHub label identifying the GPU Operator verification variant'
         required: true
+        type: string
+      test-triggers:
+        description: 'Test commands to include in PR body and comment'
+        required: false
+        default: ''
+        type: string
+      new-gpu-channels:
+        description: 'Comma-separated list of newly detected GPU operator channels'
+        required: false
+        default: ''
         type: string
 
 permissions:
@@ -41,54 +37,17 @@ permissions:
   pull-requests: write
 
 jobs:
-  update-versions:
-    if: github.event_name != 'schedule' || github.repository == 'rh-ecosystem-edge/nvidia-ci' || vars.VERSION_UPDATE_FLOW_ENABLE_SCHEDULED == 'true'
+  create-pr:
     runs-on: ubuntu-latest
-    outputs:
-      new_gpu_channels: ${{ steps.new_gpu_channels.outputs.channels }}
     steps:
       - name: Check out the Repo
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.branch }}
-      - name: Setup Python
-        uses: actions/setup-python@v6
+      - name: Download version updates
+        uses: actions/download-artifact@v4
         with:
-          python-version: 3.13
-      - name: Update versions
-        id: read_tests
-        run: |
-          pip install -r .github/scripts/gpu_operator_versions/requirements.txt
-          mkdir -p "$(dirname "${TEST_TO_TRIGGER_FILE_PATH}")"
-          PYTHONPATH=.github/scripts python -m gpu_operator_versions.update_versions
-          {
-           echo 'TEST_TRIGGERS<<EOF'
-           cat "${TEST_TO_TRIGGER_FILE_PATH}"
-           echo 'EOF'
-          } >> $GITHUB_OUTPUT
-        env:
-          VERSION_FILE_PATH: ${{ inputs.version-file }}
-          SETTINGS_FILE_PATH: ${{ inputs.settings-file }}
-          TEST_TO_TRIGGER_FILE_PATH: ${{ inputs.tests-file }}
-          TEST_COMMAND_SUFFIX: ${{ inputs.test-command-suffix }}
-          CHECK_CATALOG_AVAILABILITY: ${{ inputs.check-catalog-availability }}
-      - name: Detect new GPU operator channels
-        id: new_gpu_channels
-        env:
-          VERSIONS_FILE: ${{ inputs.version-file }}
-        run: |
-          old_channels=$(git show HEAD:"${VERSIONS_FILE}" | jq -r '."gpu-operator" | keys[]')
-          new_channels=$(jq -r '."gpu-operator" | keys[]' "${VERSIONS_FILE}")
-          new_gpu=$(comm -23 <(echo "${new_channels}") <(echo "${old_channels}"))
-
-          if [ -z "${new_gpu}" ]; then
-            echo "No new GPU operator channels detected."
-            echo "channels=" >> "$GITHUB_OUTPUT"
-          else
-            echo "New GPU operator channels detected:"
-            echo "${new_gpu}"
-            echo "channels=$(echo "${new_gpu}" | paste -sd, -)" >> "$GITHUB_OUTPUT"
-          fi
+          name: version-updates
       - name: Create Pull Request
         id: create-pr
         uses: peter-evans/create-pull-request@v8
@@ -100,7 +59,7 @@ jobs:
             :warning: Before approving the PR, run the following tests:
 
             ```
-            ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
+            ${{ inputs.test-triggers }}
             /ok-to-test
             /approve
             ```
@@ -112,12 +71,11 @@ jobs:
           labels: ${{ inputs.verification-label }}
           assignees: ${{ vars.VERSION_UPDATE_FLOW_ASSIGNEES }}
       - name: Comment test commands on PR
-        id: comment-tests
         if: steps.create-pr.outputs.pull-request-number
         env:
           GH_TOKEN: ${{ secrets.MAINTAINER_PERSONAL_ACCESS_TOKEN }}
           PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
-          TEST_TRIGGERS: ${{ steps.read_tests.outputs.TEST_TRIGGERS }}
+          TEST_TRIGGERS: ${{ inputs.test-triggers }}
         run: |
           if [ -z "${TEST_TRIGGERS//[[:space:]]/}" ]; then
             echo "No test triggers to comment; skipping."
@@ -132,8 +90,7 @@ jobs:
           help-file: .github/workflows/update-versions-help.md
 
   create-channel-issues:
-    needs: update-versions
-    if: needs.update-versions.outputs.new_gpu_channels != ''
+    if: inputs.new-gpu-channels != ''
     runs-on: ubuntu-latest
     concurrency:
       group: gpu-operator-channel-issue-creation
@@ -142,7 +99,7 @@ jobs:
       - name: Create issues for new GPU operator channels
         uses: actions/github-script@v8
         env:
-          NEW_CHANNELS: ${{ needs.update-versions.outputs.new_gpu_channels }}
+          NEW_CHANNELS: ${{ inputs.new-gpu-channels }}
           VERSIONS_FILE: ${{ inputs.version-file }}
         with:
           script: |
