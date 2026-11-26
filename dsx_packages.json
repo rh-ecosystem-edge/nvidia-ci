@@ -1,0 +1,137 @@
+{
+  "packages": [
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Fcharts%2Fdsx-ai-factory",
+      "name": "dsx-ai-factory/charts/dsx-ai-factory",
+      "updated_at": "2026-10-15T09:30:51Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Fcharts%2Fdsx-ai-factory-prereqs",
+      "name": "dsx-ai-factory/charts/dsx-ai-factory-prereqs",
+      "updated_at": "2026-10-24T12:07:18Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Fcharts%2Fnico",
+      "name": "dsx-ai-factory/charts/nico",
+      "updated_at": "2026-10-24T11:31:45Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Fcharts%2Fnico-rest",
+      "name": "dsx-ai-factory/charts/nico-rest",
+      "updated_at": "2026-10-24T11:31:48Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Fcharts%2Fnvidia-infra-controller-cloud-infra",
+      "name": "dsx-ai-factory/charts/nvidia-infra-controller-cloud-infra",
+      "updated_at": "2026-10-24T12:07:14Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Fcharts%2Fnvidia-infra-controller-site-infra",
+      "name": "dsx-ai-factory/charts/nvidia-infra-controller-site-infra",
+      "updated_at": "2026-10-24T12:07:17Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Fcharts%2Frack-manager",
+      "name": "dsx-ai-factory/charts/rack-manager",
+      "updated_at": "2026-10-24T11:31:50Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-admin-cli",
+      "name": "dsx-ai-factory/infra-controller-admin-cli",
+      "updated_at": "2026-10-24T12:06:35Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-cli",
+      "name": "dsx-ai-factory/infra-controller-cli",
+      "updated_at": "2026-10-24T11:32:54Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-core",
+      "name": "dsx-ai-factory/infra-controller-core",
+      "updated_at": "2026-10-24T12:01:47Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-flow",
+      "name": "dsx-ai-factory/infra-controller-flow",
+      "updated_at": "2026-10-24T11:33:30Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-nsm",
+      "name": "dsx-ai-factory/infra-controller-nsm",
+      "updated_at": "2026-10-24T11:33:44Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-ntp",
+      "name": "dsx-ai-factory/infra-controller-ntp",
+      "updated_at": "2026-10-24T11:33:08Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-psm",
+      "name": "dsx-ai-factory/infra-controller-psm",
+      "updated_at": "2026-10-24T11:33:30Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-rest-api",
+      "name": "dsx-ai-factory/infra-controller-rest-api",
+      "updated_at": "2026-11-19T17:03:55Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-rest-cert-manager",
+      "name": "dsx-ai-factory/infra-controller-rest-cert-manager",
+      "updated_at": "2026-11-19T17:04:03Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-rest-db",
+      "name": "dsx-ai-factory/infra-controller-rest-db",
+      "updated_at": "2026-11-19T17:04:10Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-rest-site-agent",
+      "name": "dsx-ai-factory/infra-controller-rest-site-agent",
+      "updated_at": "2026-11-19T17:04:18Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-rest-site-manager",
+      "name": "dsx-ai-factory/infra-controller-rest-site-manager",
+      "updated_at": "2026-11-19T17:04:25Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Finfra-controller-rest-workflow",
+      "name": "dsx-ai-factory/infra-controller-rest-workflow",
+      "updated_at": "2026-11-19T17:04:33Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Fnv-rms",
+      "name": "dsx-ai-factory/nv-rms",
+      "updated_at": "2026-10-24T11:38:33Z",
+      "visibility": "public"
+    },
+    {
+      "html_url": "https://github.com/orgs/rh-ecosystem-edge/packages/container/package/dsx-ai-factory%2Funbound",
+      "name": "dsx-ai-factory/unbound",
+      "updated_at": "2026-10-24T11:32:56Z",
+      "visibility": "public"
+    }
+  ],
+  "updated": "2026-11-26T11:17:47Z"
+}
