@@ -37,6 +37,8 @@ import (
 
 	nvidianetworkv1alpha1 "github.com/Mellanox/network-operator/api/v1alpha1"
 
+	sriovnetworkapi "github.com/rh-ecosystem-edge/nvidia-ci/pkg/sriovnetwork/api"
+
 	machinev1beta1client "github.com/openshift/client-go/machine/clientset/versioned/typed/machine/v1beta1"
 	operatorv1alpha1 "github.com/openshift/client-go/operator/clientset/versioned/typed/operator/v1alpha1"
 	nfdv1 "github.com/openshift/cluster-nfd-operator/api/v1"
@@ -162,6 +164,10 @@ func SetScheme(crScheme *runtime.Scheme) error {
 	}
 
 	if err := nvidianetworkv1alpha1.AddToScheme(crScheme); err != nil {
+		return err
+	}
+
+	if err := sriovnetworkapi.AddToScheme(crScheme); err != nil {
 		return err
 	}
 
