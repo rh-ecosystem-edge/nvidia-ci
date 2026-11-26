@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$OUTPUT_DIR"
-          gh api orgs/rh-ecosystem-edge/packages?package_type=container --paginate \
+          gh api 'orgs/rh-ecosystem-edge/packages?package_type=container' --paginate \
             --jq '.[] | select(.repository.name == "dsx-ai-factory") | {name, html_url, updated_at, visibility}' \
             | jq -s '{packages: (sort_by(.name)), updated: (now | todate)}' \
             > "$OUTPUT_DIR/dsx_packages.json"
