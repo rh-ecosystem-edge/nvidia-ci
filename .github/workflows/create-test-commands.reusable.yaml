@@ -30,11 +30,6 @@ on:
         required: false
         default: true
         type: boolean
-      use-driver-state:
-        description: 'Download and use driver_state.json to filter test commands'
-        required: false
-        default: false
-        type: boolean
     outputs:
       test-triggers:
         description: 'Generated test commands'
@@ -64,12 +59,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: version-state
-      - name: Download driver state
-        if: inputs.use-driver-state
-        uses: actions/download-artifact@v4
-        with:
-          name: driver-state
-        continue-on-error: true
       - name: Create test commands and update versions
         id: read_tests
         run: |
@@ -87,7 +76,6 @@ jobs:
           TEST_COMMAND_SUFFIX: ${{ inputs.test-command-suffix }}
           CHECK_CATALOG_AVAILABILITY: ${{ inputs.check-catalog-availability }}
           VERSION_STATE_PATH: version_state.json
-          DRIVER_STATE_PATH: ${{ inputs.use-driver-state && 'driver_state.json' || '' }}
       - name: Detect new GPU operator channels
         id: new_gpu_channels
         env:

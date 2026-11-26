@@ -1,9 +1,9 @@
 """Check precompiled GPU driver image availability for OCP versions.
 
-Reads a JSON state file containing ``diffs.ocp`` (changed OCP versions)
-and ``ocp_versions`` (all tracked versions).  For each changed OCP minor
-version, queries the Red Hat registry for matching precompiled GPU driver
-tags and writes availability results as JSON.
+Reads the version state JSON, checks each changed OCP version for
+precompiled GPU driver images, and filters the version state to exclude
+OCP versions without available drivers.  Writes the filtered version
+state back so downstream steps only see versions with drivers.
 
 Optionally creates or closes GitHub issues to track missing drivers.
 """
@@ -32,7 +32,6 @@ def load_config():
     """Load configuration from environment variables."""
     return {
         'state_path': os.environ.get('VERSION_STATE_PATH', 'version_state.json'),
-        'output_path': os.environ.get('DRIVER_STATE_PATH', 'driver_state.json'),
         'architecture': os.environ.get('GPU_PREFLIGHT_ARCHITECTURE', 'amd64'),
         'auth_file': os.environ.get(
             'REGISTRY_AUTH_FILE',
@@ -114,21 +113,46 @@ def check_versions_and_alert(changed_ocp, architecture, auth_file,
     return results, timestamp
 
 
-def write_driver_state(output_path, results, architecture, timestamp):
-    """Write driver availability results to JSON."""
-    driver_state = {
-        'checked_at': timestamp,
-        'architecture': architecture,
-        'results': results,
-    }
+def filter_version_state(state, unavailable):
+    """Remove unavailable OCP versions from diffs and final_versions in state.
 
-    with open(output_path, 'w') as f:
-        json.dump(driver_state, f, indent=2)
-        f.write('\n')
+    Versions without drivers are excluded from version tracking so they
+    will be detected as new changes on the next run and retried.
 
-    available_count = sum(1 for r in results if r['available'])
-    logger.info(f'Driver state written to {output_path} '
-                f'({available_count}/{len(results)} versions have drivers)')
+    Returns a new state dict with the filtered values.
+    """
+    if not unavailable:
+        return state
+
+    filtered = dict(state)
+
+    # Filter diffs.ocp
+    diffs = state.get('diffs', {})
+    if 'ocp' in diffs:
+        filtered_diffs = dict(diffs)
+        filtered_ocp = {
+            minor: patch
+            for minor, patch in diffs['ocp'].items()
+            if minor not in unavailable
+        }
+        if filtered_ocp:
+            filtered_diffs['ocp'] = filtered_ocp
+        else:
+            del filtered_diffs['ocp']
+        filtered['diffs'] = filtered_diffs
+
+    # Filter final_versions.ocp
+    final_versions = state.get('final_versions', {})
+    if 'ocp' in final_versions:
+        filtered_versions = dict(final_versions)
+        filtered_versions['ocp'] = {
+            minor: patch
+            for minor, patch in final_versions['ocp'].items()
+            if minor not in unavailable
+        }
+        filtered['final_versions'] = filtered_versions
+
+    return filtered
 
 
 def main():
@@ -141,16 +165,29 @@ def main():
 
     if not changed_ocp:
         logger.info('No OCP version changes — skipping driver image check')
-        write_driver_state(config['output_path'], [], config['architecture'],
-                           datetime.now(timezone.utc).isoformat())
         return
 
     results, timestamp = check_versions_and_alert(
         changed_ocp, config['architecture'], config['auth_file'],
         config['github_token'], config['github_repo'])
 
-    write_driver_state(config['output_path'], results,
-                       config['architecture'], timestamp)
+    available_count = sum(1 for r in results if r['available'])
+    logger.info(f'Driver check complete: '
+                f'{available_count}/{len(results)} versions have drivers')
+
+    # Filter out OCP versions without available drivers from the version
+    # state so downstream steps only see versions with drivers.
+    unavailable = {r['ocp_minor'] for r in results if not r['available']}
+    if unavailable:
+        logger.info(f'Filtering OCP versions without drivers: {sorted(unavailable)}')
+
+    filtered_state = filter_version_state(state, unavailable)
+
+    with open(config['state_path'], 'w') as f:
+        json.dump(filtered_state, f, indent=2)
+        f.write('\n')
+
+    logger.info(f'Updated version state written to {config["state_path"]}')
 
 
 if __name__ == '__main__':

@@ -41,14 +41,14 @@ jobs:
         run: PYTHONPATH=.github/scripts:scripts/common:scripts/gpu python -m gpu_operator_versions.check_driver_images
         env:
           VERSION_STATE_PATH: version_state.json
-          DRIVER_STATE_PATH: driver_state.json
           GPU_PREFLIGHT_ARCHITECTURE: ${{ inputs.architecture }}
           REGISTRY_AUTH_FILE: ${{ runner.temp }}/auth.json
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPU_PREFLIGHT_GITHUB_REPO: ${{ inputs.github-repo || github.repository }}
-      - name: Upload driver state
+      - name: Upload filtered version state
         uses: actions/upload-artifact@v4
         with:
-          name: driver-state
-          path: driver_state.json
+          name: version-state
+          path: version_state.json
+          overwrite: true
           retention-days: 1

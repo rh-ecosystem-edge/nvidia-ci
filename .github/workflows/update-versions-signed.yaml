@@ -46,7 +46,6 @@ jobs:
       tests-file: .github/scripts/generated-files/signed_tests_to_trigger.txt
       test-command-suffix: '-signed'
       check-catalog-availability: true
-      use-driver-state: true
     secrets: inherit
 
   create-pr:
