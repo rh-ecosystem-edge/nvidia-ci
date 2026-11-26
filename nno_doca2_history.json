@@ -9537,6 +9537,255 @@
       "source_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125628212233900032/artifacts/nno-signed-auto/dpf-hypervisor-deploy-cluster/finished.json"
     },
     {
+      "build_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648",
+      "pairs": [
+        {
+          "artifacts": {
+            "nno-signed-auto/nno-discover-signed-target/artifacts/nno-discovery-result.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648/artifacts/nno-signed-auto/nno-discover-signed-target/artifacts/nno-discovery-result.json",
+            "nno-signed-auto/nno-discover-signed-target/artifacts/nno-doca2-signed-request.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648/artifacts/nno-signed-auto/nno-discover-signed-target/artifacts/nno-doca2-signed-request.json",
+            "nno-signed-auto/nno-install-gpu-operator-rdma/finished.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648/artifacts/nno-signed-auto/nno-install-gpu-operator-rdma/finished.json",
+            "nno-signed-auto/nno-install-signed-driver/artifacts/nno-signed-driver-images.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648/artifacts/nno-signed-auto/nno-install-signed-driver/artifacts/nno-signed-driver-images.json",
+            "nno-signed-auto/nno-install-signed-driver/artifacts/nno-step-result-2125362779.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648/artifacts/nno-signed-auto/nno-install-signed-driver/artifacts/nno-step-result-2125362779.json",
+            "nno-signed-auto/nno-install-signed-driver/finished.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648/artifacts/nno-signed-auto/nno-install-signed-driver/finished.json",
+            "nno-signed-auto/nno-test-gpudirect/artifacts/nno-signed-driver-images.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648/artifacts/nno-signed-auto/nno-test-gpudirect/artifacts/nno-signed-driver-images.json",
+            "nno-signed-auto/nno-test-gpudirect/artifacts/nno-step-result-910140796.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648/artifacts/nno-signed-auto/nno-test-gpudirect/artifacts/nno-step-result-910140796.json",
+            "nno-signed-auto/nno-test-gpudirect/finished.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648/artifacts/nno-signed-auto/nno-test-gpudirect/finished.json"
+          },
+          "checks": {
+            "deploy_result": "passed",
+            "deploy_step": "passed",
+            "discovery_target": "passed",
+            "driver_image_id": "passed",
+            "driver_worker_images": "passed",
+            "gpu_step": "passed",
+            "gpudirect_result": "passed",
+            "gpudirect_step": "passed",
+            "nic_cluster_policy_ready": "passed",
+            "nno_csv": "passed",
+            "nno_deployment": "passed",
+            "ocp_version": "passed",
+            "precompiled_selection": "passed",
+            "rdma_gpudirect": "passed",
+            "requested_driver_policy": "passed",
+            "requested_driver_running": "passed",
+            "requested_driver_tag": "passed",
+            "requested_target": "passed"
+          },
+          "completed_at": "2026-11-26T11:03:58Z",
+          "driver_observed": {
+            "digest": "sha256:263239724bada0a2134d2e71109b0ea43cfd6af5e1064b81d8fdc84fdb2782f1",
+            "doca_version": "",
+            "image": "registry.stage.redhat.io/nvidia/doca-driver-rhel9",
+            "ofed_version": "",
+            "version": ""
+          },
+          "driver_requested": {
+            "architecture": "amd64",
+            "config_digest": "sha256:ac2aede78db77ec29fb714ebc0f9ddb37302f734a631d3191052c08dc6028aee",
+            "digest": "",
+            "doca_version": "",
+            "image": "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-5.14.0-687.65.1.el9_8.x86_64-rhel9.8-amd64",
+            "index_digest": "sha256:263239724bada0a2134d2e71109b0ea43cfd6af5e1064b81d8fdc84fdb2782f1",
+            "kernel": "5.14.0-687.65.1.el9_8.x86_64",
+            "manifest_digest": "sha256:420ed4fc57ed4d734dbaefe3cbb7922de424d2d81494acdab3507a6ec182649d",
+            "version": "26.07-0.7.7.0"
+          },
+          "id": "doca2-signed-discovery-420ed4fc57ed4d734dbaefe3cbb7922de424d2d81494acdab3507a6ec182649d-4.22.22",
+          "metrics": {
+            "bandwidth_gbps": 93.91,
+            "message_rate_mpps": 0.17912
+          },
+          "mode": "signed",
+          "nno_observed": "26.7.1",
+          "nno_requested": "26.7.1",
+          "note": "",
+          "stages": {
+            "deploy": {
+              "attempt": "2125869815590555648-1795688934-27",
+              "status": "passed",
+              "workers": {
+                "worker-303ea712f388": "registry.stage.redhat.io/nvidia/doca-driver-rhel9@sha256:263239724bada0a2134d2e71109b0ea43cfd6af5e1064b81d8fdc84fdb2782f1",
+                "worker-303ea712f398": "registry.stage.redhat.io/nvidia/doca-driver-rhel9@sha256:263239724bada0a2134d2e71109b0ea43cfd6af5e1064b81d8fdc84fdb2782f1"
+              }
+            },
+            "gpudirect": {
+              "attempt": "2125869815590555648-1795690064-23",
+              "status": "passed",
+              "workers": {
+                "worker-303ea712f388": "registry.stage.redhat.io/nvidia/doca-driver-rhel9@sha256:263239724bada0a2134d2e71109b0ea43cfd6af5e1064b81d8fdc84fdb2782f1",
+                "worker-303ea712f398": "registry.stage.redhat.io/nvidia/doca-driver-rhel9@sha256:263239724bada0a2134d2e71109b0ea43cfd6af5e1064b81d8fdc84fdb2782f1"
+              }
+            }
+          },
+          "status": "passed",
+          "validation": "signed"
+        }
+      ],
+      "run": {
+        "build_id": "2125869815590555648",
+        "discovery": {
+          "build_id": "2125869815590555648",
+          "finished_at": "2026-11-26T08:38:05.849348+00:00",
+          "job_name": "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto",
+          "outcome": "selected",
+          "reason": "one_new_compatible_image",
+          "schema_version": 1,
+          "selected": {
+            "architecture": "amd64",
+            "config_digest": "sha256:ac2aede78db77ec29fb714ebc0f9ddb37302f734a631d3191052c08dc6028aee",
+            "created_at": "2026-11-23T12:59:03.507000+00:00",
+            "image": "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-5.14.0-687.65.1.el9_8.x86_64-rhel9.8-amd64",
+            "index_digest": "sha256:263239724bada0a2134d2e71109b0ea43cfd6af5e1064b81d8fdc84fdb2782f1",
+            "kernel": "5.14.0-687.65.1.el9_8.x86_64",
+            "manifest_digest": "sha256:420ed4fc57ed4d734dbaefe3cbb7922de424d2d81494acdab3507a6ec182649d",
+            "os_tag": "rhel9.8",
+            "release": {
+              "index_digest": null,
+              "installer_version": "4.22.22",
+              "manifest_digest": "sha256:03bc1715c33a8a6de571bb9845ac07f93eebcc03a5ff6182494fcbb6dfeb49a5",
+              "os_images": {
+                "rhel-coreos": "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:43f5fc72c04091c7f85d4e1e1f9e75e78d1c57b7ca794d33a90d13c149a8bd35",
+                "rhel-coreos-10": "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:0fe4829cfdf8893b55306f8bc121fc32ee7593c5d77d78bdbdfb840058f54f6c"
+              },
+              "payload": "quay.io/openshift-release-dev/ocp-release@sha256:03bc1715c33a8a6de571bb9845ac07f93eebcc03a5ff6182494fcbb6dfeb49a5",
+              "toolkit": "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:1e3c69574f69a11babcd045c10e2242f1ccd8d161043750366673ef1535296f6",
+              "version": "4.22.22"
+            },
+            "repository": "registry.stage.redhat.io/nvidia/doca-driver-rhel9",
+            "rhel_major": "9"
+          },
+          "started_at": "2026-11-26T08:37:43.982089+00:00"
+        },
+        "environment": "",
+        "gpu_operator_version": "",
+        "job_name": "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto",
+        "kind": "periodic",
+        "ocp_version": "4.22.22",
+        "planned_modes": [
+          "signed"
+        ],
+        "provenance": {
+          "build_id": "2125869815590555648",
+          "job_name": "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto"
+        },
+        "prow_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648",
+        "source": "automatic",
+        "started_at": "2026-11-26T08:30:41Z",
+        "status": "success"
+      },
+      "source_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125869815590555648/artifacts/nno-signed-auto/dpf-hypervisor-deploy-cluster/finished.json"
+    },
+    {
+      "build_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125990603081650176",
+      "pairs": [
+        {
+          "artifacts": {
+            "nno-signed-auto/nno-discover-signed-target/artifacts/nno-discovery-result.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125990603081650176/artifacts/nno-signed-auto/nno-discover-signed-target/artifacts/nno-discovery-result.json",
+            "nno-signed-auto/nno-discover-signed-target/artifacts/nno-doca2-signed-request.json": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125990603081650176/artifacts/nno-signed-auto/nno-discover-signed-target/artifacts/nno-doca2-signed-request.json"
+          },
+          "checks": {
+            "deploy_result": "blocked",
+            "deploy_step": "blocked",
+            "discovery_target": "passed",
+            "gpu_step": "blocked",
+            "gpudirect_result": "blocked",
+            "gpudirect_step": "blocked"
+          },
+          "completed_at": "",
+          "driver_observed": {
+            "digest": "",
+            "doca_version": "",
+            "image": "",
+            "ofed_version": "",
+            "version": ""
+          },
+          "driver_requested": {
+            "architecture": "amd64",
+            "config_digest": "sha256:000bc20a13b5f003842eace2c5d2d2d3d4c387d159f70d8be77bc1b39f01a4a2",
+            "digest": "",
+            "doca_version": "",
+            "image": "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-5.14.0-687.57.1.el9_8.x86_64-rhel9.8-amd64",
+            "index_digest": "sha256:c7728eaf6228bc86d546822608acc68b106f95bc82f59075178007d22596f7d7",
+            "kernel": "5.14.0-687.57.1.el9_8.x86_64",
+            "manifest_digest": "sha256:a5b27ec498d94f571dafec8f0b8e3d48da149f0ce55b99e4b19ba23665c9d006",
+            "ofed_version": "",
+            "version": "26.07-0.7.7.0"
+          },
+          "id": "doca2-signed-discovery-a5b27ec498d94f571dafec8f0b8e3d48da149f0ce55b99e4b19ba23665c9d006-4.22.19",
+          "metrics": {},
+          "mode": "signed",
+          "nno_observed": "",
+          "nno_requested": "",
+          "note": "deploy: expected one coherent invocation, found 0; gpudirect: expected one coherent invocation, found 0",
+          "stages": {
+            "deploy": {
+              "attempts": [],
+              "status": "blocked"
+            },
+            "gpudirect": {
+              "attempts": [],
+              "status": "blocked"
+            }
+          },
+          "status": "blocked",
+          "validation": "signed"
+        }
+      ],
+      "run": {
+        "build_id": "2125990603081650176",
+        "discovery": {
+          "build_id": "2125990603081650176",
+          "finished_at": "2026-11-26T16:36:00.701237+00:00",
+          "job_name": "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto",
+          "outcome": "selected",
+          "reason": "one_new_compatible_image",
+          "schema_version": 1,
+          "selected": {
+            "architecture": "amd64",
+            "config_digest": "sha256:000bc20a13b5f003842eace2c5d2d2d3d4c387d159f70d8be77bc1b39f01a4a2",
+            "created_at": "2026-11-23T13:12:26.960000+00:00",
+            "image": "registry.stage.redhat.io/nvidia/doca-driver-rhel9:26.07-0.7.7.0-5.14.0-687.57.1.el9_8.x86_64-rhel9.8-amd64",
+            "index_digest": "sha256:c7728eaf6228bc86d546822608acc68b106f95bc82f59075178007d22596f7d7",
+            "kernel": "5.14.0-687.57.1.el9_8.x86_64",
+            "manifest_digest": "sha256:a5b27ec498d94f571dafec8f0b8e3d48da149f0ce55b99e4b19ba23665c9d006",
+            "os_tag": "rhel9.8",
+            "release": {
+              "index_digest": null,
+              "installer_version": "4.22.19",
+              "manifest_digest": "sha256:c02df63adabc70ed309853f200a1e3cfd4ef38edf00fc2a3f832d5f99e8165eb",
+              "os_images": {
+                "rhel-coreos": "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:f7a8b08fab44c31a7202eef3ec7862e0e97267f49d05256e1973a383483eb925",
+                "rhel-coreos-10": "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:70e5a0e6ab1375af2025865ea36db0f2745d42ba845639a5d4dba229a6dc4c87"
+              },
+              "payload": "quay.io/openshift-release-dev/ocp-release@sha256:c02df63adabc70ed309853f200a1e3cfd4ef38edf00fc2a3f832d5f99e8165eb",
+              "toolkit": "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:dde42ebf127b85d7668315b6bc02adeb4feebdab694121327eae8d1ccf1df3a6",
+              "version": "4.22.19"
+            },
+            "repository": "registry.stage.redhat.io/nvidia/doca-driver-rhel9",
+            "rhel_major": "9"
+          },
+          "started_at": "2026-11-26T16:35:23.645716+00:00"
+        },
+        "environment": "",
+        "gpu_operator_version": "",
+        "job_name": "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto",
+        "kind": "periodic",
+        "ocp_version": "4.22.19",
+        "planned_modes": [
+          "signed"
+        ],
+        "provenance": {
+          "build_id": "2125990603081650176",
+          "job_name": "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto"
+        },
+        "prow_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125990603081650176",
+        "source": "automatic",
+        "started_at": "2026-11-26T16:30:39Z",
+        "status": "unknown"
+      },
+      "source_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto/2125990603081650176/artifacts/nno-signed-auto/dpf-hypervisor-deploy-cluster/finished.json"
+    },
+    {
       "build_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-nno-4.19-nno-e2e/2116326895371948032",
       "pairs": [
         {
@@ -12547,6 +12796,94 @@
         "status": "success"
       },
       "source_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-nno-5.0-nno-e2e/2124722259401641984/artifacts/nno-e2e/network-operator-e2e-gpudirect/artifacts/nno-step-result-3307647356.json"
+    },
+    {
+      "build_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-nno-5.0-nno-e2e/2125809430392999936",
+      "pairs": [
+        {
+          "artifacts": {
+            "artifacts (nno-step-result-1072701366.json)": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-nno-5.0-nno-e2e/2125809430392999936/artifacts/nno-e2e/network-operator-e2e-gpudirect/artifacts/nno-step-result-1072701366.json",
+            "artifacts (nno-step-result-1466962292.json)": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-nno-5.0-nno-e2e/2125809430392999936/artifacts/nno-e2e/network-operator-e2e-shared-device/artifacts/nno-step-result-1466962292.json"
+          },
+          "checks": {
+            "nic_cluster_policy_ready": "passed",
+            "nno_csv": "passed",
+            "nno_deployment": "passed",
+            "ocp_version": "passed",
+            "rdma_gpudirect": "passed"
+          },
+          "completed_at": "2026-11-26T06:56:01Z",
+          "driver_observed": {
+            "digest": "sha256:c6a37b347b470cb2eeb1e7c736a586fb8ef953eda8cf9b6cca6ceb9642a23de6",
+            "doca_version": "",
+            "image": "nvcr.io/nvidia/mellanox/doca-driver",
+            "ofed_version": "",
+            "version": ""
+          },
+          "driver_requested": {
+            "digest": "",
+            "doca_version": "",
+            "image": "nvcr.io/nvidia/mellanox/doca-driver",
+            "version": "doca3.5.0-26.07-0.7.7.0-1"
+          },
+          "id": "doca2-standard-2125809430392999936",
+          "metrics": {
+            "bandwidth_gbps": 93.91,
+            "message_rate_mpps": 0.179118
+          },
+          "mode": "standard",
+          "nno_observed": "26.7.1",
+          "nno_requested": "26.7.1",
+          "note": "",
+          "status": "passed",
+          "validation": "dynamic"
+        },
+        {
+          "artifacts": {
+            "artifacts (nno-step-result-3512741514.json)": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-nno-5.0-nno-e2e/2125809430392999936/artifacts/nno-e2e/nno-prepare-precompiled/artifacts/nno-step-result-3512741514.json"
+          },
+          "checks": {
+            "nic_cluster_policy_ready": "skipped",
+            "nno_csv": "passed",
+            "nno_deployment": "skipped",
+            "ocp_version": "passed",
+            "precompiled_selection": "skipped"
+          },
+          "completed_at": "2026-11-26T06:56:58Z",
+          "driver_observed": {},
+          "driver_requested": {
+            "digest": "",
+            "doca_version": "",
+            "image": "",
+            "ofed_version": "",
+            "version": ""
+          },
+          "id": "doca2-precompiled-2125809430392999936-1795676175--",
+          "metrics": {},
+          "mode": "signed",
+          "nno_observed": "26.7.1",
+          "nno_requested": "26.7.1",
+          "note": "no compatible precompiled DOCA/OFED pair for NNO 26.7.1, kernel 6.12.0-211.74.1.el10_2.x86_64 / OS tag rhel10.2 / amd64 on both RDMA workers; skipping precompiled run; no matching precompiled OFED image",
+          "status": "skipped",
+          "validation": "precompiled"
+        }
+      ],
+      "run": {
+        "build_id": "2125809430392999936",
+        "environment": "",
+        "gpu_operator_version": "",
+        "job_name": "periodic-ci-rh-ecosystem-edge-nvidia-ci-main-nno-5.0-nno-e2e",
+        "kind": "periodic",
+        "ocp_version": "5.0.2",
+        "planned_modes": [
+          "signed",
+          "standard"
+        ],
+        "prow_url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-nno-5.0-nno-e2e/2125809430392999936",
+        "started_at": "2026-11-26T04:30:43Z",
+        "status": "success"
+      },
+      "source_path": "logs/periodic-ci-rh-ecosystem-edge-nvidia-ci-main-nno-5.0-nno-e2e/2125809430392999936/artifacts/nno-e2e/network-operator-e2e-gpudirect/artifacts/nno-step-result-1072701366.json"
     },
     {
       "build_path": "pr-logs/pull/rh-ecosystem-edge_nvidia-ci/747/pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed/2108534785344278528",
