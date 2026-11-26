@@ -1,12 +1,13 @@
 module github.com/rh-ecosystem-edge/nvidia-ci
 
-go 1.25.5
+go 1.26.0
 
 require (
 	github.com/Mellanox/network-operator v1.4.1-0.20251211090059-bc081d990f9a
 	github.com/NVIDIA/gpu-operator v1.8.3-0.20251203194844-846018752b8a
 	github.com/NVIDIA/k8s-dra-driver-gpu v0.0.0-20260128084442-bee1e66be194
 	github.com/NVIDIA/k8s-operator-libs v0.0.0-20251027171627-45ccd0c3dd32
+	github.com/blang/semver/v4 v4.0.0
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/golang/glog v1.2.5
 	github.com/kelseyhightower/envconfig v1.4.0
@@ -19,7 +20,7 @@ require (
 	github.com/operator-framework/api v0.39.0
 	github.com/operator-framework/operator-lifecycle-manager v0.40.0
 	go.uber.org/mock v0.6.0
-	go.yaml.in/yaml/v3 v3.0.4
+	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/sync v0.22.0
 	gopkg.in/k8snetworkplumbingwg/multus-cni.v4 v4.2.3
 	helm.sh/helm/v3 v3.20.2
@@ -47,7 +48,6 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
@@ -66,7 +66,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.22.4 // indirect
 	github.com/go-openapi/jsonreference v0.21.4 // indirect
@@ -145,8 +145,8 @@ require (
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
-	go.opentelemetry.io/otel v1.44.0 // indirect
-	go.opentelemetry.io/otel/trace v1.44.0 // indirect
+	go.opentelemetry.io/otel v1.47.0 // indirect
+	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
