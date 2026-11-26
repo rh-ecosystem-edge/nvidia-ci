@@ -13,7 +13,6 @@ on:
 
 permissions:
   contents: write
-  packages: read
   issues: write
 
 jobs:
@@ -34,7 +33,7 @@ jobs:
 
       - name: Fetch DSX AI Factory packages
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
         shell: bash
         run: |
           mkdir -p "$OUTPUT_DIR"
