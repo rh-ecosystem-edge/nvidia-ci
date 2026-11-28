@@ -123,4 +123,12 @@ const (
 
 	LabelCheckInterval = 15 * time.Second
 	LabelCheckTimeout  = 3 * time.Minute
+
+	// NodeRebootTimeout is how long to wait for a node to go NotReady and come
+	// back Ready after a reboot has been triggered.
+	NodeRebootTimeout = 15 * time.Minute
+
+	// PostRebootClusterPolicyTimeout is how long to wait for the ClusterPolicy
+	// to become ready again after a node reboot (GPU operator pods restart).
+	PostRebootClusterPolicyTimeout = 12 * time.Minute
 )
