@@ -1434,7 +1434,11 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			_, _ = preRebootPodPulled.Delete()
 
 			By("Capture BootID before reboot")
-			originalBootID := targetNode.Object.Status.NodeInfo.BootID
+			freshNode, err := nodes.Pull(inittools.APIClient, targetNodeName)
+			Expect(err).ToNot(HaveOccurred(), "error refreshing node %s before capturing BootID: %v",
+				targetNodeName, err)
+
+			originalBootID := freshNode.Object.Status.NodeInfo.BootID
 			glog.V(gpuparams.GpuLogLevel).Infof("Node %s BootID before reboot: %s", targetNodeName, originalBootID)
 
 			By(fmt.Sprintf("Trigger reboot on node %s", targetNodeName))

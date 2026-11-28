@@ -15,12 +15,13 @@ import (
 const (
 	rebootPodNamespace = "default"
 	rebootPodImage     = "registry.access.redhat.com/ubi9/ubi-minimal:latest"
+	cleanupTimeout     = 10 * time.Second
 )
 
 // RebootNode triggers a reboot of the specified node by creating a privileged
 // pod that runs nsenter to execute "systemctl reboot" on the host. The pod is
 // cleaned up after the reboot command is issued. The caller is responsible for
-// waiting until the node goes NotReady and comes back Ready.
+// waiting until the reboot completes (see WaitForNodeReboot).
 func RebootNode(apiClient *clients.Settings, nodeName string) error {
 	glog.V(100).Infof("Triggering reboot on node %s", nodeName)
 
@@ -57,11 +58,20 @@ func RebootNode(apiClient *clients.Settings, nodeName string) error {
 		},
 	}
 
-	_, err := apiClient.Pods(rebootPodNamespace).Create(
-		context.TODO(), rebootPod, metav1.CreateOptions{})
+	createCtx, createCancel := context.WithTimeout(context.Background(), cleanupTimeout)
+	defer createCancel()
+
+	_, err := apiClient.Pods(rebootPodNamespace).Create(createCtx, rebootPod, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create reboot pod on node %s: %w", nodeName, err)
 	}
+
+	defer func() {
+		delCtx, delCancel := context.WithTimeout(context.Background(), cleanupTimeout)
+		defer delCancel()
+
+		_ = apiClient.Pods(rebootPodNamespace).Delete(delCtx, podName, metav1.DeleteOptions{})
+	}()
 
 	glog.V(100).Infof("Reboot pod %s created on node %s, waiting for command to execute", podName, nodeName)
 
@@ -74,13 +84,18 @@ func RebootNode(apiClient *clients.Settings, nodeName string) error {
 		rebootPodInterval = 3 * time.Second
 	)
 
-	deadline := time.Now().Add(rebootPodTimeout)
+	pollCtx, pollCancel := context.WithTimeout(context.Background(), rebootPodTimeout)
+	defer pollCancel()
+
 	var lastPhase corev1.PodPhase
 
-	for time.Now().Before(deadline) {
-		p, getErr := apiClient.Pods(rebootPodNamespace).Get(
-			context.TODO(), podName, metav1.GetOptions{})
+	for {
+		p, getErr := apiClient.Pods(rebootPodNamespace).Get(pollCtx, podName, metav1.GetOptions{})
 		if getErr != nil {
+			if pollCtx.Err() != nil {
+				break
+			}
+
 			// Pod disappeared (node rebooted and pod was lost): reboot confirmed.
 			glog.V(100).Infof("Reboot pod %s is no longer reachable, reboot likely in progress", podName)
 
@@ -91,26 +106,21 @@ func RebootNode(apiClient *clients.Settings, nodeName string) error {
 		if lastPhase != corev1.PodPending {
 			glog.V(100).Infof("Reboot pod %s reached phase %s, reboot command was issued", podName, lastPhase)
 
-			break
+			return nil
 		}
 
-		time.Sleep(rebootPodInterval)
+		select {
+		case <-pollCtx.Done():
+		case <-time.After(rebootPodInterval):
+		}
+
+		if pollCtx.Err() != nil {
+			break
+		}
 	}
 
-	if lastPhase == corev1.PodPending {
-		// Best-effort cleanup before returning the error.
-		_ = apiClient.Pods(rebootPodNamespace).Delete(
-			context.TODO(), podName, metav1.DeleteOptions{})
-
-		return fmt.Errorf("reboot pod %s on node %s did not start within %s",
-			podName, nodeName, rebootPodTimeout)
-	}
-
-	// Best-effort cleanup: the pod may already be gone if the node rebooted quickly.
-	_ = apiClient.Pods(rebootPodNamespace).Delete(
-		context.TODO(), podName, metav1.DeleteOptions{})
-
-	return nil
+	return fmt.Errorf("reboot pod %s on node %s did not start within %s",
+		podName, nodeName, rebootPodTimeout)
 }
 
 // WaitForNodeReboot polls until the node's BootID differs from originalBootID
@@ -122,14 +132,23 @@ func WaitForNodeReboot(apiClient *clients.Settings, nodeName, originalBootID str
 
 	const pollInterval = 5 * time.Second
 
-	deadline := time.Now().Add(timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
-	for time.Now().Before(deadline) {
-		node, err := apiClient.CoreV1Interface.Nodes().Get(
-			context.TODO(), nodeName, metav1.GetOptions{})
+	for {
+		node, err := apiClient.CoreV1Interface.Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 		if err != nil {
+			if ctx.Err() != nil {
+				break
+			}
+
 			glog.V(100).Infof("Node %s not reachable (expected during reboot): %v", nodeName, err)
-			time.Sleep(pollInterval)
+
+			select {
+			case <-ctx.Done():
+				break
+			case <-time.After(pollInterval):
+			}
 
 			continue
 		}
@@ -137,7 +156,15 @@ func WaitForNodeReboot(apiClient *clients.Settings, nodeName, originalBootID str
 		currentBootID := node.Status.NodeInfo.BootID
 		if currentBootID == originalBootID {
 			glog.V(100).Infof("Node %s BootID unchanged, reboot not yet complete", nodeName)
-			time.Sleep(pollInterval)
+
+			select {
+			case <-ctx.Done():
+			case <-time.After(pollInterval):
+			}
+
+			if ctx.Err() != nil {
+				break
+			}
 
 			continue
 		}
@@ -153,7 +180,15 @@ func WaitForNodeReboot(apiClient *clients.Settings, nodeName, originalBootID str
 		}
 
 		glog.V(100).Infof("Node %s has new BootID but is not yet Ready", nodeName)
-		time.Sleep(pollInterval)
+
+		select {
+		case <-ctx.Done():
+		case <-time.After(pollInterval):
+		}
+
+		if ctx.Err() != nil {
+			break
+		}
 	}
 
 	return fmt.Errorf("node %s did not complete reboot within %s", nodeName, timeout)
