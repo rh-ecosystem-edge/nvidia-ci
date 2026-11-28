@@ -1433,21 +1433,18 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			_, _ = preRebootPodPulled.Delete()
 
+			By("Capture BootID before reboot")
+			originalBootID := targetNode.Object.Status.NodeInfo.BootID
+			glog.V(gpuparams.GpuLogLevel).Infof("Node %s BootID before reboot: %s", targetNodeName, originalBootID)
+
 			By(fmt.Sprintf("Trigger reboot on node %s", targetNodeName))
 			err = nodes.RebootNode(inittools.APIClient, targetNodeName)
 			Expect(err).ToNot(HaveOccurred(), "error triggering reboot on node %s: %v", targetNodeName, err)
 
-			By(fmt.Sprintf("Wait for node %s to go NotReady", targetNodeName))
-			err = targetNode.WaitUntilNotReady(5 * time.Minute)
-			Expect(err).ToNot(HaveOccurred(), "node %s did not go NotReady after reboot: %v",
-				targetNodeName, err)
-			glog.V(gpuparams.GpuLogLevel).Infof("Node %s is NotReady (rebooting)", targetNodeName)
-
-			By(fmt.Sprintf("Wait for node %s to become Ready again", targetNodeName))
-			err = targetNode.WaitUntilReady(nvidiagpu.NodeRebootTimeout)
-			Expect(err).ToNot(HaveOccurred(), "node %s did not become Ready after reboot: %v",
-				targetNodeName, err)
-			glog.V(gpuparams.GpuLogLevel).Infof("Node %s is Ready after reboot", targetNodeName)
+			By(fmt.Sprintf("Wait for node %s to reboot (BootID change) and become Ready", targetNodeName))
+			err = nodes.WaitForNodeReboot(inittools.APIClient, targetNodeName, originalBootID, nvidiagpu.NodeRebootTimeout)
+			Expect(err).ToNot(HaveOccurred(), "node %s did not complete reboot: %v", targetNodeName, err)
+			glog.V(gpuparams.GpuLogLevel).Infof("Node %s is Ready with new BootID after reboot", targetNodeName)
 
 			By("Wait for ClusterPolicy to be ready after reboot")
 			err = wait.ClusterPolicyReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
