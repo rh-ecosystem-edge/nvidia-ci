@@ -235,7 +235,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(0).Infof("CleanupAfterTest: %v", cleanupAfterTest)
 
 			// if any of the following labels are present, the operator should be kept
-			labelsToCheck = []string{"operator-upgrade", "single-mig", "mixed-mig", "time-slicing"}
+			labelsToCheck = []string{"operator-upgrade", "single-mig", "mixed-mig", "time-slicing", "reboot"}
 			glog.V(0).Infof("LabelsToCheck: %v", labelsToCheck)
 
 			if cleanupAfterTest && !mig.ShouldKeepOperator(labelsToCheck) {
@@ -1367,6 +1367,136 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					"Ampere-generation GPUs, MIG mode must already be toggled on via a GPU reset before the "+
 					"DRA driver starts - DynamicMIG only manages partitions, not MIG mode itself)",
 				workloadBuilder.Error())
+		})
+
+		It("Validate GPU functionality after worker node reboot", Label("reboot"), func() {
+			if !mig.IsLabelInFilter("reboot") {
+				glog.V(gpuparams.GpuLogLevel).Infof("Skipping test: 'reboot' label not present in ginkgo label filter")
+				Skip("Test skipped: 'reboot' label not present in ginkgo label filter")
+			}
+
+			By("Get GPU worker nodes")
+			gpuNodeSelector := fmt.Sprintf("%s=,%s=true",
+				inittools.GeneralConfig.WorkerLabel, nvidiagpu.NvidiaGPULabel)
+			gpuWorkerNodes, err := nodes.List(inittools.APIClient,
+				metav1.ListOptions{LabelSelector: gpuNodeSelector})
+			Expect(err).ToNot(HaveOccurred(), "error listing GPU worker nodes: %v", err)
+			Expect(gpuWorkerNodes).ToNot(BeEmpty(), "no GPU worker nodes found")
+
+			targetNode := gpuWorkerNodes[0]
+			targetNodeName := targetNode.Object.Name
+			glog.V(gpuparams.GpuLogLevel).Infof("Selected GPU worker node for reboot test: %s", targetNodeName)
+
+			By("Get cluster architecture")
+			clusterArch, err := get.GetClusterArchitecture(inittools.APIClient, WorkerNodeSelector)
+			Expect(err).ToNot(HaveOccurred(), "error getting cluster architecture: %v", err)
+
+			By(fmt.Sprintf("Run pre-reboot gpu-burn on node %s", targetNodeName))
+			preRebootPodName := "gpu-burn-pre-reboot"
+
+			preRebootPod, err := gpuburn.CreateGPUBurnPodWithParam(inittools.APIClient,
+				preRebootPodName, burn.Namespace, BurnImageName[clusterArch],
+				"gpu", 1, nvidiagpu.BurnPodCreationTimeout)
+			Expect(err).ToNot(HaveOccurred(), "error creating pre-reboot gpu-burn pod: %v", err)
+
+			preRebootPod.Spec.NodeName = targetNodeName
+			preRebootPod.Spec.NodeSelector = nil
+
+			_, err = inittools.APIClient.Pods(burn.Namespace).Create(context.TODO(),
+				preRebootPod, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred(), "error deploying pre-reboot gpu-burn pod: %v", err)
+
+			preRebootPodPulled, err := pod.Pull(inittools.APIClient, preRebootPodName, burn.Namespace)
+			Expect(err).ToNot(HaveOccurred(), "error pulling pre-reboot gpu-burn pod: %v", err)
+
+			defer func() {
+				defer GinkgoRecover()
+				if p, e := pod.Pull(inittools.APIClient, preRebootPodName, burn.Namespace); e == nil {
+					_, _ = p.Delete()
+				}
+			}()
+
+			err = preRebootPodPulled.WaitUntilScheduled(nvidiagpu.BurnPodScheduledTimeout)
+			Expect(err).ToNot(HaveOccurred(), "pre-reboot gpu-burn pod was not scheduled: %v", err)
+
+			err = preRebootPodPulled.WaitUntilRunningOrSucceeded(nvidiagpu.BurnPodRunningTimeout)
+			Expect(err).ToNot(HaveOccurred(), "pre-reboot gpu-burn pod did not reach Running: %v", err)
+
+			err = preRebootPodPulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.BurnPodSuccessTimeout)
+			Expect(err).ToNot(HaveOccurred(), "pre-reboot gpu-burn pod did not succeed: %v", err)
+
+			preRebootLogs, err := preRebootPodPulled.GetLog(nvidiagpu.BurnLogCollectionPeriod, "gpu-burn-ctr")
+			Expect(err).ToNot(HaveOccurred(), "error getting pre-reboot gpu-burn pod logs: %v", err)
+			glog.V(gpuparams.GpuLogLevel).Infof("Pre-reboot gpu-burn logs:\n%s", preRebootLogs)
+
+			mig.CheckGPUBurnPodLogs(preRebootLogs, 1)
+
+			_, _ = preRebootPodPulled.Delete()
+
+			By(fmt.Sprintf("Trigger reboot on node %s", targetNodeName))
+			err = nodes.RebootNode(inittools.APIClient, targetNodeName)
+			Expect(err).ToNot(HaveOccurred(), "error triggering reboot on node %s: %v", targetNodeName, err)
+
+			By(fmt.Sprintf("Wait for node %s to go NotReady", targetNodeName))
+			err = targetNode.WaitUntilNotReady(5 * time.Minute)
+			Expect(err).ToNot(HaveOccurred(), "node %s did not go NotReady after reboot: %v",
+				targetNodeName, err)
+			glog.V(gpuparams.GpuLogLevel).Infof("Node %s is NotReady (rebooting)", targetNodeName)
+
+			By(fmt.Sprintf("Wait for node %s to become Ready again", targetNodeName))
+			err = targetNode.WaitUntilReady(nvidiagpu.NodeRebootTimeout)
+			Expect(err).ToNot(HaveOccurred(), "node %s did not become Ready after reboot: %v",
+				targetNodeName, err)
+			glog.V(gpuparams.GpuLogLevel).Infof("Node %s is Ready after reboot", targetNodeName)
+
+			By("Wait for ClusterPolicy to be ready after reboot")
+			err = wait.ClusterPolicyReady(inittools.APIClient, nvidiagpu.ClusterPolicyName,
+				nvidiagpu.ClusterPolicyReadyCheckInterval, nvidiagpu.PostRebootClusterPolicyTimeout)
+			Expect(err).ToNot(HaveOccurred(), "ClusterPolicy did not become ready after reboot: %v", err)
+			glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy is ready after reboot")
+
+			By(fmt.Sprintf("Run post-reboot gpu-burn on node %s", targetNodeName))
+			postRebootPodName := "gpu-burn-post-reboot"
+
+			postRebootPod, err := gpuburn.CreateGPUBurnPodWithParam(inittools.APIClient,
+				postRebootPodName, burn.Namespace, BurnImageName[clusterArch],
+				"gpu", 1, nvidiagpu.BurnPodCreationTimeout)
+			Expect(err).ToNot(HaveOccurred(), "error creating post-reboot gpu-burn pod: %v", err)
+
+			postRebootPod.Spec.NodeName = targetNodeName
+			postRebootPod.Spec.NodeSelector = nil
+
+			_, err = inittools.APIClient.Pods(burn.Namespace).Create(context.TODO(),
+				postRebootPod, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred(), "error deploying post-reboot gpu-burn pod: %v", err)
+
+			postRebootPodPulled, err := pod.Pull(inittools.APIClient, postRebootPodName, burn.Namespace)
+			Expect(err).ToNot(HaveOccurred(), "error pulling post-reboot gpu-burn pod: %v", err)
+
+			defer func() {
+				defer GinkgoRecover()
+				if p, e := pod.Pull(inittools.APIClient, postRebootPodName, burn.Namespace); e == nil {
+					_, _ = p.Delete()
+				}
+			}()
+
+			err = postRebootPodPulled.WaitUntilScheduled(nvidiagpu.BurnPodScheduledTimeout)
+			Expect(err).ToNot(HaveOccurred(), "post-reboot gpu-burn pod was not scheduled: %v", err)
+
+			err = postRebootPodPulled.WaitUntilRunningOrSucceeded(nvidiagpu.BurnPodRunningTimeout)
+			Expect(err).ToNot(HaveOccurred(), "post-reboot gpu-burn pod did not reach Running: %v", err)
+
+			err = postRebootPodPulled.WaitUntilInStatus(corev1.PodSucceeded, nvidiagpu.BurnPodSuccessTimeout)
+			Expect(err).ToNot(HaveOccurred(), "post-reboot gpu-burn pod did not succeed: %v", err)
+
+			postRebootLogs, err := postRebootPodPulled.GetLog(nvidiagpu.BurnLogCollectionPeriod, "gpu-burn-ctr")
+			Expect(err).ToNot(HaveOccurred(), "error getting post-reboot gpu-burn pod logs: %v", err)
+			glog.V(gpuparams.GpuLogLevel).Infof("Post-reboot gpu-burn logs:\n%s", postRebootLogs)
+
+			mig.CheckGPUBurnPodLogs(postRebootLogs, 1)
+
+			glog.V(gpuparams.GpuLogLevel).Infof("Reboot test passed: GPU functionality validated on node %s after reboot",
+				targetNodeName)
 		})
 
 		It("Upgrade NVIDIA GPU Operator", Label("operator-upgrade"), func() {
