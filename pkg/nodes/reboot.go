@@ -9,6 +9,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -96,17 +97,34 @@ func RebootNode(apiClient *clients.Settings, nodeName string) error {
 				break
 			}
 
-			// Pod disappeared (node rebooted and pod was lost): reboot confirmed.
-			glog.V(100).Infof("Reboot pod %s is no longer reachable, reboot likely in progress", podName)
+			if k8serrors.IsNotFound(getErr) {
+				glog.V(100).Infof("Reboot pod %s not found (node rebooted and pod was lost)", podName)
 
-			return nil
+				return nil
+			}
+
+			glog.V(100).Infof("Transient error getting reboot pod %s, retrying: %v", podName, getErr)
+
+			select {
+			case <-pollCtx.Done():
+			case <-time.After(rebootPodInterval):
+			}
+
+			continue
 		}
 
 		lastPhase = p.Status.Phase
-		if lastPhase != corev1.PodPending {
+
+		switch lastPhase {
+		case corev1.PodRunning, corev1.PodSucceeded:
 			glog.V(100).Infof("Reboot pod %s reached phase %s, reboot command was issued", podName, lastPhase)
 
 			return nil
+		case corev1.PodFailed:
+			return fmt.Errorf("reboot pod %s on node %s failed (phase=%s)",
+				podName, nodeName, lastPhase)
+		case corev1.PodPending:
+			// continue polling
 		}
 
 		select {
