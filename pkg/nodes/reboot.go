@@ -120,8 +120,8 @@ func RebootNode(apiClient *clients.Settings, nodeName string) error {
 			glog.V(100).Infof("Reboot pod %s reached phase %s, reboot command was issued", podName, lastPhase)
 
 			return nil
-		case corev1.PodFailed:
-			return fmt.Errorf("reboot pod %s on node %s failed (phase=%s)",
+		case corev1.PodFailed, corev1.PodUnknown:
+			return fmt.Errorf("reboot pod %s on node %s entered unexpected phase %s",
 				podName, nodeName, lastPhase)
 		case corev1.PodPending:
 			// continue polling
