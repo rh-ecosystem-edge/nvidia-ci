@@ -121,7 +121,17 @@ func RebootNode(apiClient *clients.Settings, nodeName string) error {
 
 			return nil
 		case corev1.PodFailed, corev1.PodUnknown:
-			return fmt.Errorf("reboot pod %s on node %s entered unexpected phase %s",
+			if containerStarted(p) {
+				// The container ran, so the reboot command was issued.
+				// Failed/Unknown is expected when the kubelet kills pods
+				// during graceful node shutdown.
+				glog.V(100).Infof("Reboot pod %s terminated after starting (phase=%s), "+
+					"reboot command was issued", podName, lastPhase)
+
+				return nil
+			}
+
+			return fmt.Errorf("reboot pod %s on node %s failed before the container started (phase=%s)",
 				podName, nodeName, lastPhase)
 		case corev1.PodPending:
 			// continue polling
@@ -210,4 +220,24 @@ func WaitForNodeReboot(apiClient *clients.Settings, nodeName, originalBootID str
 	}
 
 	return fmt.Errorf("node %s did not complete reboot within %s", nodeName, timeout)
+}
+
+// containerStarted returns true if the pod's first container ever started
+// running (has a non-zero StartedAt in its terminated or running state).
+func containerStarted(p *corev1.Pod) bool {
+	if len(p.Status.ContainerStatuses) == 0 {
+		return false
+	}
+
+	cs := p.Status.ContainerStatuses[0]
+
+	if cs.State.Terminated != nil && !cs.State.Terminated.StartedAt.IsZero() {
+		return true
+	}
+
+	if cs.State.Running != nil {
+		return true
+	}
+
+	return false
 }
